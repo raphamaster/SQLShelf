@@ -1,0 +1,42 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Ambiente virtual
+venv/
+.venv/
+env/
+ENV/
+
+# Distribuição / empacotamento
+build/
+dist/
+*.egg-info/
+.eggs/
+*.spec
+
+# --- Ferramentas ---
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# --- Dados do projeto SQLShelf ---
+# Índice é descartável e regenerável — nunca versionar
+.sqlshelf/
+
+# Configuração local do usuário (se algum dia ficar dentro do repo)
+config.local.json
+
+# --- IDE / Editor ---
+.vscode/
+.idea/
+*.code-workspace
+
+# --- Sistema operacional ---
+.DS_Store
+Thumbs.db
+desktop.ini
