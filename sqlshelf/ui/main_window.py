@@ -1225,7 +1225,8 @@ class MainWindow(QMainWindow):
         return [
             str(p.relative_to(self._folder))
             for p in self._folder.rglob("*")
-            if p.is_dir() and ".sqlshelf" not in p.parts
+            if p.is_dir()
+            and not any(part.startswith(".") for part in p.relative_to(self._folder).parts)
         ]
 
     def _post_create(self, path: Path) -> None:
