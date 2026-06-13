@@ -317,9 +317,12 @@ class IndexDB:
             )
 
     def get_favorites(self) -> list[SearchResult]:
+        from .search import _TABLES_SUBQ, _IS_FAV_SUBQ
+
         with self._lock:
             rows = self._conn.execute(
-                "SELECT q.id, q.rel_path, q.title, COALESCE(q.description, ''), '', 0.0"
+                f"SELECT q.id, q.rel_path, q.title, COALESCE(q.description, ''), '', 0.0,"
+                f" q.updated_at, {_TABLES_SUBQ}, {_IS_FAV_SUBQ}"
                 " FROM queries q"
                 " JOIN favorites f ON f.rel_path = q.rel_path"
                 " ORDER BY q.title"
@@ -345,9 +348,12 @@ class IndexDB:
             )
 
     def get_recently_viewed(self, limit: int = 20) -> list[SearchResult]:
+        from .search import _TABLES_SUBQ, _IS_FAV_SUBQ
+
         with self._lock:
             rows = self._conn.execute(
-                "SELECT q.id, q.rel_path, q.title, COALESCE(q.description, ''), '', 0.0"
+                f"SELECT q.id, q.rel_path, q.title, COALESCE(q.description, ''), '', 0.0,"
+                f" q.updated_at, {_TABLES_SUBQ}, {_IS_FAV_SUBQ}"
                 " FROM queries q"
                 " JOIN recently_viewed rv ON rv.rel_path = q.rel_path"
                 " ORDER BY rv.viewed_at DESC"

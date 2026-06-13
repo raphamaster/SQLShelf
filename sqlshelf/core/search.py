@@ -8,6 +8,19 @@ from .models import SearchResult
 # Matches prefixes like table:Customers  col:OrderId  tag:finance
 _PREFIX_RE = re.compile(r"(?:^|\s)(table|col|tag):(\S+)")
 
+# Subqueries appended to every SELECT for the new display fields
+_TABLES_SUBQ = (
+    "COALESCE("
+    "  (SELECT GROUP_CONCAT(qo.object_name, ',')"
+    "   FROM query_objects qo"
+    "   WHERE qo.query_id=q.id AND qo.object_type='table'), '')"
+)
+_IS_FAV_SUBQ = (
+    "CASE WHEN EXISTS"
+    "  (SELECT 1 FROM favorites f WHERE f.rel_path=q.rel_path)"
+    " THEN 1 ELSE 0 END"
+)
+
 
 def parse_query(text: str) -> tuple[dict[str, list[str]], str]:
     """Split 'table:X col:Y free text' into (filters, free_text).
@@ -96,7 +109,10 @@ def search(conn: sqlite3.Connection, text: str) -> list[SearchResult]:
         sql = f"""
             SELECT q.id, q.rel_path, q.title, COALESCE(q.description, ''),
                    snippet(queries_fts, 2, '[', ']', '...', 20),
-                   bm25(queries_fts)
+                   bm25(queries_fts),
+                   q.updated_at,
+                   {_TABLES_SUBQ},
+                   {_IS_FAV_SUBQ}
             FROM queries q
             JOIN queries_fts ON queries_fts.rowid = q.id
             {where_clause}
@@ -105,7 +121,10 @@ def search(conn: sqlite3.Connection, text: str) -> list[SearchResult]:
     else:
         sql = f"""
             SELECT q.id, q.rel_path, q.title, COALESCE(q.description, ''),
-                   '', 0.0
+                   '', 0.0,
+                   q.updated_at,
+                   {_TABLES_SUBQ},
+                   {_IS_FAV_SUBQ}
             FROM queries q
             {where_clause}
             ORDER BY q.title
@@ -121,8 +140,9 @@ def search(conn: sqlite3.Connection, text: str) -> list[SearchResult]:
 
 def _all_queries(conn: sqlite3.Connection) -> list[SearchResult]:
     rows = conn.execute(
-        "SELECT id, rel_path, title, COALESCE(description, ''), '', 0.0"
-        " FROM queries ORDER BY title"
+        f"SELECT q.id, q.rel_path, q.title, COALESCE(q.description, ''), '', 0.0,"
+        f" q.updated_at, {_TABLES_SUBQ}, {_IS_FAV_SUBQ}"
+        " FROM queries q ORDER BY q.title"
     ).fetchall()
     return _rows_to_results(conn, rows)
 
@@ -132,7 +152,7 @@ def _rows_to_results(
 ) -> list[SearchResult]:
     results = []
     for row in rows:
-        qid, rel_path, title, description, snippet, rank = row
+        qid, rel_path, title, description, snippet, rank, updated_at, tables_str, is_fav = row
         tags = [
             r[0]
             for r in conn.execute(
@@ -141,6 +161,7 @@ def _rows_to_results(
                 (qid,),
             ).fetchall()
         ]
+        tables = [t for t in (tables_str or "").split(",") if t]
         results.append(
             SearchResult(
                 query_id=qid,
@@ -150,6 +171,9 @@ def _rows_to_results(
                 snippet=snippet,
                 rank=rank,
                 tags=tags,
+                tables=tables,
+                updated_at=updated_at,
+                is_favorite=bool(is_fav),
             )
         )
     return results
