@@ -180,6 +180,17 @@ class MainWindow(QMainWindow):
         view_menu = QMenu("&View", self)
         mb.addMenu(view_menu)
 
+        help_menu = QMenu("&Help", self)
+        mb.addMenu(help_menu)
+        help_act = QAction("Help", self)
+        help_act.setShortcut(QKeySequence("F1"))
+        help_act.triggered.connect(self._show_help)
+        help_menu.addAction(help_act)
+        help_menu.addSeparator()
+        about_act = QAction("About SQLShelf", self)
+        about_act.triggered.connect(self._show_about)
+        help_menu.addAction(about_act)
+
         reveal_act = QAction(
             _icon(QStyle.StandardPixmap.SP_FileDialogDetailedView),
             "Reveal File in Explorer",
@@ -287,8 +298,16 @@ class MainWindow(QMainWindow):
         ew_layout.setSpacing(0)
         ew_layout.addWidget(self._editor)
 
+        # Outer wrapper gives the editor the same 10 px left indent as the
+        # metadata panel content, so the border and buttons align visually.
+        editor_outer = QWidget()
+        eo_layout = QVBoxLayout(editor_outer)
+        eo_layout.setContentsMargins(10, 0, 0, 0)
+        eo_layout.setSpacing(0)
+        eo_layout.addWidget(self._editor_wrapper)
+
         right_layout.addWidget(top_section)
-        right_layout.addWidget(self._editor_wrapper, stretch=1)
+        right_layout.addWidget(editor_outer, stretch=1)
 
         # ── Empty / onboarding state ─────────────────────────────────────────
         self._onboarding = QWidget()
@@ -356,7 +375,7 @@ class MainWindow(QMainWindow):
             lambda: self._edit_toggle_btn.click()
         )
         QShortcut(QKeySequence("Ctrl+N"), self).activated.connect(self.new_query)
-        QShortcut(QKeySequence("Ctrl+K"), self).activated.connect(self.open_command_palette)
+        QShortcut(QKeySequence("Ctrl+P"), self).activated.connect(self.open_command_palette)
         esc = QShortcut(QKeySequence(_Qt.Key.Key_Escape), self)
         esc.setContext(_Qt.ShortcutContext.WindowShortcut)
         esc.activated.connect(self._cancel_edit_mode)
@@ -607,12 +626,7 @@ class MainWindow(QMainWindow):
         self._search_bar.clear()
         self._search_bar.blockSignals(False)
         results: list[SearchResult] = []
-        dbs = (
-            {self._browse_folder: self._known_dbs[self._browse_folder]}
-            if self._browse_folder and self._browse_folder in self._known_dbs
-            else self._known_dbs
-        )
-        for folder, db in dbs.items():
+        for folder, db in self._known_dbs.items():
             try:
                 for r in db.get_favorites():
                     r.folder = folder
@@ -977,6 +991,37 @@ class MainWindow(QMainWindow):
         if body:
             QApplication.clipboard().setText(body)
             self._status_bar.showMessage("SQL body copied to clipboard")
+
+    # ------------------------------------------------------------------
+    # Help / About
+    # ------------------------------------------------------------------
+
+    def _show_help(self) -> None:
+        QMessageBox.information(
+            self,
+            "SQLShelf — Help",
+            "<b>Keyboard shortcuts</b><br><br>"
+            "<b>Ctrl+O</b> — Open Folder<br>"
+            "<b>Ctrl+N</b> — New Query<br>"
+            "<b>Ctrl+D</b> — Duplicate Query<br>"
+            "<b>Ctrl+P</b> — Command Palette<br>"
+            "<b>Ctrl+F</b> — Focus Search<br>"
+            "<b>Ctrl+E</b> — Toggle Edit Mode<br>"
+            "<b>Ctrl+S</b> — Save<br>"
+            "<b>Ctrl+Shift+C</b> — Copy SQL (no frontmatter)<br>"
+            "<b>Esc</b> — Cancel Edit",
+        )
+
+    def _show_about(self) -> None:
+        QMessageBox.about(
+            self,
+            "About SQLShelf",
+            "<b>SQLShelf</b><br><br>"
+            "Open-source SQL query manager.<br>"
+            "Organizes, describes, categorizes and searches SQL files<br>"
+            "by content, table, field or tag.<br><br>"
+            "Author: Raphael Franco",
+        )
 
     # ------------------------------------------------------------------
     # Lifecycle

@@ -79,11 +79,11 @@ class MetadataPanel(QWidget):
         )
         self._title_label.setWordWrap(True)
 
-        self._shortcut_hint = QLabel("Ctrl+K")
+        self._shortcut_hint = QLabel("Ctrl+P")
         self._shortcut_hint.setStyleSheet(
             f"color: {TEXT_TERTIARY}; font-size: 9px; padding-right: 4px;"
         )
-        self._shortcut_hint.setToolTip("Command palette (coming soon)")
+        self._shortcut_hint.setToolTip("Command palette")
 
         title_row = QHBoxLayout()
         title_row.setContentsMargins(0, 0, 0, 0)
