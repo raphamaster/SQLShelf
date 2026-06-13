@@ -36,6 +36,7 @@ from ..core.scanner import scan_folder
 from ..core.snippets import list_templates
 from ..core.watcher import FolderWatcher
 from .code_editor import CodeEditor
+from .theme import tokens as _tk
 from .theme.tokens import ACCENT, ACCENT_BORDER, ACCENT_FILL, TEXT_SECONDARY, TEXT_TERTIARY
 from .command_palette import CommandPalette
 from .highlighter import SqlHighlighter
@@ -450,16 +451,19 @@ class MainWindow(QMainWindow):
         ob_icon = QLabel("📂")
         ob_icon.setStyleSheet(f"font-size: 56px; color: {TEXT_TERTIARY};")
         ob_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._ob_icon = ob_icon
 
         ob_title = QLabel("No folder open")
         ob_title.setStyleSheet(
             f"font-size: 17px; font-weight: bold; color: {TEXT_SECONDARY};"
         )
         ob_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._ob_title = ob_title
 
         ob_sub = QLabel("Open a folder to start browsing your SQL queries.")
         ob_sub.setStyleSheet(f"font-size: 12px; color: {TEXT_TERTIARY};")
         ob_sub.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._ob_sub = ob_sub
 
         ob_btn = QPushButton("📂  Open Folder")
         ob_btn.setObjectName("OpenFolderBtn")
@@ -992,7 +996,7 @@ class MainWindow(QMainWindow):
         self._save_action.setVisible(True)
         self._cancel_action.setVisible(True)
         self._editor_wrapper.setStyleSheet(
-            f"#EditorWrapper {{ border: 1px solid {ACCENT_BORDER}; border-radius: 4px; }}"
+            f"#EditorWrapper {{ border: 1px solid {_tk.ACCENT_BORDER}; border-radius: 4px; }}"
         )
         self._edit_toggle_btn.setText("✏  Editing…")
 
@@ -1237,11 +1241,41 @@ class MainWindow(QMainWindow):
 
     def _change_theme(self, name: str) -> None:
         cfg.set_theme(name)
-        QMessageBox.information(
-            self,
-            "Theme Changed",
-            "The new theme will be applied the next time you start SQLShelf.",
+        self._apply_theme_live(name)
+
+    def _apply_theme_live(self, name: str) -> None:
+        from .theme.tokens import QT_MATERIAL_THEMES, app_stylesheet, set_active_palette
+
+        set_active_palette(name)
+
+        app = QApplication.instance()
+        if app is None:
+            return
+
+        try:
+            import qt_material
+            qt_material.apply_stylesheet(
+                app, theme=QT_MATERIAL_THEMES.get(name, "dark_teal.xml")
+            )
+        except ImportError:
+            pass
+
+        app.setStyleSheet(app.styleSheet() + app_stylesheet())
+
+        # Refresh widgets that manage their own stylesheets
+        self._search_bar.refresh_theme()
+        self._query_list.refresh_theme()
+        self._sidebar.refresh_theme()
+        self._metadata_panel.refresh_theme()
+        self._editor.refresh_theme()
+        self._highlighter.refresh_theme()
+
+        # Refresh onboarding labels
+        self._ob_icon.setStyleSheet(f"font-size: 56px; color: {_tk.TEXT_TERTIARY};")
+        self._ob_title.setStyleSheet(
+            f"font-size: 17px; font-weight: bold; color: {_tk.TEXT_SECONDARY};"
         )
+        self._ob_sub.setStyleSheet(f"font-size: 12px; color: {_tk.TEXT_TERTIARY};")
 
     # ------------------------------------------------------------------
     # Lifecycle

@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .theme import tokens as _tk
 from .theme.tokens import ACCENT, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_TERTIARY
 
 _ROLE_PATH = Qt.ItemDataRole.UserRole
@@ -99,20 +100,20 @@ class SidebarWidget(QWidget):
         tr_layout.setContentsMargins(0, 2, 0, 4)
         tr_layout.setSpacing(6)
 
-        icon_lbl = QLabel("≡")
-        icon_lbl.setStyleSheet(
+        self._icon_lbl = QLabel("≡")
+        self._icon_lbl.setStyleSheet(
             f"color: {ACCENT}; font-size: 18px; font-weight: bold; background: transparent;"
         )
-        icon_lbl.setFixedWidth(18)
+        self._icon_lbl.setFixedWidth(18)
 
-        name_lbl = QLabel("SQLShelf")
-        name_lbl.setStyleSheet(
+        self._name_lbl = QLabel("SQLShelf")
+        self._name_lbl.setStyleSheet(
             f"font-weight: 600; font-size: 14px; color: {TEXT_PRIMARY};"
             " background: transparent; letter-spacing: 0.3px;"
         )
 
-        tr_layout.addWidget(icon_lbl)
-        tr_layout.addWidget(name_lbl)
+        tr_layout.addWidget(self._icon_lbl)
+        tr_layout.addWidget(self._name_lbl)
         tr_layout.addStretch()
 
         # ── Open Folder button ────────────────────────────────────────────────
@@ -370,6 +371,16 @@ class SidebarWidget(QWidget):
     def _on_tag_item_clicked(self, item: QListWidgetItem) -> None:
         self._set_active_btn(self._btn_all)
         self.tag_selected.emit(item.text())
+
+    def refresh_theme(self) -> None:
+        self._icon_lbl.setStyleSheet(
+            f"color: {_tk.ACCENT}; font-size: 18px; font-weight: bold; background: transparent;"
+        )
+        self._name_lbl.setStyleSheet(
+            f"font-weight: 600; font-size: 14px; color: {_tk.TEXT_PRIMARY};"
+            " background: transparent; letter-spacing: 0.3px;"
+        )
+        self._empty_label.setStyleSheet(f"color: {_tk.TEXT_TERTIARY}; font-size: 11px;")
 
     def _selected_tag(self) -> str:
         item = self._tag_list.currentItem()

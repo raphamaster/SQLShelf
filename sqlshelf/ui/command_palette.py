@@ -13,15 +13,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..core.models import SearchResult
-from .theme.tokens import (
-    ACCENT_BORDER,
-    BORDER_EMPH,
-    CARD,
-    SURFACE,
-    TEXT_PRIMARY,
-    TEXT_SECONDARY,
-    TEXT_TERTIARY,
-)
+from .theme import tokens as _tk
 
 
 class CommandPalette(QDialog):
@@ -51,40 +43,40 @@ class CommandPalette(QDialog):
         self.resize(560, 400)
         self.setStyleSheet(f"""
             QDialog {{
-                background-color: {CARD};
-                border: 1px solid {BORDER_EMPH};
+                background-color: {_tk.CARD};
+                border: 1px solid {_tk.BORDER_EMPH};
             }}
             QLineEdit {{
-                background-color: {SURFACE};
-                border: 1px solid {BORDER_EMPH};
-                color: {TEXT_PRIMARY};
+                background-color: {_tk.SURFACE};
+                border: 1px solid {_tk.BORDER_EMPH};
+                color: {_tk.TEXT_PRIMARY};
                 border-radius: 4px;
                 padding: 5px 8px;
             }}
             QLineEdit:focus {{
-                border-color: {ACCENT_BORDER};
+                border-color: {_tk.ACCENT_BORDER};
             }}
             QListWidget {{
-                background-color: {SURFACE};
-                border: 1px solid {BORDER_EMPH};
+                background-color: {_tk.SURFACE};
+                border: 1px solid {_tk.BORDER_EMPH};
             }}
             QListWidget::item {{
-                color: {TEXT_PRIMARY};
+                color: {_tk.TEXT_PRIMARY};
                 padding: 6px 8px;
             }}
             QListWidget::item:hover {{
-                background-color: {CARD};
+                background-color: {_tk.CARD};
             }}
             QListWidget::item:selected {{
-                background-color: {CARD};
-                color: {TEXT_PRIMARY};
+                background-color: {_tk.CARD};
+                color: {_tk.TEXT_PRIMARY};
             }}
         """)
 
         self._all_results = results
 
         hint = QLabel("Type to filter — Enter to open — Esc to close")
-        hint.setStyleSheet(f"color: {TEXT_TERTIARY}; font-size: 11px; padding: 2px 4px;")
+        hint.setStyleSheet(f"color: {_tk.TEXT_TERTIARY}; font-size: 11px; padding: 2px 4px;")
 
         self._search = QLineEdit()
         self._search.setPlaceholderText("Search queries… (table:X  col:X  tag:X  or name)")

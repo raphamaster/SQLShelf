@@ -5,6 +5,7 @@ from PySide6.QtGui import QColor, QPainter, QTextFormat
 from PySide6.QtWidgets import QTextEdit
 from PySide6.QtWidgets import QPlainTextEdit, QWidget
 
+from .theme import tokens as _tk
 from .theme.tokens import (
     EDITOR_LINE_HL,
     GUTTER_BG,
@@ -111,6 +112,14 @@ class CodeEditor(QPlainTextEdit):
     # ------------------------------------------------------------------
     # Current-line highlight
     # ------------------------------------------------------------------
+
+    def refresh_theme(self) -> None:
+        CodeEditor._GUTTER_BG      = QColor(_tk.GUTTER_BG)
+        CodeEditor._NUM_INACTIVE   = QColor(_tk.GUTTER_NUM_INACTIVE)
+        CodeEditor._NUM_CURRENT    = QColor(_tk.GUTTER_NUM_CURRENT)
+        CodeEditor._LINE_HIGHLIGHT = QColor(_tk.EDITOR_LINE_HL)
+        self._highlight_current_line()
+        self._gutter.update()
 
     def _highlight_current_line(self) -> None:
         sel = QTextEdit.ExtraSelection()
