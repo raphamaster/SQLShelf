@@ -32,6 +32,7 @@ from ..core.scanner import scan_folder
 from ..core.snippets import list_templates
 from ..core.watcher import FolderWatcher
 from .code_editor import CodeEditor
+from .theme.tokens import ACCENT_BORDER
 from .command_palette import CommandPalette
 from .highlighter import SqlHighlighter
 from .metadata_panel import MetadataPanel
@@ -231,7 +232,7 @@ class MainWindow(QMainWindow):
         right_layout.setSpacing(0)
 
         self._metadata_panel = MetadataPanel()
-        self._metadata_panel.table_clicked.connect(self._on_object_clicked)
+        self._metadata_panel.filter_requested.connect(self._on_filter_requested)
         self._metadata_panel.favorite_toggled.connect(self._toggle_favorite)
 
         # Editor toolbar
@@ -246,16 +247,16 @@ class MainWindow(QMainWindow):
 
         self._save_btn = QPushButton("💾  Save")
         self._save_btn.setToolTip("Save changes (Ctrl+S)")
-        self._save_btn.setEnabled(False)
         self._save_btn.clicked.connect(self.save_current)
 
         self._cancel_btn = QPushButton("✕  Cancel")
-        self._cancel_btn.setEnabled(False)
         self._cancel_btn.clicked.connect(self._cancel_edit)
 
         self._toolbar.addWidget(self._edit_toggle_btn)
-        self._toolbar.addWidget(self._save_btn)
-        self._toolbar.addWidget(self._cancel_btn)
+        self._save_action = self._toolbar.addWidget(self._save_btn)
+        self._cancel_action = self._toolbar.addWidget(self._cancel_btn)
+        self._save_action.setVisible(False)
+        self._cancel_action.setVisible(False)
 
         self._editor = CodeEditor()
         self._editor.setReadOnly(True)
@@ -275,14 +276,15 @@ class MainWindow(QMainWindow):
         ts_layout.addWidget(self._toolbar)
 
         # Editor wrapper — top/bottom breathing room (right margin comes from right_layout)
-        editor_wrapper = QWidget()
-        ew_layout = QVBoxLayout(editor_wrapper)
+        self._editor_wrapper = QWidget()
+        self._editor_wrapper.setObjectName("EditorWrapper")
+        ew_layout = QVBoxLayout(self._editor_wrapper)
         ew_layout.setContentsMargins(0, 4, 0, 6)
         ew_layout.setSpacing(0)
         ew_layout.addWidget(self._editor)
 
         right_layout.addWidget(top_section)
-        right_layout.addWidget(editor_wrapper, stretch=1)
+        right_layout.addWidget(self._editor_wrapper, stretch=1)
 
         # Splitter
         splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -409,8 +411,9 @@ class MainWindow(QMainWindow):
         self._editor.setReadOnly(True)
         self._editor.clear()
         self._metadata_panel.clear()
-        self._save_btn.setEnabled(False)
-        self._cancel_btn.setEnabled(False)
+        self._save_action.setVisible(False)
+        self._cancel_action.setVisible(False)
+        self._editor_wrapper.setStyleSheet("")
         self._edit_toggle_btn.setChecked(False)
         self._edit_toggle_btn.setText("✏  Edit")
         self._current_result = None
@@ -470,8 +473,9 @@ class MainWindow(QMainWindow):
             self._edit_mode = False
             self._editor.setReadOnly(True)
             self._metadata_panel.set_edit_mode(False)
-            self._save_btn.setEnabled(False)
-            self._cancel_btn.setEnabled(False)
+            self._save_action.setVisible(False)
+            self._cancel_action.setVisible(False)
+            self._editor_wrapper.setStyleSheet("")
             self._edit_toggle_btn.setChecked(False)
             self._edit_toggle_btn.setText("✏  Edit")
 
@@ -580,10 +584,10 @@ class MainWindow(QMainWindow):
                 pass
         self._query_list.set_results(results)
 
-    def _on_object_clicked(self, href: str) -> None:
-        """Reverse search: clicking a table/col name filters the query list."""
+    def _on_filter_requested(self, kind: str, value: str) -> None:
+        """Reverse search: clicking a table/column chip fills the search bar."""
         self._search_bar.blockSignals(True)
-        self._search_bar._edit.setText(href)
+        self._search_bar._edit.setText(f"{kind}:{value}")
         self._search_bar.blockSignals(False)
         self._run_search()
 
@@ -687,8 +691,11 @@ class MainWindow(QMainWindow):
         self._edit_mode = True
         self._editor.setReadOnly(False)
         self._metadata_panel.set_edit_mode(True)
-        self._save_btn.setEnabled(True)
-        self._cancel_btn.setEnabled(True)
+        self._save_action.setVisible(True)
+        self._cancel_action.setVisible(True)
+        self._editor_wrapper.setStyleSheet(
+            f"#EditorWrapper {{ border: 1px solid {ACCENT_BORDER}; border-radius: 4px; }}"
+        )
         self._edit_toggle_btn.setText("✏  Editing…")
 
     def _cancel_edit_mode(self) -> None:
@@ -696,8 +703,9 @@ class MainWindow(QMainWindow):
         self._edit_mode = False
         self._editor.setReadOnly(True)
         self._metadata_panel.set_edit_mode(False)
-        self._save_btn.setEnabled(False)
-        self._cancel_btn.setEnabled(False)
+        self._save_action.setVisible(False)
+        self._cancel_action.setVisible(False)
+        self._editor_wrapper.setStyleSheet("")
         self._edit_toggle_btn.setChecked(False)
         self._edit_toggle_btn.setText("✏  Edit")
         # Reload from disk to discard unsaved changes
@@ -735,8 +743,9 @@ class MainWindow(QMainWindow):
         self._edit_mode = False
         self._editor.setReadOnly(True)
         self._metadata_panel.set_edit_mode(False)
-        self._save_btn.setEnabled(False)
-        self._cancel_btn.setEnabled(False)
+        self._save_action.setVisible(False)
+        self._cancel_action.setVisible(False)
+        self._editor_wrapper.setStyleSheet("")
         self._edit_toggle_btn.setChecked(False)
         self._edit_toggle_btn.setText("✏  Edit")
         self._refresh_ui()
