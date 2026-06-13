@@ -32,6 +32,15 @@ from .theme.tokens import (
 )
 
 
+def _palette_btn_style() -> str:
+    return (
+        f"QPushButton {{ background-color: {_tk.ACCENT_FILL}; color: {_tk.ACCENT}; "
+        f"border: 1px solid {_tk.ACCENT_BORDER}; border-radius: {_tk.RADIUS}px; "
+        f"padding: 2px 10px; font-size: 11px; font-weight: 500; }} "
+        f"QPushButton:hover {{ background-color: {_tk.ACCENT_FOCUS_BG}; border-color: {_tk.ACCENT}; }}"
+    )
+
+
 def _chip_style() -> str:
     return (
         f"QPushButton {{ background-color: {_tk.TAG_BG}; color: {_tk.TEXT_SECONDARY}; "
@@ -59,6 +68,7 @@ class MetadataPanel(QWidget):
     filter_requested = Signal(str, str)
     favorite_toggled = Signal()
     reveal_requested = Signal()
+    command_palette_requested = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -87,11 +97,11 @@ class MetadataPanel(QWidget):
         )
         self._title_label.setWordWrap(True)
 
-        self._shortcut_hint = QLabel("Ctrl+P")
-        self._shortcut_hint.setStyleSheet(
-            f"color: {TEXT_TERTIARY}; font-size: 9px; padding-right: 4px;"
-        )
+        self._shortcut_hint = QPushButton("⌘  Ctrl+P")
         self._shortcut_hint.setToolTip(tr("metadata.command_palette"))
+        self._shortcut_hint.setStyleSheet(_palette_btn_style())
+        self._shortcut_hint.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._shortcut_hint.clicked.connect(self.command_palette_requested)
 
         title_row = QHBoxLayout()
         title_row.setContentsMargins(0, 0, 0, 0)
@@ -315,9 +325,7 @@ class MetadataPanel(QWidget):
             f"font-weight: bold; font-size: 13px; color: {_tk.TEXT_PRIMARY};"
         )
         self._desc_label.setStyleSheet(f"color: {_tk.TEXT_SECONDARY}; font-size: 12px;")
-        self._shortcut_hint.setStyleSheet(
-            f"color: {_tk.TEXT_TERTIARY}; font-size: 9px; padding-right: 4px;"
-        )
+        self._shortcut_hint.setStyleSheet(_palette_btn_style())
         self._path_btn.setStyleSheet(
             f"QPushButton {{ background: transparent; border: none; text-align: left; "
             f"color: {_tk.TEXT_SECONDARY}; font-size: 11px; padding: 0px 0px 1px 0px; }} "
