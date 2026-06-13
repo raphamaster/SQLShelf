@@ -147,10 +147,12 @@ class IndexDB:
                 self._conn.execute("ROLLBACK")
                 raise
 
-    def index_incremental(self, queries: list[Query]) -> int:
+    def index_incremental(self, queries: list[Query], progress_cb=None) -> int:
         """Smart reindex: skip files whose mtime+hash are unchanged.
 
         Returns total number of files inserted, updated, or deleted.
+        *progress_cb*, if provided, is called as ``progress_cb(current, total)``
+        after each file is processed (safe to emit Qt signals from here).
         """
         with self._lock:
             existing: dict[str, tuple[int, str]] = {
@@ -162,25 +164,32 @@ class IndexDB:
 
             changed = 0
             current_paths: set[str] = set()
+            total = len(queries)
 
             self._conn.execute("BEGIN")
             try:
-                for query in queries:
+                for i, query in enumerate(queries):
                     try:
                         rel_path = query.path.relative_to(self._project_root).as_posix()
                     except ValueError:
+                        if progress_cb:
+                            progress_cb(i + 1, total)
                         continue
                     current_paths.add(rel_path)
 
                     try:
                         stat = query.path.stat()
                     except OSError:
+                        if progress_cb:
+                            progress_cb(i + 1, total)
                         continue
                     file_mtime = int(stat.st_mtime)
 
                     if rel_path in existing:
                         stored_mtime, stored_hash = existing[rel_path]
                         if file_mtime == stored_mtime:
+                            if progress_cb:
+                                progress_cb(i + 1, total)
                             continue
                         content_hash = hashlib.sha256(query.path.read_bytes()).hexdigest()
                         if content_hash == stored_hash:
@@ -188,11 +197,15 @@ class IndexDB:
                                 "UPDATE queries SET file_mtime=? WHERE rel_path=?",
                                 (file_mtime, rel_path),
                             )
+                            if progress_cb:
+                                progress_cb(i + 1, total)
                             continue
                         self._conn.execute("DELETE FROM queries WHERE rel_path=?", (rel_path,))
 
                     self._insert_query(query)
                     changed += 1
+                    if progress_cb:
+                        progress_cb(i + 1, total)
 
                 deleted = set(existing.keys()) - current_paths
                 for rel_path in deleted:
