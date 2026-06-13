@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
 from ..core.frontmatter import write_sql_file
 from ..core.i18n import tr
 from ..core.snippets import apply_template, extract_params, list_templates
-from .new_query_dialog import _FolderTree
+from .new_query_dialog import _FolderSelector
 
 
 def _safe_filename(title: str) -> str:
@@ -69,7 +69,7 @@ class TemplateDialog(QDialog):
         self._tags_edit = QLineEdit()
         self._tags_edit.setPlaceholderText(tr("dialog.template.tags_placeholder"))
 
-        self._folder_tree = _FolderTree(
+        self._folder_selector = _FolderSelector(
             subfolders,
             tr("dialog.new_query.project_root"),
         )
@@ -95,7 +95,7 @@ class TemplateDialog(QDialog):
 
         form = QFormLayout()
         form.addRow(tr("dialog.new_query.label_tags"), self._tags_edit)
-        form.addRow(tr("dialog.new_query.label_folder"), self._folder_tree)
+        form.addRow(tr("dialog.new_query.label_folder"), self._folder_selector)
         layout.addLayout(form)
 
         layout.addWidget(QLabel(tr("dialog.template.params_label")))
@@ -162,7 +162,7 @@ class TemplateDialog(QDialog):
         params = {k: w.text() for k, w in self._params_widgets.items()}
         filled_body = apply_template(body, params)
 
-        folder_key = self._folder_tree.selected_folder()
+        folder_key = self._folder_selector.selected_folder()
         if folder_key == "__root__":
             target_dir = self._project_root
         else:
