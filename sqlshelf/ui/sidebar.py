@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QHBoxLayout,
@@ -23,6 +23,9 @@ from .theme import tokens as _tk
 from .theme.tokens import ACCENT, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_TERTIARY
 
 _ROLE_PATH = Qt.ItemDataRole.UserRole
+_IMAGES = Path(__file__).parent.parent.parent / "images"
+_LOGO_DARK  = _IMAGES / "logo_sqlshelf.png"
+_LOGO_LIGHT = _IMAGES / "logo_sqlshelf_white.png"
 
 
 class CollapsibleSection(QWidget):
@@ -104,20 +107,16 @@ class SidebarWidget(QWidget):
         tr_layout.setContentsMargins(0, 2, 0, 4)
         tr_layout.setSpacing(6)
 
-        self._icon_lbl = QLabel("≡")
-        self._icon_lbl.setStyleSheet(
-            f"color: {ACCENT}; font-size: 18px; font-weight: bold; background: transparent;"
-        )
-        self._icon_lbl.setFixedWidth(18)
+        self._logo_lbl = QLabel()
+        self._logo_lbl.setObjectName("LogoLabel")
+        self._logo_lbl.setStyleSheet("background: transparent;")
+        self._logo_lbl.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
+        self._logo_lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        self._logo_pix_dark  = QPixmap(str(_LOGO_DARK))
+        self._logo_pix_light = QPixmap(str(_LOGO_LIGHT))
+        self._update_logo_pixmap()
 
-        self._name_lbl = QLabel("SQLShelf")
-        self._name_lbl.setStyleSheet(
-            f"font-weight: 600; font-size: 14px; color: {TEXT_PRIMARY};"
-            " background: transparent; letter-spacing: 0.3px;"
-        )
-
-        tr_layout.addWidget(self._icon_lbl)
-        tr_layout.addWidget(self._name_lbl)
+        tr_layout.addWidget(self._logo_lbl)
         tr_layout.addStretch()
 
         # ── Open Folder button ────────────────────────────────────────────────
@@ -392,14 +391,21 @@ class SidebarWidget(QWidget):
         self._set_active_btn(self._btn_all)
         self.tag_selected.emit(item.text())
 
+    def _update_logo_pixmap(self) -> None:
+        pix = (
+            self._logo_pix_light
+            if _tk.ACTIVE_THEME == "light"
+            else self._logo_pix_dark
+        )
+        if pix.isNull():
+            self._logo_lbl.setText("SQLShelf")
+            return
+        self._logo_lbl.setPixmap(
+            pix.scaledToHeight(28, Qt.TransformationMode.SmoothTransformation)
+        )
+
     def refresh_theme(self) -> None:
-        self._icon_lbl.setStyleSheet(
-            f"color: {_tk.ACCENT}; font-size: 18px; font-weight: bold; background: transparent;"
-        )
-        self._name_lbl.setStyleSheet(
-            f"font-weight: 600; font-size: 14px; color: {_tk.TEXT_PRIMARY};"
-            " background: transparent; letter-spacing: 0.3px;"
-        )
+        self._update_logo_pixmap()
         self._empty_label.setStyleSheet(f"color: {_tk.TEXT_TERTIARY}; font-size: 11px;")
 
     def _selected_tag(self) -> str:
