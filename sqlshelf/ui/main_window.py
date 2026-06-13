@@ -236,11 +236,8 @@ class MainWindow(QMainWindow):
 
         # Editor toolbar
         self._toolbar = QToolBar()
+        self._toolbar.setObjectName("EditorToolBar")
         self._toolbar.setMovable(False)
-        self._toolbar.setStyleSheet(
-            "QToolBar { background-color: #1c1c2e; border: none; padding: 2px 8px; spacing: 2px; }"
-            "QPushButton { padding: 1px 10px; font-size: 12px; max-height: 24px; }"
-        )
 
         self._edit_toggle_btn = QPushButton("✏  Edit")
         self._edit_toggle_btn.setCheckable(True)
@@ -271,10 +268,6 @@ class MainWindow(QMainWindow):
         # Top section — metadata + toolbar share a dark card background
         top_section = QWidget()
         top_section.setObjectName("EditorTopSection")
-        top_section.setStyleSheet(
-            "QWidget#EditorTopSection { background-color: #1c1c2e; "
-            "border-bottom: 2px solid #3a3a60; }"
-        )
         ts_layout = QVBoxLayout(top_section)
         ts_layout.setContentsMargins(0, 0, 0, 0)
         ts_layout.setSpacing(0)

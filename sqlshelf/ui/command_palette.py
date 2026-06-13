@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..core.models import SearchResult
+from .theme.tokens import TEXT_SECONDARY
 
 
 class CommandPalette(QDialog):
@@ -44,7 +45,7 @@ class CommandPalette(QDialog):
         self._all_results = results
 
         hint = QLabel("Type to filter queries — Enter to open")
-        hint.setStyleSheet("color: #888888; font-size: 11px; padding: 2px 4px;")
+        hint.setStyleSheet(f"color: {TEXT_SECONDARY}; font-size: 11px; padding: 2px 4px;")
 
         self._search = QLineEdit()
         self._search.setPlaceholderText("Search queries…")

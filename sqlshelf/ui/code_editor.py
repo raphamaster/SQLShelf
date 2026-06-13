@@ -5,6 +5,13 @@ from PySide6.QtGui import QColor, QPainter, QTextFormat
 from PySide6.QtWidgets import QTextEdit
 from PySide6.QtWidgets import QPlainTextEdit, QWidget
 
+from .theme.tokens import (
+    EDITOR_LINE_HL,
+    GUTTER_BG,
+    GUTTER_NUM_CURRENT,
+    GUTTER_NUM_INACTIVE,
+)
+
 
 class _LineNumberArea(QWidget):
     def __init__(self, editor: CodeEditor) -> None:
@@ -25,10 +32,10 @@ class CodeEditor(QPlainTextEdit):
     and the active line is always highlighted.
     """
 
-    _GUTTER_BG       = QColor("#1a1a2a")
-    _NUM_INACTIVE    = QColor("#45455a")
-    _NUM_CURRENT     = QColor("#c0c0e0")
-    _LINE_HIGHLIGHT  = QColor("#24243a")  # subtle tint on the current line
+    _GUTTER_BG       = QColor(GUTTER_BG)
+    _NUM_INACTIVE    = QColor(GUTTER_NUM_INACTIVE)
+    _NUM_CURRENT     = QColor(GUTTER_NUM_CURRENT)
+    _LINE_HIGHLIGHT  = QColor(EDITOR_LINE_HL)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
