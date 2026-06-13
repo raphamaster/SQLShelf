@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 from ..core.frontmatter import write_sql_file
 from ..core.i18n import tr
 from ..core.snippets import apply_template, extract_params, list_templates
+from .new_query_dialog import _FolderSelector, _safe_filename as _sf
 
 
 def _safe_filename(title: str) -> str:
@@ -39,14 +40,13 @@ class TemplateDialog(QDialog):
 
     def __init__(
         self,
-        project_root: Path,
-        subfolders: list[str],
+        current_project: Path,
+        all_projects: list[Path],
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle(tr("dialog.template.title"))
         self.resize(640, 520)
-        self._project_root = project_root
         self.created_path: Path | None = None
 
         templates = list_templates()
@@ -68,10 +68,10 @@ class TemplateDialog(QDialog):
         self._tags_edit = QLineEdit()
         self._tags_edit.setPlaceholderText(tr("dialog.template.tags_placeholder"))
 
-        self._folder_combo = QComboBox()
-        self._folder_combo.addItem(tr("dialog.new_query.project_root"), userData="__root__")
-        for sf in sorted(subfolders):
-            self._folder_combo.addItem(sf)
+        self._folder_selector = _FolderSelector(
+            all_projects,
+            current_project,
+        )
 
         self._params_form = QFormLayout()
 
@@ -94,7 +94,7 @@ class TemplateDialog(QDialog):
 
         form = QFormLayout()
         form.addRow(tr("dialog.new_query.label_tags"), self._tags_edit)
-        form.addRow(tr("dialog.new_query.label_folder"), self._folder_combo)
+        form.addRow(tr("dialog.new_query.label_folder"), self._folder_selector)
         layout.addLayout(form)
 
         layout.addWidget(QLabel(tr("dialog.template.params_label")))
@@ -161,11 +161,8 @@ class TemplateDialog(QDialog):
         params = {k: w.text() for k, w in self._params_widgets.items()}
         filled_body = apply_template(body, params)
 
-        if self._folder_combo.currentData() == "__root__":
-            target_dir = self._project_root
-        else:
-            target_dir = self._project_root / self._folder_combo.currentText()
-            target_dir.mkdir(parents=True, exist_ok=True)
+        target_dir = self._folder_selector.selected_path()
+        target_dir.mkdir(parents=True, exist_ok=True)
 
         filename = _safe_filename(title) + ".sql"
         path = target_dir / filename
