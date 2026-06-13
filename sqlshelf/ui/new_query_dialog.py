@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..core.frontmatter import write_sql_file
+from ..core.i18n import tr
 
 
 def _safe_filename(title: str) -> str:
@@ -43,33 +44,33 @@ class NewQueryDialog(QDialog):
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
-        self.setWindowTitle("New Query")
+        self.setWindowTitle(tr("dialog.new_query.title"))
         self.resize(600, 450)
         self._project_root = project_root
         self.created_path: Path | None = None
 
         self._title_edit = QLineEdit()
-        self._title_edit.setPlaceholderText("Title (used as filename)")
+        self._title_edit.setPlaceholderText(tr("dialog.new_query.title_placeholder"))
 
         self._tags_edit = QLineEdit()
-        self._tags_edit.setPlaceholderText("Tags (comma-separated)")
+        self._tags_edit.setPlaceholderText(tr("dialog.new_query.tags_placeholder"))
 
         self._desc_edit = QLineEdit()
-        self._desc_edit.setPlaceholderText("Short description")
+        self._desc_edit.setPlaceholderText(tr("dialog.new_query.desc_placeholder"))
 
         self._folder_combo = QComboBox()
-        self._folder_combo.addItem("(project root)")
+        self._folder_combo.addItem(tr("dialog.new_query.project_root"), userData="__root__")
         for sf in sorted(subfolders):
             self._folder_combo.addItem(sf)
 
         self._body_edit = QPlainTextEdit()
-        self._body_edit.setPlaceholderText("Paste SQL here…")
+        self._body_edit.setPlaceholderText(tr("dialog.new_query.sql_placeholder"))
 
         form = QFormLayout()
-        form.addRow("Title *:", self._title_edit)
-        form.addRow("Tags:", self._tags_edit)
-        form.addRow("Description:", self._desc_edit)
-        form.addRow("Folder:", self._folder_combo)
+        form.addRow(tr("dialog.new_query.label_title"), self._title_edit)
+        form.addRow(tr("dialog.new_query.label_tags"), self._tags_edit)
+        form.addRow(tr("dialog.new_query.label_desc"), self._desc_edit)
+        form.addRow(tr("dialog.new_query.label_folder"), self._folder_combo)
 
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
@@ -79,21 +80,24 @@ class NewQueryDialog(QDialog):
 
         layout = QVBoxLayout(self)
         layout.addLayout(form)
-        layout.addWidget(QLabel("SQL body:"))
+        layout.addWidget(QLabel(tr("dialog.new_query.label_body")))
         layout.addWidget(self._body_edit)
         layout.addWidget(buttons)
 
     def _on_accept(self) -> None:
         title = self._title_edit.text().strip()
         if not title:
-            QMessageBox.warning(self, "Validation", "Title is required.")
+            QMessageBox.warning(
+                self,
+                tr("dialog.new_query.validation_title"),
+                tr("dialog.new_query.title_required"),
+            )
             return
 
-        folder_text = self._folder_combo.currentText()
-        if folder_text == "(project root)":
+        if self._folder_combo.currentData() == "__root__":
             target_dir = self._project_root
         else:
-            target_dir = self._project_root / folder_text
+            target_dir = self._project_root / self._folder_combo.currentText()
             target_dir.mkdir(parents=True, exist_ok=True)
 
         filename = _safe_filename(title) + ".sql"

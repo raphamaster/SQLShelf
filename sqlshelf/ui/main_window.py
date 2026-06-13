@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
 
 from ..core import config as cfg
 from ..core.frontmatter import read_sql_file, write_sql_file
+from ..core.i18n import available_languages, get_language, ntr, set_language, tr
 from ..core.index_db import IndexDB
 from ..core.models import SearchResult
 from ..core.scanner import scan_folder
@@ -143,7 +144,7 @@ class _IndexProgressDialog(QDialog):
             parent,
             Qt.WindowType.WindowTitleHint | Qt.WindowType.CustomizeWindowHint,
         )
-        self.setWindowTitle("Indexing…")
+        self.setWindowTitle(tr("progress.title"))
         self.setModal(True)
         self.setMinimumWidth(420)
         self.setFixedHeight(140)
@@ -152,10 +153,10 @@ class _IndexProgressDialog(QDialog):
         layout.setContentsMargins(24, 20, 24, 20)
         layout.setSpacing(10)
 
-        self._title_label = QLabel(f"<b>Importing folder:</b> {folder_name}")
+        self._title_label = QLabel(tr("progress.importing", name=folder_name))
         layout.addWidget(self._title_label)
 
-        self._detail_label = QLabel("Scanning files…")
+        self._detail_label = QLabel(tr("progress.scanning"))
         layout.addWidget(self._detail_label)
 
         self._bar = QProgressBar()
@@ -173,7 +174,7 @@ class _IndexProgressDialog(QDialog):
             self._bar.setRange(0, total)
         self._bar.setValue(current)
         pct = int(current / total * 100)
-        self._detail_label.setText(f"Indexing: {current} / {total} files")
+        self._detail_label.setText(tr("progress.indexing_files", current=current, total=total))
         self._pct_label.setText(f"{pct}%")
 
 
@@ -247,100 +248,123 @@ class MainWindow(QMainWindow):
         mb = QMenuBar(self)
         self.setMenuBar(mb)
 
-        file_menu = QMenu("&File", self)
-        mb.addMenu(file_menu)
+        self._file_menu = QMenu(tr("menu.file"), self)
+        mb.addMenu(self._file_menu)
 
-        open_act = QAction(
-            _icon(QStyle.StandardPixmap.SP_DirOpenIcon), "Open Folder…", self
+        self._open_act = QAction(
+            _icon(QStyle.StandardPixmap.SP_DirOpenIcon), tr("menu.open_folder"), self
         )
-        open_act.setShortcut(QKeySequence("Ctrl+O"))
-        open_act.triggered.connect(self.open_folder)
-        file_menu.addAction(open_act)
+        self._open_act.setShortcut(QKeySequence("Ctrl+O"))
+        self._open_act.triggered.connect(self.open_folder)
+        self._file_menu.addAction(self._open_act)
 
-        new_act = QAction(
-            _icon(QStyle.StandardPixmap.SP_FileIcon), "New Query…", self
+        self._new_act = QAction(
+            _icon(QStyle.StandardPixmap.SP_FileIcon), tr("menu.new_query"), self
         )
-        new_act.setShortcut(QKeySequence("Ctrl+N"))
-        new_act.triggered.connect(self.new_query)
-        file_menu.addAction(new_act)
+        self._new_act.setShortcut(QKeySequence("Ctrl+N"))
+        self._new_act.triggered.connect(self.new_query)
+        self._file_menu.addAction(self._new_act)
 
-        self._new_template_act = QAction("New from Template…", self)
+        self._new_template_act = QAction(tr("menu.new_from_template"), self)
         self._new_template_act.triggered.connect(self.new_from_template)
-        file_menu.addAction(self._new_template_act)
+        self._file_menu.addAction(self._new_template_act)
 
         self._duplicate_act = QAction(
-            _icon(QStyle.StandardPixmap.SP_FileLinkIcon), "Duplicate Query…", self
+            _icon(QStyle.StandardPixmap.SP_FileLinkIcon), tr("menu.duplicate_query"), self
         )
         self._duplicate_act.setShortcut(QKeySequence("Ctrl+D"))
         self._duplicate_act.triggered.connect(self.duplicate_current)
-        file_menu.addAction(self._duplicate_act)
+        self._file_menu.addAction(self._duplicate_act)
 
-        file_menu.addSeparator()
+        self._file_menu.addSeparator()
 
-        self._recent_menu = QMenu("Recent Projects", self)
+        self._recent_menu = QMenu(tr("menu.recent_projects"), self)
         self._recent_menu.setIcon(_icon(QStyle.StandardPixmap.SP_FileDialogStart))
-        file_menu.addMenu(self._recent_menu)
+        self._file_menu.addMenu(self._recent_menu)
         self._rebuild_recent_menu()
 
-        file_menu.addSeparator()
+        self._file_menu.addSeparator()
 
-        reindex_act = QAction(
-            _icon(QStyle.StandardPixmap.SP_BrowserReload), "Force Reindex", self
+        self._reindex_act = QAction(
+            _icon(QStyle.StandardPixmap.SP_BrowserReload), tr("menu.force_reindex"), self
         )
-        reindex_act.triggered.connect(self.force_reindex)
-        file_menu.addAction(reindex_act)
+        self._reindex_act.triggered.connect(self.force_reindex)
+        self._file_menu.addAction(self._reindex_act)
 
-        view_menu = QMenu("&View", self)
-        mb.addMenu(view_menu)
+        self._view_menu = QMenu(tr("menu.view"), self)
+        mb.addMenu(self._view_menu)
 
-        settings_menu = QMenu("&Settings", self)
-        mb.addMenu(settings_menu)
+        self._settings_menu = QMenu(tr("menu.settings"), self)
+        mb.addMenu(self._settings_menu)
 
-        theme_menu = QMenu("Theme", self)
-        settings_menu.addMenu(theme_menu)
+        # Theme submenu
+        self._theme_menu = QMenu(tr("menu.theme"), self)
+        self._settings_menu.addMenu(self._theme_menu)
 
         current_theme = cfg.get_theme()
         theme_group = QActionGroup(self)
         theme_group.setExclusive(True)
-        for key, label in [("dark", "Dark"), ("light", "Light")]:
-            act = QAction(label, self)
+        self._theme_acts: dict[str, QAction] = {}
+        for key, label_key in [("dark", "menu.theme_dark"), ("light", "menu.theme_light")]:
+            act = QAction(tr(label_key), self)
             act.setCheckable(True)
             act.setChecked(key == current_theme)
             act.triggered.connect(lambda checked, k=key: self._change_theme(k))
             theme_group.addAction(act)
-            theme_menu.addAction(act)
+            self._theme_menu.addAction(act)
+            self._theme_acts[key] = act
 
-        help_menu = QMenu("&Help", self)
-        mb.addMenu(help_menu)
-        help_act = QAction("Help", self)
-        help_act.setShortcut(QKeySequence("F1"))
-        help_act.triggered.connect(self._show_help)
-        help_menu.addAction(help_act)
-        help_menu.addSeparator()
-        about_act = QAction("About SQLShelf", self)
-        about_act.triggered.connect(self._show_about)
-        help_menu.addAction(about_act)
+        self._settings_menu.addSeparator()
 
-        reveal_act = QAction(
+        # Language submenu
+        self._language_menu = QMenu(tr("menu.language"), self)
+        self._settings_menu.addMenu(self._language_menu)
+        self._rebuild_language_menu()
+
+        self._help_menu = QMenu(tr("menu.help"), self)
+        mb.addMenu(self._help_menu)
+        self._help_act = QAction(tr("menu.help_action"), self)
+        self._help_act.setShortcut(QKeySequence("F1"))
+        self._help_act.triggered.connect(self._show_help)
+        self._help_menu.addAction(self._help_act)
+        self._help_menu.addSeparator()
+        self._about_act = QAction(tr("menu.about"), self)
+        self._about_act.triggered.connect(self._show_about)
+        self._help_menu.addAction(self._about_act)
+
+        self._reveal_act = QAction(
             _icon(QStyle.StandardPixmap.SP_FileDialogDetailedView),
-            "Reveal File in Explorer",
+            tr("menu.reveal_in_explorer"),
             self,
         )
-        reveal_act.triggered.connect(self.reveal_in_explorer)
-        view_menu.addAction(reveal_act)
+        self._reveal_act.triggered.connect(self.reveal_in_explorer)
+        self._view_menu.addAction(self._reveal_act)
 
-        open_ssms_act = QAction("Open in SSMS", self)
-        open_ssms_act.triggered.connect(self.open_in_ssms)
-        view_menu.addAction(open_ssms_act)
+        self._open_ssms_act = QAction(tr("menu.open_in_ssms"), self)
+        self._open_ssms_act.triggered.connect(self.open_in_ssms)
+        self._view_menu.addAction(self._open_ssms_act)
 
-        copy_act = QAction(
+        self._copy_act = QAction(
             _icon(QStyle.StandardPixmap.SP_DialogSaveButton),
-            "Copy SQL (no frontmatter)",
+            tr("menu.copy_sql"),
             self,
         )
-        copy_act.setShortcut(QKeySequence("Ctrl+Shift+C"))
-        copy_act.triggered.connect(self.copy_sql)
-        view_menu.addAction(copy_act)
+        self._copy_act.setShortcut(QKeySequence("Ctrl+Shift+C"))
+        self._copy_act.triggered.connect(self.copy_sql)
+        self._view_menu.addAction(self._copy_act)
+
+    def _rebuild_language_menu(self) -> None:
+        self._language_menu.clear()
+        current = get_language()
+        lang_group = QActionGroup(self)
+        lang_group.setExclusive(True)
+        for code, name in available_languages():
+            act = QAction(name, self)
+            act.setCheckable(True)
+            act.setChecked(code == current)
+            act.triggered.connect(lambda checked, c=code: self._change_language(c))
+            lang_group.addAction(act)
+            self._language_menu.addAction(act)
 
     def _build_ui(self) -> None:
         # Left panel
@@ -387,16 +411,16 @@ class MainWindow(QMainWindow):
         self._toolbar.setObjectName("EditorToolBar")
         self._toolbar.setMovable(False)
 
-        self._edit_toggle_btn = QPushButton("✏  Edit")
+        self._edit_toggle_btn = QPushButton(tr("editor.btn_edit"))
         self._edit_toggle_btn.setCheckable(True)
-        self._edit_toggle_btn.setToolTip("Toggle edit mode (Ctrl+E)")
+        self._edit_toggle_btn.setToolTip(tr("editor.tooltip_edit"))
         self._edit_toggle_btn.clicked.connect(self._toggle_edit_mode)
 
-        self._save_btn = QPushButton("💾  Save")
-        self._save_btn.setToolTip("Save changes (Ctrl+S)")
+        self._save_btn = QPushButton(tr("editor.btn_save"))
+        self._save_btn.setToolTip(tr("editor.tooltip_save"))
         self._save_btn.clicked.connect(self.save_current)
 
-        self._cancel_btn = QPushButton("✕  Cancel")
+        self._cancel_btn = QPushButton(tr("editor.btn_cancel"))
         self._cancel_btn.clicked.connect(self._cancel_edit)
 
         self._toolbar.addWidget(self._edit_toggle_btn)
@@ -453,30 +477,28 @@ class MainWindow(QMainWindow):
         ob_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._ob_icon = ob_icon
 
-        ob_title = QLabel("No folder open")
-        ob_title.setStyleSheet(
+        self._ob_title = QLabel(tr("onboarding.no_folder"))
+        self._ob_title.setStyleSheet(
             f"font-size: 17px; font-weight: bold; color: {TEXT_SECONDARY};"
         )
-        ob_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._ob_title = ob_title
+        self._ob_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        ob_sub = QLabel("Open a folder to start browsing your SQL queries.")
-        ob_sub.setStyleSheet(f"font-size: 12px; color: {TEXT_TERTIARY};")
-        ob_sub.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._ob_sub = ob_sub
+        self._ob_sub = QLabel(tr("onboarding.subtitle"))
+        self._ob_sub.setStyleSheet(f"font-size: 12px; color: {TEXT_TERTIARY};")
+        self._ob_sub.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        ob_btn = QPushButton("📂  Open Folder")
-        ob_btn.setObjectName("OpenFolderBtn")
-        ob_btn.setFixedWidth(160)
-        ob_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        ob_btn.clicked.connect(self.open_folder)
+        self._ob_open_btn = QPushButton(tr("onboarding.open_btn"))
+        self._ob_open_btn.setObjectName("OpenFolderBtn")
+        self._ob_open_btn.setFixedWidth(160)
+        self._ob_open_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._ob_open_btn.clicked.connect(self.open_folder)
 
         ob_layout.addWidget(ob_icon)
         ob_layout.addSpacing(4)
-        ob_layout.addWidget(ob_title)
-        ob_layout.addWidget(ob_sub)
+        ob_layout.addWidget(self._ob_title)
+        ob_layout.addWidget(self._ob_sub)
         ob_layout.addSpacing(12)
-        ob_layout.addWidget(ob_btn, alignment=Qt.AlignmentFlag.AlignCenter)
+        ob_layout.addWidget(self._ob_open_btn, alignment=Qt.AlignmentFlag.AlignCenter)
 
         # ── Content stack: normal (middle + right) OR onboarding ─────────────
         self._inner_splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -515,11 +537,67 @@ class MainWindow(QMainWindow):
         esc.activated.connect(self._cancel_edit_mode)
 
     # ------------------------------------------------------------------
+    # i18n — live language switching
+    # ------------------------------------------------------------------
+
+    def _change_language(self, lang: str) -> None:
+        cfg.set_language(lang)
+        set_language(lang)
+        self._rebuild_language_menu()
+        self.retranslate_ui()
+
+    def retranslate_ui(self) -> None:
+        """Re-apply all translatable strings after a language change."""
+        # Menus
+        self._file_menu.setTitle(tr("menu.file"))
+        self._view_menu.setTitle(tr("menu.view"))
+        self._settings_menu.setTitle(tr("menu.settings"))
+        self._theme_menu.setTitle(tr("menu.theme"))
+        self._language_menu.setTitle(tr("menu.language"))
+        self._help_menu.setTitle(tr("menu.help"))
+        # Actions
+        self._open_act.setText(tr("menu.open_folder"))
+        self._new_act.setText(tr("menu.new_query"))
+        self._new_template_act.setText(tr("menu.new_from_template"))
+        self._duplicate_act.setText(tr("menu.duplicate_query"))
+        self._recent_menu.setTitle(tr("menu.recent_projects"))
+        self._reindex_act.setText(tr("menu.force_reindex"))
+        self._reveal_act.setText(tr("menu.reveal_in_explorer"))
+        self._open_ssms_act.setText(tr("menu.open_in_ssms"))
+        self._copy_act.setText(tr("menu.copy_sql"))
+        self._help_act.setText(tr("menu.help_action"))
+        self._about_act.setText(tr("menu.about"))
+        for key, act in self._theme_acts.items():
+            label_key = "menu.theme_dark" if key == "dark" else "menu.theme_light"
+            act.setText(tr(label_key))
+        # Rebuild the recent menu "(none)" label if needed
+        self._rebuild_recent_menu()
+        # Toolbar buttons
+        if not self._edit_mode:
+            self._edit_toggle_btn.setText(tr("editor.btn_edit"))
+        else:
+            self._edit_toggle_btn.setText(tr("editor.btn_editing"))
+        self._edit_toggle_btn.setToolTip(tr("editor.tooltip_edit"))
+        self._save_btn.setText(tr("editor.btn_save"))
+        self._save_btn.setToolTip(tr("editor.tooltip_save"))
+        self._cancel_btn.setText(tr("editor.btn_cancel"))
+        # Onboarding
+        self._ob_title.setText(tr("onboarding.no_folder"))
+        self._ob_sub.setText(tr("onboarding.subtitle"))
+        self._ob_open_btn.setText(tr("onboarding.open_btn"))
+        # Child widgets
+        self._sidebar.retranslate_ui()
+        self._search_bar.retranslate_ui()
+        self._metadata_panel.retranslate_ui()
+        # Status bar
+        self._refresh_status_bar()
+
+    # ------------------------------------------------------------------
     # Folder / indexing
     # ------------------------------------------------------------------
 
     def open_folder(self) -> None:
-        folder = QFileDialog.getExistingDirectory(self, "Select Queries Folder")
+        folder = QFileDialog.getExistingDirectory(self, tr("dialog.open_folder"))
         if folder:
             self.load_folder(Path(folder))
 
@@ -539,7 +617,7 @@ class MainWindow(QMainWindow):
         self._sidebar.set_folders(cfg.get_known_folders(), folder)
 
         self.setWindowTitle(f"SQLShelf — {folder.name}")
-        self._status_bar.showMessage("Indexing…")
+        self._status_bar.showMessage(tr("status.indexing"))
         self._reset_editor()
 
         self._progress_dialog = _IndexProgressDialog(folder.name, self)
@@ -569,7 +647,7 @@ class MainWindow(QMainWindow):
         self._search_bar.clear()
         self._search_bar.blockSignals(False)
         self._sidebar.set_folders(cfg.get_known_folders(), folder)
-        self._status_bar.showMessage(f"Folder: {folder.name}")
+        self._status_bar.showMessage(tr("status.folder", name=folder.name))
         self._refresh_ui()
 
     def _get_or_open_db(self, folder: Path) -> IndexDB:
@@ -581,33 +659,33 @@ class MainWindow(QMainWindow):
         if total > 0:
             pct = int(current / total * 100)
             self._status_bar.showMessage(
-                f"Indexing… {pct}%  ({current}/{total} files)"
+                tr("status.indexing_pct", pct=pct, current=current, total=total)
             )
 
     def _on_index_finished(self, count: int) -> None:
         if self._progress_dialog is not None:
             self._progress_dialog.accept()
             self._progress_dialog = None
-        self._status_bar.showMessage(f"{count} queries indexed")
+        self._status_bar.showMessage(tr("status.indexed", count=count))
         self._refresh_ui()
 
     def _on_index_error(self, msg: str) -> None:
         if self._progress_dialog is not None:
             self._progress_dialog.reject()
             self._progress_dialog = None
-        self._status_bar.showMessage(f"Index error: {msg}")
+        self._status_bar.showMessage(tr("status.index_error", msg=msg))
 
     def force_reindex(self) -> None:
         if self._db is None or self._folder is None:
             return
-        self._status_bar.showMessage("Full reindex…")
+        self._status_bar.showMessage(tr("status.full_reindex"))
         try:
             queries = scan_folder(self._folder)
             self._db.index_all(queries)
-            self._status_bar.showMessage(f"{self._db.count()} queries indexed")
+            self._status_bar.showMessage(tr("status.indexed", count=self._db.count()))
             self._refresh_ui()
         except Exception as exc:
-            self._status_bar.showMessage(f"Reindex error: {exc}")
+            self._status_bar.showMessage(tr("status.reindex_error", msg=str(exc)))
 
     def _stop_watcher(self) -> None:
         if self._watcher is not None:
@@ -618,7 +696,7 @@ class MainWindow(QMainWindow):
         self._recent_menu.clear()
         recents = cfg.get_recent_projects()
         if not recents:
-            self._recent_menu.addAction("(none)").setEnabled(False)
+            self._recent_menu.addAction(tr("menu.recent_none")).setEnabled(False)
             return
         for path in recents:
             action = QAction(str(path), self)
@@ -635,7 +713,7 @@ class MainWindow(QMainWindow):
         self._cancel_action.setVisible(False)
         self._editor_wrapper.setStyleSheet("")
         self._edit_toggle_btn.setChecked(False)
-        self._edit_toggle_btn.setText("✏  Edit")
+        self._edit_toggle_btn.setText(tr("editor.btn_edit"))
         self._current_result = None
         self._current_metadata = {}
 
@@ -655,12 +733,13 @@ class MainWindow(QMainWindow):
         if self._known_dbs:
             total = sum(db.count() for db in self._known_dbs.values())
             n = len(self._known_dbs)
+            q_word = ntr("word.query", "word.queries", total)
+            f_word = ntr("word.folder", "word.folders", n)
             self._status_bar.showMessage(
-                f"{total} {'query' if total == 1 else 'queries'} indexed"
-                f" — {n} folder{'s' if n != 1 else ''} loaded"
+                tr("status.folders_loaded", total=total, query=q_word, n=n, folder=f_word)
             )
         else:
-            self._status_bar.showMessage("No folder loaded — File → Open Folder…")
+            self._status_bar.showMessage(tr("status.no_folder"))
 
     def _refresh_ui(self) -> None:
         self._update_content_view()
@@ -717,7 +796,7 @@ class MainWindow(QMainWindow):
             self._cancel_action.setVisible(False)
             self._editor_wrapper.setStyleSheet("")
             self._edit_toggle_btn.setChecked(False)
-            self._edit_toggle_btn.setText("✏  Edit")
+            self._edit_toggle_btn.setText(tr("editor.btn_edit"))
 
         # Resolve the folder this result comes from (important in multi-folder mode)
         if result.folder is not None and result.folder.is_dir():
@@ -852,7 +931,7 @@ class MainWindow(QMainWindow):
                     except Exception:
                         pass
             QApplication.clipboard().setText(body)
-            self._status_bar.showMessage(f"Copied: {result.rel_path}")
+            self._status_bar.showMessage(tr("status.copied", path=result.rel_path))
         elif action == "reveal":
             self._query_list.select_by_rel_path(result.rel_path)
             self.reveal_in_explorer()
@@ -869,12 +948,8 @@ class MainWindow(QMainWindow):
     def _on_folder_deindex_requested(self, folder: Path) -> None:
         reply = QMessageBox.question(
             self,
-            "Deindex Folder",
-            f"<b>Remove and deindex:</b><br><br>"
-            f"<tt>{folder}</tt><br><br>"
-            f"This will delete the search index for this folder and remove it from the sidebar.<br>"
-            f"Your original <tt>.sql</tt> files will <b>not</b> be deleted.<br><br>"
-            f"Are you sure?",
+            tr("msg.deindex.title"),
+            tr("msg.deindex.text", path=str(folder)),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
             QMessageBox.StandardButton.Cancel,
         )
@@ -931,9 +1006,8 @@ class MainWindow(QMainWindow):
             return
         if self._current_result and self._current_result.rel_path == result.rel_path:
             self._metadata_panel.set_favorite(is_fav)
-        self._status_bar.showMessage(
-            f"{'Added to' if is_fav else 'Removed from'} favorites: {result.rel_path}"
-        )
+        key = "status.added_favorite" if is_fav else "status.removed_favorite"
+        self._status_bar.showMessage(tr(key, path=result.rel_path))
 
     # ------------------------------------------------------------------
     # Command palette (Ctrl+K)
@@ -998,7 +1072,7 @@ class MainWindow(QMainWindow):
         self._editor_wrapper.setStyleSheet(
             f"#EditorWrapper {{ border: 1px solid {_tk.ACCENT_BORDER}; border-radius: 4px; }}"
         )
-        self._edit_toggle_btn.setText("✏  Editing…")
+        self._edit_toggle_btn.setText(tr("editor.btn_editing"))
 
     def _cancel_edit_mode(self) -> None:
         """Exit edit mode, discarding unsaved changes by reloading from disk."""
@@ -1009,7 +1083,7 @@ class MainWindow(QMainWindow):
         self._cancel_action.setVisible(False)
         self._editor_wrapper.setStyleSheet("")
         self._edit_toggle_btn.setChecked(False)
-        self._edit_toggle_btn.setText("✏  Edit")
+        self._edit_toggle_btn.setText(tr("editor.btn_edit"))
         # Reload from disk to discard unsaved changes
         if self._current_result is not None and self._folder is not None:
             path = self._folder / self._current_result.rel_path
@@ -1034,7 +1108,7 @@ class MainWindow(QMainWindow):
         try:
             write_sql_file(path, meta, body)
         except Exception as exc:
-            QMessageBox.critical(self, "Save Error", str(exc))
+            QMessageBox.critical(self, tr("msg.save_error"), str(exc))
             return
 
         if self._db is not None:
@@ -1049,9 +1123,9 @@ class MainWindow(QMainWindow):
         self._cancel_action.setVisible(False)
         self._editor_wrapper.setStyleSheet("")
         self._edit_toggle_btn.setChecked(False)
-        self._edit_toggle_btn.setText("✏  Edit")
+        self._edit_toggle_btn.setText(tr("editor.btn_edit"))
         self._refresh_ui()
-        self._status_bar.showMessage(f"Saved: {self._current_result.rel_path}")
+        self._status_bar.showMessage(tr("status.saved", path=self._current_result.rel_path))
 
     # ------------------------------------------------------------------
     # New query / duplicate / templates
@@ -1059,7 +1133,9 @@ class MainWindow(QMainWindow):
 
     def new_query(self) -> None:
         if self._folder is None:
-            QMessageBox.information(self, "No Folder", "Open a folder first.")
+            QMessageBox.information(
+                self, tr("msg.no_folder.title"), tr("msg.no_folder.text")
+            )
             return
         subfolders = self._list_subfolders()
         dlg = NewQueryDialog(self._folder, subfolders, self)
@@ -1068,14 +1144,15 @@ class MainWindow(QMainWindow):
 
     def new_from_template(self) -> None:
         if self._folder is None:
-            QMessageBox.information(self, "No Folder", "Open a folder first.")
+            QMessageBox.information(
+                self, tr("msg.no_folder.title"), tr("msg.no_folder.text")
+            )
             return
         if not list_templates():
             QMessageBox.information(
                 self,
-                "No Templates",
-                f"No templates found.\n\nCreate .sql files in:\n"
-                f"{Path.home() / '.sqlshelf' / 'templates'}",
+                tr("msg.no_templates.title"),
+                tr("msg.no_templates.text", path=str(Path.home() / ".sqlshelf" / "templates")),
             )
             return
         dlg = TemplateDialog(self._folder, self._list_subfolders(), self)
@@ -1084,15 +1161,17 @@ class MainWindow(QMainWindow):
 
     def duplicate_current(self) -> None:
         if self._current_result is None or self._folder is None:
-            QMessageBox.information(self, "No Query", "Select a query to duplicate.")
+            QMessageBox.information(
+                self, tr("msg.no_query.title"), tr("msg.no_query.text")
+            )
             return
 
         src_path = self._folder / self._current_result.rel_path
         new_title, ok = QInputDialog.getText(
             self,
-            "Duplicate Query",
-            "New query title:",
-            text=f"Copy of {self._current_result.title}",
+            tr("dialog.duplicate.title"),
+            tr("dialog.duplicate.label"),
+            text=tr("dialog.duplicate.prefix", title=self._current_result.title),
         )
         if not ok or not new_title.strip():
             return
@@ -1101,7 +1180,7 @@ class MainWindow(QMainWindow):
         try:
             metadata, body, _has_fm = read_sql_file(src_path)
         except Exception as exc:
-            QMessageBox.critical(self, "Duplicate Error", str(exc))
+            QMessageBox.critical(self, tr("msg.duplicate_error"), str(exc))
             return
 
         from .new_query_dialog import _safe_filename
@@ -1124,7 +1203,7 @@ class MainWindow(QMainWindow):
         try:
             write_sql_file(dest_path, new_meta, body)
         except Exception as exc:
-            QMessageBox.critical(self, "Duplicate Error", str(exc))
+            QMessageBox.critical(self, tr("msg.duplicate_error"), str(exc))
             return
 
         self._post_create(dest_path)
@@ -1146,7 +1225,7 @@ class MainWindow(QMainWindow):
             self._db.upsert_query(updated[0])
         self._pending_select = path.relative_to(self._folder).as_posix()
         self._refresh_ui()
-        self._status_bar.showMessage(f"Created: {path.name}")
+        self._status_bar.showMessage(tr("status.created", name=path.name))
 
     # ------------------------------------------------------------------
     # Watcher handler
@@ -1169,7 +1248,7 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
         self._refresh_ui()
-        self._status_bar.showMessage(f"{self._db.count()} queries indexed")
+        self._status_bar.showMessage(tr("status.indexed", count=self._db.count()))
 
     # ------------------------------------------------------------------
     # System actions
@@ -1194,46 +1273,27 @@ class MainWindow(QMainWindow):
             try:
                 os.startfile(str(path))  # type: ignore[attr-defined]
             except Exception as exc:
-                QMessageBox.warning(self, "Open in SSMS", str(exc))
+                QMessageBox.warning(self, tr("msg.open_ssms.title"), str(exc))
         else:
-            QMessageBox.information(self, "Open in SSMS", "Only available on Windows.")
+            QMessageBox.information(
+                self, tr("msg.open_ssms.title"), tr("msg.open_ssms.windows_only")
+            )
 
     def copy_sql(self) -> None:
         body = self._editor.toPlainText()
         if body:
             QApplication.clipboard().setText(body)
-            self._status_bar.showMessage("SQL body copied to clipboard")
+            self._status_bar.showMessage(tr("status.sql_copied"))
 
     # ------------------------------------------------------------------
     # Help / About
     # ------------------------------------------------------------------
 
     def _show_help(self) -> None:
-        QMessageBox.information(
-            self,
-            "SQLShelf — Help",
-            "<b>Keyboard shortcuts</b><br><br>"
-            "<b>Ctrl+O</b> — Open Folder<br>"
-            "<b>Ctrl+N</b> — New Query<br>"
-            "<b>Ctrl+D</b> — Duplicate Query<br>"
-            "<b>Ctrl+P</b> — Command Palette<br>"
-            "<b>Ctrl+F</b> — Focus Search<br>"
-            "<b>Ctrl+E</b> — Toggle Edit Mode<br>"
-            "<b>Ctrl+S</b> — Save<br>"
-            "<b>Ctrl+Shift+C</b> — Copy SQL (no frontmatter)<br>"
-            "<b>Esc</b> — Cancel Edit",
-        )
+        QMessageBox.information(self, tr("help.title"), tr("help.text"))
 
     def _show_about(self) -> None:
-        QMessageBox.about(
-            self,
-            "About SQLShelf",
-            "<b>SQLShelf</b><br><br>"
-            "Open-source SQL query manager.<br>"
-            "Organizes, describes, categorizes and searches SQL files<br>"
-            "by content, table, field or tag.<br><br>"
-            "Author: Raphael Franco",
-        )
+        QMessageBox.about(self, tr("about.title"), tr("about.text"))
 
     # ------------------------------------------------------------------
     # Theme
