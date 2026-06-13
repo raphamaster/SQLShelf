@@ -524,7 +524,7 @@ class MainWindow(QMainWindow):
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(self._sidebar)
         splitter.addWidget(self._content_stack)
-        splitter.setSizes([180, 1220])
+        splitter.setSizes([220, 1180])
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
         splitter.setCollapsible(0, False)
