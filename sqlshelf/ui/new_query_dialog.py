@@ -67,34 +67,51 @@ def _build_folder_tree(
     subfolders: list[str],
     root_label: str,
 ) -> QTreeWidget:
-    """Build a QTreeWidget with collapsed folder hierarchy."""
+    """Build a QTreeWidget where root-level folders are always visible.
+
+    Structure:
+        (raiz do projeto)   <- top-level, selectable
+        Backups             <- top-level, selectable, expandable
+          Backup            <- child
+          Restore           <- child
+        CMS                 <- top-level, selectable, expandable
+          CMSProperties     <- child
+    """
     tree = QTreeWidget(parent_widget)
     tree.setHeaderHidden(True)
     tree.setRootIsDecorated(True)
     tree.setStyleSheet(_TREE_STYLE)
 
+    # "(raiz do projeto)" is the first top-level item
     root_item = QTreeWidgetItem(tree, [root_label])
     root_item.setData(0, Qt.ItemDataRole.UserRole, "__root__")
 
+    # node_map: relative-path key -> QTreeWidgetItem
     node_map: dict[str, QTreeWidgetItem] = {}
+
     for sf in sorted(subfolders):
         parts = Path(sf).parts
-        parent_item: QTreeWidgetItem = root_item
         for i, part in enumerate(parts):
             key = str(Path(*parts[: i + 1]))
-            if key not in node_map:
-                item = QTreeWidgetItem(parent_item, [part])
-                item.setData(0, Qt.ItemDataRole.UserRole, key)
-                node_map[key] = item
-            parent_item = node_map[key]
+            if key in node_map:
+                continue
+            if i == 0:
+                # Top-level folder: direct child of the invisible root
+                item = QTreeWidgetItem(tree, [part])
+            else:
+                parent_key = str(Path(*parts[:i]))
+                item = QTreeWidgetItem(node_map[parent_key], [part])
+            item.setData(0, Qt.ItemDataRole.UserRole, key)
+            node_map[key] = item
 
+    # Keep sub-folders collapsed; top-level items are always visible
     tree.collapseAll()
     tree.setCurrentItem(root_item)
     return tree
 
 
 class _FolderPickerDialog(QDialog):
-    """Modal that shows the folder tree for selection."""
+    """Modal tree picker for choosing a destination folder."""
 
     def __init__(
         self,
@@ -106,7 +123,6 @@ class _FolderPickerDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle(tr("dialog.new_query.label_folder"))
         self.setMinimumWidth(380)
-        self.setMinimumHeight(360)
         self.resize(420, 420)
 
         self._tree = _build_folder_tree(self, subfolders, root_label)
@@ -114,7 +130,6 @@ class _FolderPickerDialog(QDialog):
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
         )
 
-        # Restore previously selected item
         self._restore_selection(current_key)
 
         buttons = QDialogButtonBox(
@@ -128,17 +143,17 @@ class _FolderPickerDialog(QDialog):
         layout.addWidget(buttons)
 
     def _restore_selection(self, key: str) -> None:
-        root = self._tree.invisibleRootItem().child(0)
-        if root is None:
-            return
+        """Re-select the previously chosen folder and expand its ancestors."""
         if key == "__root__":
-            self._tree.setCurrentItem(root)
+            # First top-level item is the root label
+            root = self._tree.topLevelItem(0)
+            if root:
+                self._tree.setCurrentItem(root)
             return
-        it = QTreeWidgetItem.__new__(QTreeWidgetItem)
-        iterator = self._tree.findItems("", Qt.MatchFlag.MatchContains | Qt.MatchFlag.MatchRecursive)
-        for item in iterator:
+        for item in self._tree.findItems(
+            "", Qt.MatchFlag.MatchContains | Qt.MatchFlag.MatchRecursive
+        ):
             if item.data(0, Qt.ItemDataRole.UserRole) == key:
-                # Expand ancestors so item is visible
                 parent = item.parent()
                 while parent:
                     parent.setExpanded(True)
@@ -156,7 +171,7 @@ class _FolderPickerDialog(QDialog):
 
 
 class _FolderSelector(QWidget):
-    """Read-only label + browse button for folder selection in forms."""
+    """Read-only path label + browse button for forms."""
 
     def __init__(
         self,
@@ -202,10 +217,7 @@ class _FolderSelector(QWidget):
         if dlg.exec() == QDialog.DialogCode.Accepted:
             key = dlg.selected_folder()
             self._current_key = key
-            if key == "__root__":
-                self._label.setText(self._root_label)
-            else:
-                self._label.setText(key)
+            self._label.setText(self._root_label if key == "__root__" else key)
 
     def selected_folder(self) -> str:
         return self._current_key
