@@ -291,6 +291,14 @@ class MainWindow(QMainWindow):
         self._reindex_act.triggered.connect(self.force_reindex)
         self._file_menu.addAction(self._reindex_act)
 
+        self._edit_menu = QMenu(tr("menu.edit"), self)
+        mb.addMenu(self._edit_menu)
+
+        self._copy_frontmatter_template_act = QAction(tr("menu.copy_frontmatter_template"), self)
+        self._copy_frontmatter_template_act.setShortcut(QKeySequence("Ctrl+Shift+F"))
+        self._copy_frontmatter_template_act.triggered.connect(self.copy_frontmatter_template)
+        self._edit_menu.addAction(self._copy_frontmatter_template_act)
+
         self._view_menu = QMenu(tr("menu.view"), self)
         mb.addMenu(self._view_menu)
 
@@ -572,6 +580,8 @@ class MainWindow(QMainWindow):
         self._duplicate_act.setText(tr("menu.duplicate_query"))
         self._recent_menu.setTitle(tr("menu.recent_projects"))
         self._reindex_act.setText(tr("menu.force_reindex"))
+        self._edit_menu.setTitle(tr("menu.edit"))
+        self._copy_frontmatter_template_act.setText(tr("menu.copy_frontmatter_template"))
         self._reveal_act.setText(tr("menu.reveal_in_explorer"))
         self._open_ssms_act.setText(tr("menu.open_in_ssms"))
         self._copy_act.setText(tr("menu.copy_sql"))
@@ -1322,6 +1332,23 @@ class MainWindow(QMainWindow):
         if body:
             QApplication.clipboard().setText(body)
             self._status_bar.showMessage(tr("status.sql_copied"))
+
+    def copy_frontmatter_template(self) -> None:
+        from datetime import date
+
+        today = date.today().isoformat()
+        block = (
+            "/* ---\n"
+            "title: \n"
+            "description: \n"
+            "tags:\n"
+            "  - \n"
+            f"created: {today}\n"
+            f"updated: {today}\n"
+            "--- */"
+        )
+        QApplication.clipboard().setText(block)
+        self._status_bar.showMessage(tr("status.frontmatter_template_copied"))
 
     # ------------------------------------------------------------------
     # Help / About
