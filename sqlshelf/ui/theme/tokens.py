@@ -269,16 +269,14 @@ def app_stylesheet() -> str:
             background-color: {CARD};
             border-bottom: 1px solid {BORDER};
         }}
-        QToolBar#EditorToolBar {{
+        QWidget#EditorToolBar {{
             background-color: {CARD};
-            border: none;
-            padding: 2px 8px 2px 10px;
-            spacing: 2px;
         }}
-        QToolBar#EditorToolBar QPushButton {{
-            padding: 1px 10px;
+        QWidget#EditorToolBar QPushButton {{
+            padding: 2px 12px;
             font-size: 12px;
             max-height: 24px;
+            border-radius: {RADIUS}px;
         }}
         QPushButton#NavButton {{
             background: transparent;
@@ -343,7 +341,7 @@ def app_stylesheet() -> str:
             color: {TEXT_PRIMARY};
             background-color: {HOVER_BG_MEDIUM};
         }}
-        QToolBar#EditorToolBar QPushButton:hover {{
+        QWidget#EditorToolBar QPushButton:hover {{
             background-color: {HOVER_BG_STRONG};
             border-radius: 4px;
             border: 1px solid {BORDER_EMPH};

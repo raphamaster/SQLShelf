@@ -91,7 +91,7 @@ class SidebarWidget(QWidget):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setMinimumWidth(150)
+        self.setMinimumWidth(200)
         self.setObjectName("SidebarWidget")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
 
@@ -159,6 +159,9 @@ class SidebarWidget(QWidget):
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum
         )
         self._folders_list.setMaximumHeight(220)
+        self._folders_list.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
         self._folders_list.itemClicked.connect(self._on_folder_item_clicked)
         self._folders_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self._folders_list.customContextMenuRequested.connect(
@@ -176,6 +179,9 @@ class SidebarWidget(QWidget):
 
         # ── TAGS section content ─────────────────────────────────────────────
         self._tag_list = QListWidget()
+        self._tag_list.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
         self._tag_list.itemClicked.connect(self._on_tag_item_clicked)
 
         self._tags_section = CollapsibleSection(tr("sidebar.tags_section"), self._tag_list)
