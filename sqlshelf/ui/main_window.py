@@ -505,6 +505,12 @@ class MainWindow(QMainWindow):
         self._inner_splitter.addWidget(middle)
         self._inner_splitter.addWidget(right)
         self._inner_splitter.setSizes([320, 900])
+        # Middle column keeps its user-set width; right panel absorbs all excess.
+        self._inner_splitter.setStretchFactor(0, 0)
+        self._inner_splitter.setStretchFactor(1, 1)
+        self._inner_splitter.setCollapsible(0, False)
+        self._inner_splitter.setCollapsible(1, False)
+        middle.setMinimumWidth(200)
 
         self._content_stack = QStackedWidget()
         self._content_stack.addWidget(self._inner_splitter)  # index 0 — normal view
@@ -515,6 +521,10 @@ class MainWindow(QMainWindow):
         splitter.addWidget(self._sidebar)
         splitter.addWidget(self._content_stack)
         splitter.setSizes([180, 1220])
+        splitter.setStretchFactor(0, 0)
+        splitter.setStretchFactor(1, 1)
+        splitter.setCollapsible(0, False)
+        splitter.setCollapsible(1, False)
         self.setCentralWidget(splitter)
 
         self._status_bar = QStatusBar()
