@@ -150,17 +150,27 @@ def _all_queries(conn: sqlite3.Connection) -> list[SearchResult]:
 def _rows_to_results(
     conn: sqlite3.Connection, rows: list[tuple]
 ) -> list[SearchResult]:
+    if not rows:
+        return []
+
+    # Batch-fetch all tags in one query to avoid N+1 per-row round-trips.
+    qids = [row[0] for row in rows]
+    tag_map: dict[int, list[str]] = {qid: [] for qid in qids}
+    _CHUNK = 900  # stay under SQLite's default variable limit of 999
+    for i in range(0, len(qids), _CHUNK):
+        chunk = qids[i : i + _CHUNK]
+        placeholders = ",".join("?" * len(chunk))
+        for qid, tname in conn.execute(
+            f"SELECT qt.query_id, t.name FROM tags t"
+            f" JOIN query_tags qt ON t.id=qt.tag_id"
+            f" WHERE qt.query_id IN ({placeholders})",
+            chunk,
+        ).fetchall():
+            tag_map[qid].append(tname)
+
     results = []
     for row in rows:
         qid, rel_path, title, description, snippet, rank, updated_at, tables_str, is_fav = row
-        tags = [
-            r[0]
-            for r in conn.execute(
-                "SELECT t.name FROM tags t"
-                " JOIN query_tags qt ON t.id=qt.tag_id WHERE qt.query_id=?",
-                (qid,),
-            ).fetchall()
-        ]
         tables = [t for t in (tables_str or "").split(",") if t]
         results.append(
             SearchResult(
@@ -170,7 +180,7 @@ def _rows_to_results(
                 description=description,
                 snippet=snippet,
                 rank=rank,
-                tags=tags,
+                tags=tag_map[qid],
                 tables=tables,
                 updated_at=updated_at,
                 is_favorite=bool(is_fav),
