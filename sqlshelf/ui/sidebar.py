@@ -73,9 +73,10 @@ class SidebarWidget(QWidget):
     """
 
     open_folder_requested = Signal()
-    folder_selected = Signal(object)          # Path
-    folder_remove_requested = Signal(object)  # Path
-    folder_favorite_toggled = Signal(object)  # Path
+    folder_selected = Signal(object)           # Path
+    folder_remove_requested = Signal(object)   # Path
+    folder_deindex_requested = Signal(object)  # Path
+    folder_favorite_toggled = Signal(object)   # Path
     tag_selected = Signal(str)
     favorites_selected = Signal()
     recent_selected = Signal()
@@ -285,6 +286,7 @@ class SidebarWidget(QWidget):
         fav_act = menu.addAction("Unfavorite" if is_fav else "Favorite")
         menu.addSeparator()
         remove_act = menu.addAction("Remove from sidebar")
+        deindex_act = menu.addAction("Deindex folder…")
 
         chosen = menu.exec(self._folders_list.mapToGlobal(pos))
         if chosen == open_act:
@@ -293,6 +295,8 @@ class SidebarWidget(QWidget):
             self.folder_favorite_toggled.emit(path)
         elif chosen == remove_act:
             self.folder_remove_requested.emit(path)
+        elif chosen == deindex_act:
+            self.folder_deindex_requested.emit(path)
 
     # ------------------------------------------------------------------
     # Tags
