@@ -3,8 +3,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QComboBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
@@ -12,12 +12,15 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPlainTextEdit,
+    QTreeWidget,
+    QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
 )
 
 from ..core.frontmatter import write_sql_file
 from ..core.i18n import tr
+from .theme import tokens as _tk
 
 
 def _safe_filename(title: str) -> str:
@@ -26,6 +29,77 @@ def _safe_filename(title: str) -> str:
     name = re.sub(r"[^\w\s-]", "", name)
     name = re.sub(r"[\s_]+", "_", name)
     return name or "query"
+
+
+class _FolderTree(QTreeWidget):
+    """Compact tree for selecting a project subfolder."""
+
+    def __init__(
+        self,
+        subfolders: list[str],
+        root_label: str,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setHeaderHidden(True)
+        self.setRootIsDecorated(True)
+        self.setFixedHeight(160)
+        self.setStyleSheet(f"""
+            QTreeWidget {{
+                background-color: {_tk.SURFACE};
+                border: 1px solid {_tk.BORDER};
+                border-radius: {_tk.RADIUS}px;
+                color: {_tk.TEXT_PRIMARY};
+                outline: none;
+            }}
+            QTreeWidget::item {{
+                padding: 3px 4px;
+                color: {_tk.TEXT_PRIMARY};
+            }}
+            QTreeWidget::item:hover {{
+                background-color: {_tk.HOVER_BG_STRONG};
+            }}
+            QTreeWidget::item:selected {{
+                background-color: {_tk.BORDER_EMPH};
+                color: {_tk.TEXT_PRIMARY};
+                border: none;
+            }}
+            QTreeWidget::item:selected:active {{
+                background-color: {_tk.BORDER_EMPH};
+                color: {_tk.TEXT_PRIMARY};
+            }}
+            QTreeWidget::branch {{
+                background-color: {_tk.SURFACE};
+            }}
+            QTreeWidget::branch:selected {{
+                background-color: {_tk.BORDER_EMPH};
+            }}
+        """)
+
+        root_item = QTreeWidgetItem(self, [root_label])
+        root_item.setData(0, Qt.ItemDataRole.UserRole, "__root__")
+
+        node_map: dict[str, QTreeWidgetItem] = {}
+        for sf in sorted(subfolders):
+            parts = Path(sf).parts
+            parent_item: QTreeWidgetItem = root_item
+            for i, part in enumerate(parts):
+                key = str(Path(*parts[: i + 1]))
+                if key not in node_map:
+                    item = QTreeWidgetItem(parent_item, [part])
+                    item.setData(0, Qt.ItemDataRole.UserRole, key)
+                    node_map[key] = item
+                parent_item = node_map[key]
+
+        self.expandAll()
+        self.setCurrentItem(root_item)
+
+    def selected_folder(self) -> str:
+        item = self.currentItem()
+        if item is None:
+            return "__root__"
+        data = item.data(0, Qt.ItemDataRole.UserRole)
+        return data if data else "__root__"
 
 
 class NewQueryDialog(QDialog):
@@ -45,7 +119,7 @@ class NewQueryDialog(QDialog):
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle(tr("dialog.new_query.title"))
-        self.resize(600, 450)
+        self.resize(600, 520)
         self._project_root = project_root
         self.created_path: Path | None = None
 
@@ -58,10 +132,10 @@ class NewQueryDialog(QDialog):
         self._desc_edit = QLineEdit()
         self._desc_edit.setPlaceholderText(tr("dialog.new_query.desc_placeholder"))
 
-        self._folder_combo = QComboBox()
-        self._folder_combo.addItem(tr("dialog.new_query.project_root"), userData="__root__")
-        for sf in sorted(subfolders):
-            self._folder_combo.addItem(sf)
+        self._folder_tree = _FolderTree(
+            subfolders,
+            tr("dialog.new_query.project_root"),
+        )
 
         self._body_edit = QPlainTextEdit()
         self._body_edit.setPlaceholderText(tr("dialog.new_query.sql_placeholder"))
@@ -70,7 +144,7 @@ class NewQueryDialog(QDialog):
         form.addRow(tr("dialog.new_query.label_title"), self._title_edit)
         form.addRow(tr("dialog.new_query.label_tags"), self._tags_edit)
         form.addRow(tr("dialog.new_query.label_desc"), self._desc_edit)
-        form.addRow(tr("dialog.new_query.label_folder"), self._folder_combo)
+        form.addRow(tr("dialog.new_query.label_folder"), self._folder_tree)
 
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
@@ -94,10 +168,11 @@ class NewQueryDialog(QDialog):
             )
             return
 
-        if self._folder_combo.currentData() == "__root__":
+        folder_key = self._folder_tree.selected_folder()
+        if folder_key == "__root__":
             target_dir = self._project_root
         else:
-            target_dir = self._project_root / self._folder_combo.currentText()
+            target_dir = self._project_root / folder_key
             target_dir.mkdir(parents=True, exist_ok=True)
 
         filename = _safe_filename(title) + ".sql"

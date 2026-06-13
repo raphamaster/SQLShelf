@@ -386,4 +386,62 @@ def app_stylesheet() -> str:
         QMenu::indicator:checked {{
             color: {ACCENT};
         }}
+        QComboBox {{
+            background-color: {SURFACE};
+            color: {TEXT_PRIMARY};
+            border: 1px solid {BORDER};
+            border-radius: {RADIUS}px;
+            padding: 4px 8px;
+            min-height: 24px;
+        }}
+        QComboBox:hover {{
+            border-color: {BORDER_EMPH};
+        }}
+        QComboBox:focus {{
+            border-color: {ACCENT};
+            background-color: {SURFACE};
+            color: {TEXT_PRIMARY};
+        }}
+        QComboBox:on {{
+            background-color: {SURFACE};
+            color: {TEXT_PRIMARY};
+        }}
+        QComboBox::drop-down {{
+            subcontrol-origin: padding;
+            subcontrol-position: center right;
+            width: 24px;
+            border-left: 1px solid {BORDER};
+            border-top-right-radius: {RADIUS}px;
+            border-bottom-right-radius: {RADIUS}px;
+        }}
+        QComboBox::down-arrow {{
+            width: 10px;
+            height: 10px;
+        }}
+        QComboBox QAbstractItemView {{
+            background-color: {CARD};
+            color: {TEXT_PRIMARY};
+            border: 1px solid {BORDER_EMPH};
+            selection-background-color: {BORDER_EMPH};
+            selection-color: {TEXT_PRIMARY};
+            outline: none;
+        }}
+        QComboBox QAbstractItemView::item {{
+            padding: 5px 10px;
+            min-height: 24px;
+            color: {TEXT_PRIMARY};
+            background-color: transparent;
+        }}
+        QComboBox QAbstractItemView::item:hover {{
+            background-color: {HOVER_BG_STRONG};
+            color: {TEXT_PRIMARY};
+        }}
+        QComboBox QAbstractItemView::item:selected {{
+            background-color: {BORDER_EMPH};
+            color: {TEXT_PRIMARY};
+        }}
+        QComboBox QAbstractItemView::item:hover:selected {{
+            background-color: {BORDER_EMPH};
+            color: {TEXT_PRIMARY};
+        }}
     """
