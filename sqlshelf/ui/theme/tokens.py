@@ -269,15 +269,17 @@ def app_stylesheet() -> str:
             background-color: {CARD};
             border-bottom: 1px solid {BORDER};
         }}
+        QWidget#EditorWrapper {{
+            background-color: {EDITOR_BG};
+        }}
         QWidget#EditorToolBar {{
             background-color: {CARD};
-            border: 1px solid {BORDER_EMPH};
-            border-radius: {RADIUS}px;
         }}
         QWidget#EditorToolBar QPushButton {{
             padding: 2px 12px;
             font-size: 12px;
             max-height: 24px;
+            border-radius: {RADIUS}px;
         }}
         QPushButton#NavButton {{
             background: transparent;
@@ -344,7 +346,6 @@ def app_stylesheet() -> str:
         }}
         QWidget#EditorToolBar QPushButton:hover {{
             background-color: {HOVER_BG_STRONG};
-            border-radius: 4px;
             border: 1px solid {BORDER_EMPH};
         }}
         QPlainTextEdit {{

@@ -450,29 +450,23 @@ class MainWindow(QMainWindow):
         top_section.setObjectName("EditorTopSection")
         top_section.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         ts_layout = QVBoxLayout(top_section)
-        ts_layout.setContentsMargins(0, 0, 0, 8)
+        ts_layout.setContentsMargins(0, 0, 0, 0)
         ts_layout.setSpacing(0)
         ts_layout.addWidget(self._metadata_panel)
         ts_layout.addWidget(self._toolbar)
 
-        # Editor wrapper — top/bottom breathing room (right margin comes from right_layout)
+        # Editor wrapper — carries the 10px left indent that aligns the editor
+        # with the metadata panel content; its own background fills the gap.
         self._editor_wrapper = QWidget()
         self._editor_wrapper.setObjectName("EditorWrapper")
+        self._editor_wrapper.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         ew_layout = QVBoxLayout(self._editor_wrapper)
-        ew_layout.setContentsMargins(0, 4, 0, 6)
+        ew_layout.setContentsMargins(10, 4, 0, 6)
         ew_layout.setSpacing(0)
         ew_layout.addWidget(self._editor)
 
-        # Outer wrapper gives the editor the same 10 px left indent as the
-        # metadata panel content, so the border and buttons align visually.
-        editor_outer = QWidget()
-        eo_layout = QVBoxLayout(editor_outer)
-        eo_layout.setContentsMargins(10, 0, 0, 0)
-        eo_layout.setSpacing(0)
-        eo_layout.addWidget(self._editor_wrapper)
-
         right_layout.addWidget(top_section)
-        right_layout.addWidget(editor_outer, stretch=1)
+        right_layout.addWidget(self._editor_wrapper, stretch=1)
 
         # ── Empty / onboarding state ─────────────────────────────────────────
         self._onboarding = QWidget()
