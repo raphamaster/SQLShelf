@@ -1014,6 +1014,7 @@ class MainWindow(QMainWindow):
             is_fav = self._db.toggle_favorite(result.rel_path)
         except Exception:
             return
+        self._query_list.update_favorite(result.rel_path, is_fav)
         if self._current_result and self._current_result.rel_path == result.rel_path:
             self._metadata_panel.set_favorite(is_fav)
         key = "status.added_favorite" if is_fav else "status.removed_favorite"
