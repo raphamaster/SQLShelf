@@ -64,3 +64,12 @@ CREATE TRIGGER queries_au AFTER UPDATE ON queries BEGIN
     INSERT INTO queries_fts(rowid, title, description, body, objects)
     VALUES (new.id, new.title, new.description, new.body, '');
 END;
+
+CREATE TABLE favorites (
+    rel_path TEXT PRIMARY KEY
+);
+
+CREATE TABLE recently_viewed (
+    rel_path  TEXT NOT NULL PRIMARY KEY,
+    viewed_at TEXT NOT NULL
+);

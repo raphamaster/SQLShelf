@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QFormLayout,
     QLabel,
@@ -16,9 +16,14 @@ class MetadataPanel(QWidget):
     """Right-panel top section: title, description, tags, SQL objects.
 
     In read-only mode shows labels; edit mode makes title/description/tags editable.
+
+    Signals:
+        metadata_changed(title, description, tags)
+        table_clicked(str)  — user clicked a table name → trigger reverse search.
     """
 
-    metadata_changed = Signal(str, str, list)  # title, description, tags
+    metadata_changed = Signal(str, str, list)
+    table_clicked = Signal(str)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -40,6 +45,9 @@ class MetadataPanel(QWidget):
         self._objects_label = QLabel()
         self._objects_label.setWordWrap(True)
         self._objects_label.setStyleSheet("color: #88aa88; font-size: 11px;")
+        self._objects_label.setTextFormat(Qt.TextFormat.RichText)
+        self._objects_label.setOpenExternalLinks(False)
+        self._objects_label.linkActivated.connect(self._on_object_link)
 
         # --- edit-mode widgets ---
         self._title_edit = QLineEdit()
@@ -96,11 +104,19 @@ class MetadataPanel(QWidget):
         self._desc_label.setText(description)
         self._tags_label.setText("  ".join(f"#{t}" for t in tags))
 
-        parts = []
+        parts: list[str] = []
         if tables:
-            parts.append("Tables: " + ", ".join(sorted(tables)))
+            links = " ".join(
+                f'<a href="table:{t}" style="color:#88aa88;">{t}</a>'
+                for t in sorted(tables)
+            )
+            parts.append(f"Tables: {links}")
         if columns:
-            parts.append("Columns: " + ", ".join(sorted(columns)))
+            col_links = " ".join(
+                f'<a href="col:{c}" style="color:#88aa88;">{c}</a>'
+                for c in sorted(columns)
+            )
+            parts.append(f"Columns: {col_links}")
         self._objects_label.setText("  |  ".join(parts) if parts else "")
 
         self._title_edit.setText(title)
@@ -130,3 +146,14 @@ class MetadataPanel(QWidget):
         self._title_edit.clear()
         self._desc_edit.clear()
         self._tags_edit.clear()
+
+    # ------------------------------------------------------------------
+    # Internal
+    # ------------------------------------------------------------------
+
+    def _on_object_link(self, href: str) -> None:
+        """Translate link hrefs to search-bar prefixes."""
+        if href.startswith("table:"):
+            self.table_clicked.emit(href)
+        elif href.startswith("col:"):
+            self.table_clicked.emit(href)
