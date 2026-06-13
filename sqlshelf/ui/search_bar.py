@@ -23,7 +23,7 @@ _STYLESHEET = f"""
         border-radius: {RADIUS}px;
         color: rgba(255,255,255,0.92);
         font-size: 13px;
-        min-height: 36px;
+        min-height: 44px;
         selection-background-color: #264F78;
     }}
     QLineEdit#SearchInput:focus {{
