@@ -5,7 +5,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, Signal
+from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, QTimer, Signal
 from PySide6.QtGui import QAction, QFont, QIcon, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
@@ -83,6 +83,53 @@ class _IndexWorker(QRunnable):
             self.signals.finished.emit(self._db.count())
         except Exception as exc:
             self.signals.error.emit(str(exc))
+
+
+# ---------------------------------------------------------------------------
+# Background search worker
+# ---------------------------------------------------------------------------
+
+class _SearchWorkerSignals(QObject):
+    results_ready = Signal(list, int)   # (list[SearchResult], generation)
+
+
+class _SearchWorker(QRunnable):
+    def __init__(
+        self,
+        dbs: dict,
+        text: str,
+        browse_folder,
+        gen: int,
+    ) -> None:
+        super().__init__()
+        self.signals = _SearchWorkerSignals()
+        self._dbs = dbs
+        self._text = text
+        self._browse_folder = browse_folder
+        self._gen = gen
+
+    def run(self) -> None:
+        try:
+            results = []
+            if self._browse_folder is not None:
+                db = self._dbs.get(self._browse_folder)
+                if db:
+                    results = db.search(self._text)
+                    for r in results:
+                        r.folder = self._browse_folder
+            else:
+                for folder, db in self._dbs.items():
+                    try:
+                        folder_results = db.search(self._text)
+                        for r in folder_results:
+                            r.folder = folder
+                        results.extend(folder_results)
+                    except Exception:
+                        pass
+                results.sort(key=lambda r: r.rank)
+        except Exception:
+            results = []
+        self.signals.results_ready.emit(results, self._gen)
 
 
 # ---------------------------------------------------------------------------
@@ -165,9 +212,18 @@ class MainWindow(QMainWindow):
         self._known_dbs: dict[Path, IndexDB] = {}
         self._browse_folder: Path | None = None  # None = show all known folders
 
+        # Async search state
+        self._search_gen: int = 0      # incremented per dispatch; workers check this
+        self._pending_select: str | None = None  # rel_path to auto-select after search
+
         self._build_menu()
         self._build_ui()
         self._build_shortcuts()
+
+        self._search_timer = QTimer(self)
+        self._search_timer.setSingleShot(True)
+        self._search_timer.setInterval(200)  # ms to wait after last keystroke
+        self._search_timer.timeout.connect(self._do_search)
 
         # Pre-open DBs for known folders so global view works on startup
         for folder, _ in cfg.get_known_folders():
@@ -601,30 +657,30 @@ class MainWindow(QMainWindow):
                     pass
             tags = sorted(tags_set)
         self._sidebar.set_tags(tags)
-        self._run_search()
+        self._do_search()
 
-    def _run_search(self) -> None:
+    def _do_search(self) -> None:
+        """Dispatch a search to the thread pool; discard result if superseded."""
+        self._search_timer.stop()   # cancel any still-pending debounce
         if not self._known_dbs:
             return
-        text = self._search_bar.text()
-        results: list[SearchResult] = []
-        if self._browse_folder is not None:
-            db = self._known_dbs.get(self._browse_folder)
-            if db:
-                results = db.search(text)
-                for r in results:
-                    r.folder = self._browse_folder
-        else:
-            for folder, db in self._known_dbs.items():
-                try:
-                    folder_results = db.search(text)
-                    for r in folder_results:
-                        r.folder = folder
-                    results.extend(folder_results)
-                except Exception:
-                    pass
-            results.sort(key=lambda r: r.rank)
+        self._search_gen += 1
+        worker = _SearchWorker(
+            dict(self._known_dbs),
+            self._search_bar.text(),
+            self._browse_folder,
+            self._search_gen,
+        )
+        worker.signals.results_ready.connect(self._on_search_results)
+        QThreadPool.globalInstance().start(worker)
+
+    def _on_search_results(self, results: list, gen: int) -> None:
+        if gen != self._search_gen:
+            return  # stale result from a superseded search
         self._query_list.set_results(results)
+        if self._pending_select is not None:
+            self._query_list.select_by_rel_path(self._pending_select)
+            self._pending_select = None
 
     # ------------------------------------------------------------------
     # Query selection
@@ -698,7 +754,7 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _on_search_changed(self, _text: str) -> None:
-        self._run_search()
+        self._search_timer.start()   # reset countdown on each keystroke
 
     def _on_tag_selected(self, tag: str) -> None:
         if not tag:
@@ -711,6 +767,8 @@ class MainWindow(QMainWindow):
         self._refresh_ui()
 
     def _on_favorites_selected(self) -> None:
+        self._search_gen += 1   # discard any in-flight search worker
+        self._search_timer.stop()
         self._search_bar.blockSignals(True)
         self._search_bar.clear()
         self._search_bar.blockSignals(False)
@@ -725,6 +783,8 @@ class MainWindow(QMainWindow):
         self._query_list.set_results(results)
 
     def _on_recent_selected(self) -> None:
+        self._search_gen += 1   # discard any in-flight search worker
+        self._search_timer.stop()
         self._search_bar.blockSignals(True)
         self._search_bar.clear()
         self._search_bar.blockSignals(False)
@@ -748,7 +808,7 @@ class MainWindow(QMainWindow):
         self._search_bar.blockSignals(True)
         self._search_bar._edit.setText(f"{kind}:{value}")
         self._search_bar.blockSignals(False)
-        self._run_search()
+        self._do_search()
 
     # ------------------------------------------------------------------
     # Context menu actions from QueryListWidget
@@ -892,8 +952,8 @@ class MainWindow(QMainWindow):
         self._search_bar.blockSignals(True)
         self._search_bar.clear()
         self._search_bar.blockSignals(False)
-        self._run_search()
-        self._query_list.select_by_rel_path(result.rel_path)
+        self._pending_select = result.rel_path
+        self._do_search()
 
     # ------------------------------------------------------------------
     # Edit / Save
@@ -1063,10 +1123,8 @@ class MainWindow(QMainWindow):
         updated = [q for q in scan_folder(self._folder) if q.path == path]
         if updated and self._db is not None:
             self._db.upsert_query(updated[0])
+        self._pending_select = path.relative_to(self._folder).as_posix()
         self._refresh_ui()
-        self._query_list.select_by_rel_path(
-            path.relative_to(self._folder).as_posix()
-        )
         self._status_bar.showMessage(f"Created: {path.name}")
 
     # ------------------------------------------------------------------

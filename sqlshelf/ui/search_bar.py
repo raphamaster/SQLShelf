@@ -3,7 +3,7 @@ from __future__ import annotations
 from PySide6.QtCore import QEvent, Qt, Signal
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QLineEdit, QPushButton, QWidget
 
-from .theme.tokens import ACCENT_BORDER, BORDER_EMPH, CARD, RADIUS, TEXT_SECONDARY
+from .theme.tokens import ACCENT, ACCENT_BORDER, ACCENT_FILL, RADIUS
 
 _HELP_TOOLTIP = (
     "Search operators:\n"
@@ -16,28 +16,7 @@ _HELP_TOOLTIP = (
 
 _STYLE_NORMAL = f"""
     QWidget#SearchBar {{
-        background-color: {CARD};
-        border: 1px solid {BORDER_EMPH};
-        border-radius: {RADIUS}px;
-    }}
-    QWidget#SearchBar QLineEdit {{
-        background: transparent;
-        border: none;
-        color: rgba(255,255,255,0.92);
-        font-size: 13px;
-        min-height: 36px;
-        selection-background-color: #264F78;
-    }}
-    QLabel#SearchIcon {{
-        font-size: 15px;
-        color: {TEXT_SECONDARY};
-        background: transparent;
-    }}
-"""
-
-_STYLE_FOCUSED = f"""
-    QWidget#SearchBar {{
-        background-color: {CARD};
+        background-color: {ACCENT_FILL};
         border: 1px solid {ACCENT_BORDER};
         border-radius: {RADIUS}px;
     }}
@@ -51,7 +30,28 @@ _STYLE_FOCUSED = f"""
     }}
     QLabel#SearchIcon {{
         font-size: 15px;
-        color: rgba(10,222,153,0.70);
+        color: {ACCENT_BORDER};
+        background: transparent;
+    }}
+"""
+
+_STYLE_FOCUSED = f"""
+    QWidget#SearchBar {{
+        background-color: rgba(10,222,153,0.15);
+        border: 2px solid {ACCENT};
+        border-radius: {RADIUS}px;
+    }}
+    QWidget#SearchBar QLineEdit {{
+        background: transparent;
+        border: none;
+        color: rgba(255,255,255,0.92);
+        font-size: 13px;
+        min-height: 36px;
+        selection-background-color: #264F78;
+    }}
+    QLabel#SearchIcon {{
+        font-size: 15px;
+        color: {ACCENT};
         background: transparent;
     }}
 """
