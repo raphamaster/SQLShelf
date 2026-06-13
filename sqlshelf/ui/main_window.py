@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
     QStackedWidget,
     QStatusBar,
     QStyle,
-    QToolBar,
+    QHBoxLayout,
     QVBoxLayout,
     QWidget,
 )
@@ -411,9 +411,12 @@ class MainWindow(QMainWindow):
         self._metadata_panel.reveal_requested.connect(self.reveal_in_explorer)
 
         # Editor toolbar
-        self._toolbar = QToolBar()
+        self._toolbar = QWidget()
         self._toolbar.setObjectName("EditorToolBar")
-        self._toolbar.setMovable(False)
+        self._toolbar.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        tb_layout = QHBoxLayout(self._toolbar)
+        tb_layout.setContentsMargins(10, 6, 8, 6)
+        tb_layout.setSpacing(6)
 
         self._edit_toggle_btn = QPushButton(tr("editor.btn_edit"))
         self._edit_toggle_btn.setCheckable(True)
@@ -427,11 +430,12 @@ class MainWindow(QMainWindow):
         self._cancel_btn = QPushButton(tr("editor.btn_cancel"))
         self._cancel_btn.clicked.connect(self._cancel_edit)
 
-        self._toolbar.addWidget(self._edit_toggle_btn)
-        self._save_action = self._toolbar.addWidget(self._save_btn)
-        self._cancel_action = self._toolbar.addWidget(self._cancel_btn)
-        self._save_action.setVisible(False)
-        self._cancel_action.setVisible(False)
+        tb_layout.addWidget(self._edit_toggle_btn)
+        tb_layout.addWidget(self._save_btn)
+        tb_layout.addWidget(self._cancel_btn)
+        tb_layout.addStretch()
+        self._save_btn.setVisible(False)
+        self._cancel_btn.setVisible(False)
 
         self._editor = CodeEditor()
         self._editor.setReadOnly(True)
@@ -724,8 +728,8 @@ class MainWindow(QMainWindow):
         self._editor.setReadOnly(True)
         self._editor.clear()
         self._metadata_panel.clear()
-        self._save_action.setVisible(False)
-        self._cancel_action.setVisible(False)
+        self._save_btn.setVisible(False)
+        self._cancel_btn.setVisible(False)
         self._editor_wrapper.setStyleSheet("")
         self._edit_toggle_btn.setChecked(False)
         self._edit_toggle_btn.setText(tr("editor.btn_edit"))
@@ -807,8 +811,8 @@ class MainWindow(QMainWindow):
             self._edit_mode = False
             self._editor.setReadOnly(True)
             self._metadata_panel.set_edit_mode(False)
-            self._save_action.setVisible(False)
-            self._cancel_action.setVisible(False)
+            self._save_btn.setVisible(False)
+            self._cancel_btn.setVisible(False)
             self._editor_wrapper.setStyleSheet("")
             self._edit_toggle_btn.setChecked(False)
             self._edit_toggle_btn.setText(tr("editor.btn_edit"))
@@ -1083,8 +1087,8 @@ class MainWindow(QMainWindow):
         self._edit_mode = True
         self._editor.setReadOnly(False)
         self._metadata_panel.set_edit_mode(True)
-        self._save_action.setVisible(True)
-        self._cancel_action.setVisible(True)
+        self._save_btn.setVisible(True)
+        self._cancel_btn.setVisible(True)
         self._editor_wrapper.setStyleSheet(
             f"#EditorWrapper {{ border: 1px solid {_tk.ACCENT_BORDER}; border-radius: 4px; }}"
         )
@@ -1095,8 +1099,8 @@ class MainWindow(QMainWindow):
         self._edit_mode = False
         self._editor.setReadOnly(True)
         self._metadata_panel.set_edit_mode(False)
-        self._save_action.setVisible(False)
-        self._cancel_action.setVisible(False)
+        self._save_btn.setVisible(False)
+        self._cancel_btn.setVisible(False)
         self._editor_wrapper.setStyleSheet("")
         self._edit_toggle_btn.setChecked(False)
         self._edit_toggle_btn.setText(tr("editor.btn_edit"))
@@ -1135,8 +1139,8 @@ class MainWindow(QMainWindow):
         self._edit_mode = False
         self._editor.setReadOnly(True)
         self._metadata_panel.set_edit_mode(False)
-        self._save_action.setVisible(False)
-        self._cancel_action.setVisible(False)
+        self._save_btn.setVisible(False)
+        self._cancel_btn.setVisible(False)
         self._editor_wrapper.setStyleSheet("")
         self._edit_toggle_btn.setChecked(False)
         self._edit_toggle_btn.setText(tr("editor.btn_edit"))
