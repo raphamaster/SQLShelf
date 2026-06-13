@@ -284,8 +284,8 @@ class MainWindow(QMainWindow):
         # Middle panel
         middle = QWidget()
         mid_layout = QVBoxLayout(middle)
-        mid_layout.setContentsMargins(8, 8, 8, 4)
-        mid_layout.setSpacing(4)
+        mid_layout.setContentsMargins(8, 10, 8, 4)
+        mid_layout.setSpacing(8)
 
         self._search_bar = SearchBar()
         self._search_bar.search_changed.connect(self._on_search_changed)
