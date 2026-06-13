@@ -9,6 +9,7 @@ from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, Signal
 from PySide6.QtGui import QAction, QFont, QIcon, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
+    QDialog,
     QFileDialog,
     QInputDialog,
     QLabel,
@@ -16,6 +17,7 @@ from PySide6.QtWidgets import (
     QMenu,
     QMenuBar,
     QMessageBox,
+    QProgressBar,
     QPushButton,
     QSplitter,
     QStackedWidget,
@@ -57,6 +59,7 @@ def _icon(style_enum) -> QIcon:
 class _IndexWorkerSignals(QObject):
     finished = Signal(int)
     error = Signal(str)
+    progress = Signal(int, int)  # (current, total)
 
 
 class _IndexWorker(QRunnable):
@@ -69,10 +72,61 @@ class _IndexWorker(QRunnable):
     def run(self) -> None:
         try:
             queries = scan_folder(self._folder)
-            self._db.index_incremental(queries)
+            total = len(queries)
+            if total:
+                self.signals.progress.emit(0, total)
+
+            def _cb(current: int, t: int) -> None:
+                self.signals.progress.emit(current, t)
+
+            self._db.index_incremental(queries, progress_cb=_cb)
             self.signals.finished.emit(self._db.count())
         except Exception as exc:
             self.signals.error.emit(str(exc))
+
+
+# ---------------------------------------------------------------------------
+# Progress dialog shown while indexing a new folder
+# ---------------------------------------------------------------------------
+
+class _IndexProgressDialog(QDialog):
+    def __init__(self, folder_name: str, parent=None) -> None:
+        super().__init__(
+            parent,
+            Qt.WindowType.WindowTitleHint | Qt.WindowType.CustomizeWindowHint,
+        )
+        self.setWindowTitle("Indexing…")
+        self.setModal(True)
+        self.setMinimumWidth(420)
+        self.setFixedHeight(140)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(10)
+
+        self._title_label = QLabel(f"<b>Importing folder:</b> {folder_name}")
+        layout.addWidget(self._title_label)
+
+        self._detail_label = QLabel("Scanning files…")
+        layout.addWidget(self._detail_label)
+
+        self._bar = QProgressBar()
+        self._bar.setRange(0, 0)  # indeterminate until total is known
+        layout.addWidget(self._bar)
+
+        self._pct_label = QLabel("")
+        self._pct_label.setAlignment(Qt.AlignmentFlag.AlignRight)
+        layout.addWidget(self._pct_label)
+
+    def on_progress(self, current: int, total: int) -> None:
+        if total <= 0:
+            return
+        if self._bar.maximum() == 0:
+            self._bar.setRange(0, total)
+        self._bar.setValue(current)
+        pct = int(current / total * 100)
+        self._detail_label.setText(f"Indexing: {current} / {total} files")
+        self._pct_label.setText(f"{pct}%")
 
 
 # ---------------------------------------------------------------------------
@@ -105,6 +159,7 @@ class MainWindow(QMainWindow):
         self._current_result: SearchResult | None = None
         self._current_metadata: dict = {}
         self._edit_mode = False
+        self._progress_dialog: _IndexProgressDialog | None = None
 
         # Multi-folder support
         self._known_dbs: dict[Path, IndexDB] = {}
@@ -125,6 +180,7 @@ class MainWindow(QMainWindow):
             self._refresh_ui()
         else:
             self._update_content_view()
+        self._refresh_status_bar()
 
     # ------------------------------------------------------------------
     # UI construction
@@ -218,6 +274,7 @@ class MainWindow(QMainWindow):
         self._sidebar.open_folder_requested.connect(self.open_folder)
         self._sidebar.folder_selected.connect(self._on_sidebar_folder_selected)
         self._sidebar.folder_remove_requested.connect(self._on_folder_remove_requested)
+        self._sidebar.folder_deindex_requested.connect(self._on_folder_deindex_requested)
         self._sidebar.folder_favorite_toggled.connect(self._on_folder_favorite_toggled)
         self._sidebar.tag_selected.connect(self._on_tag_selected)
         self._sidebar.favorites_selected.connect(self._on_favorites_selected)
@@ -363,7 +420,6 @@ class MainWindow(QMainWindow):
 
         self._status_bar = QStatusBar()
         self.setStatusBar(self._status_bar)
-        self._status_bar.showMessage("No folder loaded — File → Open Folder…")
 
     def _build_shortcuts(self) -> None:
         from PySide6.QtGui import QShortcut
@@ -409,12 +465,16 @@ class MainWindow(QMainWindow):
         self._status_bar.showMessage("Indexing…")
         self._reset_editor()
 
+        self._progress_dialog = _IndexProgressDialog(folder.name, self)
+
         worker = _IndexWorker(db, folder)
+        worker.signals.progress.connect(self._progress_dialog.on_progress)
+        worker.signals.progress.connect(self._on_index_progress)
         worker.signals.finished.connect(self._on_index_finished)
-        worker.signals.error.connect(
-            lambda msg: self._status_bar.showMessage(f"Index error: {msg}")
-        )
+        worker.signals.error.connect(self._on_index_error)
         QThreadPool.globalInstance().start(worker)
+
+        self._progress_dialog.show()
 
         self._watcher_bridge = _WatcherBridge()
         self._watcher_bridge.files_changed.connect(self._handle_files_changed)
@@ -440,9 +500,25 @@ class MainWindow(QMainWindow):
             self._known_dbs[folder] = IndexDB(folder)
         return self._known_dbs[folder]
 
+    def _on_index_progress(self, current: int, total: int) -> None:
+        if total > 0:
+            pct = int(current / total * 100)
+            self._status_bar.showMessage(
+                f"Indexing… {pct}%  ({current}/{total} files)"
+            )
+
     def _on_index_finished(self, count: int) -> None:
+        if self._progress_dialog is not None:
+            self._progress_dialog.accept()
+            self._progress_dialog = None
         self._status_bar.showMessage(f"{count} queries indexed")
         self._refresh_ui()
+
+    def _on_index_error(self, msg: str) -> None:
+        if self._progress_dialog is not None:
+            self._progress_dialog.reject()
+            self._progress_dialog = None
+        self._status_bar.showMessage(f"Index error: {msg}")
 
     def force_reindex(self) -> None:
         if self._db is None or self._folder is None:
@@ -496,6 +572,17 @@ class MainWindow(QMainWindow):
             self._content_stack.setCurrentIndex(0)
         else:
             self._content_stack.setCurrentIndex(1)
+
+    def _refresh_status_bar(self) -> None:
+        """Update the status bar to reflect the current index state."""
+        if self._known_dbs:
+            total = sum(db.count() for db in self._known_dbs.values())
+            n = len(self._known_dbs)
+            self._status_bar.showMessage(
+                f"{total} {'query' if total == 1 else 'queries'} indexed"
+                f" — {n} folder{'s' if n != 1 else ''} loaded"
+            )
+        else:
             self._status_bar.showMessage("No folder loaded — File → Open Folder…")
 
     def _refresh_ui(self) -> None:
@@ -696,6 +783,50 @@ class MainWindow(QMainWindow):
     def _on_folder_remove_requested(self, folder: Path) -> None:
         cfg.remove_known_folder(folder)
         self._sidebar.set_folders(cfg.get_known_folders(), self._folder)
+        self._refresh_status_bar()
+
+    def _on_folder_deindex_requested(self, folder: Path) -> None:
+        reply = QMessageBox.question(
+            self,
+            "Deindex Folder",
+            f"<b>Remove and deindex:</b><br><br>"
+            f"<tt>{folder}</tt><br><br>"
+            f"This will delete the search index for this folder and remove it from the sidebar.<br>"
+            f"Your original <tt>.sql</tt> files will <b>not</b> be deleted.<br><br>"
+            f"Are you sure?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Cancel,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        db = self._known_dbs.pop(folder, None)
+        if db is not None:
+            try:
+                db.close()
+            except Exception:
+                pass
+            db_path = folder / ".sqlshelf" / "index.db"
+            try:
+                if db_path.exists():
+                    db_path.unlink()
+            except Exception:
+                pass
+
+        cfg.remove_known_folder(folder)
+        self._rebuild_recent_menu()
+        self._sidebar.set_folders(cfg.get_known_folders(), self._folder)
+
+        # If the active folder was deindexed, reset the view
+        if self._folder is not None and self._folder.resolve() == folder.resolve():
+            self._folder = None
+            self._db = None
+            self._browse_folder = None
+            self._reset_editor()
+            self._query_list.set_results([])
+
+        self._refresh_ui()
+        self._refresh_status_bar()
 
     def _on_folder_favorite_toggled(self, folder: Path) -> None:
         cfg.toggle_folder_favorite(folder)
