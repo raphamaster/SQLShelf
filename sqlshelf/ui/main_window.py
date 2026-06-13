@@ -409,6 +409,7 @@ class MainWindow(QMainWindow):
         self._metadata_panel.filter_requested.connect(self._on_filter_requested)
         self._metadata_panel.favorite_toggled.connect(self._toggle_favorite)
         self._metadata_panel.reveal_requested.connect(self.reveal_in_explorer)
+        self._metadata_panel.command_palette_requested.connect(self.open_command_palette)
 
         # Editor toolbar
         self._toolbar = QWidget()
