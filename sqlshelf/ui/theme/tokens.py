@@ -271,6 +271,7 @@ def app_stylesheet() -> str:
         }}
         QWidget#EditorToolBar {{
             background-color: {CARD};
+            border: 1px solid {BORDER_EMPH};
             border-radius: {RADIUS}px;
         }}
         QWidget#EditorToolBar QPushButton {{
