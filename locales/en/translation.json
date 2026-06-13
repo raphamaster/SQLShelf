@@ -19,6 +19,8 @@
   "menu.about": "About SQLShelf",
   "menu.reveal_in_explorer": "Reveal File in Explorer",
   "menu.open_in_ssms": "Open in SSMS",
+  "menu.edit": "&Edit",
+  "menu.copy_frontmatter_template": "Copy Frontmatter Template",
   "menu.copy_sql": "Copy SQL (no frontmatter)",
   "menu.recent_none": "(none)",
 
@@ -121,6 +123,7 @@
   "status.added_favorite": "Added to favorites: {path}",
   "status.removed_favorite": "Removed from favorites: {path}",
   "status.sql_copied": "SQL body copied to clipboard",
+  "status.frontmatter_template_copied": "Frontmatter template copied to clipboard",
 
   "word.query": "query",
   "word.queries": "queries",
@@ -146,7 +149,7 @@
   "msg.deindex.text": "<b>Remove and deindex:</b><br><br><tt>{path}</tt><br><br>This will delete the search index for this folder and remove it from the sidebar.<br>Your original <tt>.sql</tt> files will <b>not</b> be deleted.<br><br>Are you sure?",
 
   "help.title": "SQLShelf — Help",
-  "help.text": "<b>Keyboard shortcuts</b><br><br><b>Ctrl+O</b> — Open Folder<br><b>Ctrl+N</b> — New Query<br><b>Ctrl+D</b> — Duplicate Query<br><b>Ctrl+P</b> — Command Palette<br><b>Ctrl+F</b> — Focus Search<br><b>Ctrl+E</b> — Toggle Edit Mode<br><b>Ctrl+S</b> — Save<br><b>Ctrl+Shift+C</b> — Copy SQL (no frontmatter)<br><b>Esc</b> — Cancel Edit",
+  "help.text": "<b>Keyboard shortcuts</b><br><br><b>Ctrl+O</b> — Open Folder<br><b>Ctrl+N</b> — New Query<br><b>Ctrl+D</b> — Duplicate Query<br><b>Ctrl+P</b> — Command Palette<br><b>Ctrl+F</b> — Focus Search<br><b>Ctrl+E</b> — Toggle Edit Mode<br><b>Ctrl+S</b> — Save<br><b>Ctrl+Shift+C</b> — Copy SQL (no frontmatter)<br><b>Ctrl+Shift+F</b> — Copy Frontmatter Template<br><b>Esc</b> — Cancel Edit",
 
   "about.title": "About SQLShelf",
   "about.text": "<b>SQLShelf</b><br><br>Open-source SQL query manager.<br>Organizes, describes, categorizes and searches SQL files<br>by content, table, field or tag.<br><br>Author: Raphael Franco"
