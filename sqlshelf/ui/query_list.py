@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..core.i18n import tr
 from ..core.models import SearchResult
 from .theme import tokens as _tk
 from .theme.tokens import (
@@ -78,16 +79,16 @@ def _relative_date(iso: str | None) -> str:
         d = datetime.fromisoformat(iso).date()
         delta = (date.today() - d).days
         if delta == 0:
-            return "today"
+            return tr("date.today")
         if delta == 1:
-            return "yesterday"
+            return tr("date.yesterday")
         if delta < 7:
-            return f"{delta}d ago"
+            return tr("date.days_ago", n=delta)
         if delta < 30:
-            return f"{delta // 7}w ago"
+            return tr("date.weeks_ago", n=delta // 7)
         if delta < 365:
-            return f"{delta // 30}mo ago"
-        return f"{delta // 365}y ago"
+            return tr("date.months_ago", n=delta // 30)
+        return tr("date.years_ago", n=delta // 365)
     except Exception:
         return ""
 
@@ -337,11 +338,11 @@ class QueryListWidget(QWidget):
         result = self._results[row]
 
         menu = QMenu(self._list)
-        fav_act    = menu.addAction("☆  Toggle Favorite")
-        dup_act    = menu.addAction("⎘  Duplicate Query…")
-        copy_act   = menu.addAction("📋  Copy SQL")
+        fav_act    = menu.addAction(tr("context_menu.toggle_favorite"))
+        dup_act    = menu.addAction(tr("context_menu.duplicate"))
+        copy_act   = menu.addAction(tr("context_menu.copy_sql"))
         menu.addSeparator()
-        reveal_act = menu.addAction("📂  Reveal in Explorer")
+        reveal_act = menu.addAction(tr("context_menu.reveal"))
 
         chosen = menu.exec(self._list.mapToGlobal(pos))
         if chosen is fav_act:
