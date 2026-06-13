@@ -100,4 +100,36 @@ def app_stylesheet() -> str:
             font-size: 12px;
             max-height: 24px;
         }}
+        QPushButton#NavButton {{
+            background: transparent;
+            border: none;
+            border-left: 2px solid transparent;
+            text-align: left;
+            padding: 6px 8px 6px 12px;
+            color: {TEXT_SECONDARY};
+            font-size: 12px;
+        }}
+        QPushButton#NavButton:hover {{
+            background-color: {CARD};
+            color: {TEXT_PRIMARY};
+        }}
+        QPushButton#NavButton[active="true"] {{
+            background-color: {CARD};
+            color: {ACCENT};
+            border-left: 2px solid {ACCENT};
+        }}
+        QToolButton#SectionHeader {{
+            background: transparent;
+            border: none;
+            color: {TEXT_TERTIARY};
+            font-size: 9px;
+            font-weight: bold;
+            text-align: left;
+            padding: 4px 4px 2px 0px;
+        }}
+        QLabel#SectionLabel {{
+            color: {TEXT_TERTIARY};
+            font-size: 9px;
+            font-weight: bold;
+        }}
     """
