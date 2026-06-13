@@ -12,6 +12,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .theme.tokens import CHIP_DELETE_BG, CHIP_DELETE_FG, TAG_BG, TAG_RADIUS, TAG_TEXT
+
 # ---------------------------------------------------------------------------
 # Flow layout (wrapping horizontal layout)
 # ---------------------------------------------------------------------------
@@ -89,19 +91,19 @@ class _FlowLayout(QLayout):
 def _display_chip_style(bg: str, fg: str) -> str:
     return (
         f"background-color: {bg}; color: {fg}; "
-        "border-radius: 9px; padding: 2px 9px; font-size: 11px;"
+        f"border-radius: {TAG_RADIUS}px; padding: 2px 9px; font-size: 11px;"
     )
 
 
 def _input_chip_style(bg: str, fg: str) -> str:
     return (
         f"QPushButton {{ background-color: {bg}; color: {fg}; border: none; "
-        "border-radius: 8px; padding: 1px 6px; font-size: 11px; text-align: left; max-height: 20px; } "
-        "QPushButton:hover { background-color: #5c1a1a; color: #ffaaaa; }"
+        f"border-radius: {TAG_RADIUS - 1}px; padding: 1px 6px; font-size: 11px; text-align: left; max-height: 20px; }} "
+        f"QPushButton:hover {{ background-color: {CHIP_DELETE_BG}; color: {CHIP_DELETE_FG}; }}"
     )
 
-_CHIP_BG = "#1a3d5c"
-_CHIP_FG = "#7ec8e3"
+_CHIP_BG = TAG_BG
+_CHIP_FG = TAG_TEXT
 
 
 # ---------------------------------------------------------------------------

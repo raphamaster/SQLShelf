@@ -4,6 +4,8 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
+
+from .theme.tokens import TEXT_SECONDARY, TEXT_TERTIARY
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QHBoxLayout,
@@ -67,7 +69,7 @@ class SidebarWidget(QWidget):
         folders_header.setContentsMargins(0, 12, 0, 2)
 
         folders_lbl = QLabel("FOLDERS")
-        folders_lbl.setStyleSheet("font-weight: bold; color: #aaaaaa;")
+        folders_lbl.setStyleSheet(f"font-weight: bold; color: {TEXT_SECONDARY};")
 
         folders_header.addWidget(folders_lbl)
         folders_header.addStretch()
@@ -76,7 +78,7 @@ class SidebarWidget(QWidget):
         folders_header_widget.setLayout(folders_header)
 
         self._empty_label = QLabel("No folders yet.\nClick 'Open Folder' to add one.")
-        self._empty_label.setStyleSheet("color: #777777; font-size: 11px;")
+        self._empty_label.setStyleSheet(f"color: {TEXT_TERTIARY}; font-size: 11px;")
         self._empty_label.setWordWrap(True)
         self._empty_label.setContentsMargins(4, 4, 4, 4)
 
@@ -94,7 +96,7 @@ class SidebarWidget(QWidget):
 
         # ── BROWSE section ───────────────────────────────────────────────────
         nav_label = QLabel("BROWSE")
-        nav_label.setStyleSheet("font-weight: bold; margin-top: 12px; color: #aaaaaa;")
+        nav_label.setStyleSheet(f"font-weight: bold; margin-top: 12px; color: {TEXT_SECONDARY};")
 
         self._nav_list = QListWidget()
         self._nav_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
@@ -114,7 +116,7 @@ class SidebarWidget(QWidget):
 
         # ── TAGS section ─────────────────────────────────────────────────────
         tags_label = QLabel("TAGS")
-        tags_label.setStyleSheet("font-weight: bold; margin-top: 8px; color: #aaaaaa;")
+        tags_label.setStyleSheet(f"font-weight: bold; margin-top: 8px; color: {TEXT_SECONDARY};")
 
         self._tag_list = QListWidget()
         self._tag_list.itemClicked.connect(self._on_tag_item_clicked)
