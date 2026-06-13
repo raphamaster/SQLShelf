@@ -294,6 +294,16 @@ class QueryListWidget(QWidget):
                 self._list.setCurrentIndex(self._model.index(i, 0))
                 return
 
+    def update_favorite(self, rel_path: str, is_fav: bool) -> None:
+        """Update the favorite star for the item matching *rel_path* in place."""
+        for i, r in enumerate(self._results):
+            if r.rel_path == rel_path:
+                r.is_favorite = is_fav
+                item = self._model.item(i)
+                if item is not None:
+                    item.setData(is_fav, _ROLE_FAVORITE)
+                break
+
     def count(self) -> int:
         return len(self._results)
 
