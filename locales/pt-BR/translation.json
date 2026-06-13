@@ -19,6 +19,8 @@
   "menu.about": "Sobre o SQLShelf",
   "menu.reveal_in_explorer": "Revelar Arquivo no Explorer",
   "menu.open_in_ssms": "Abrir no SSMS",
+  "menu.edit": "&Editar",
+  "menu.copy_frontmatter_template": "Copiar Modelo de Frontmatter",
   "menu.copy_sql": "Copiar SQL (sem frontmatter)",
   "menu.recent_none": "(nenhum)",
 
@@ -121,6 +123,7 @@
   "status.added_favorite": "Adicionado aos favoritos: {path}",
   "status.removed_favorite": "Removido dos favoritos: {path}",
   "status.sql_copied": "SQL copiado para a área de transferência",
+  "status.frontmatter_template_copied": "Modelo de frontmatter copiado para a área de transferência",
 
   "word.query": "consulta",
   "word.queries": "consultas",
