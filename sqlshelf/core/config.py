@@ -22,6 +22,10 @@ def _save(data: dict) -> None:
     _CONFIG_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
+# ---------------------------------------------------------------------------
+# Recent projects (File menu history)
+# ---------------------------------------------------------------------------
+
 def get_recent_projects() -> list[Path]:
     """Return list of recently opened project folders (most-recent first)."""
     data = _load()
@@ -51,40 +55,50 @@ def get_last_project() -> Path | None:
     return recent[0] if recent else None
 
 
-def get_pinned_folders() -> list[Path]:
-    """Return list of pinned project folders (in order pinned)."""
+# ---------------------------------------------------------------------------
+# Known folders (sidebar explorer)
+# Each entry: {"path": str, "favorited": bool}
+# ---------------------------------------------------------------------------
+
+def get_known_folders() -> list[tuple[Path, bool]]:
+    """Return (path, is_favorited) for each known folder that still exists on disk."""
     data = _load()
-    paths = []
-    for p in data.get("pinned_folders", []):
-        path = Path(p)
+    result = []
+    for entry in data.get("known_folders", []):
+        path = Path(entry["path"])
         if path.is_dir():
-            paths.append(path)
-    return paths
+            result.append((path, bool(entry.get("favorited", False))))
+    return result
 
 
-def pin_folder(path: Path) -> None:
-    """Add *path* to pinned folders (no-op if already pinned)."""
+def add_known_folder(path: Path) -> None:
+    """Add *path* to known folders (no-op if already present)."""
     data = _load()
     path_str = str(path.resolve())
-    pinned: list[str] = data.get("pinned_folders", [])
-    if path_str not in pinned:
-        pinned.append(path_str)
-    data["pinned_folders"] = pinned
+    folders: list[dict] = data.get("known_folders", [])
+    if not any(f["path"] == path_str for f in folders):
+        folders.append({"path": path_str, "favorited": False})
+        data["known_folders"] = folders
+        _save(data)
+
+
+def remove_known_folder(path: Path) -> None:
+    """Remove *path* from known folders."""
+    data = _load()
+    path_str = str(path.resolve())
+    data["known_folders"] = [
+        f for f in data.get("known_folders", []) if f["path"] != path_str
+    ]
     _save(data)
 
 
-def unpin_folder(path: Path) -> None:
-    """Remove *path* from pinned folders (no-op if not pinned)."""
+def toggle_folder_favorite(path: Path) -> bool:
+    """Toggle favorite flag for *path*; return new flag value."""
     data = _load()
     path_str = str(path.resolve())
-    pinned: list[str] = data.get("pinned_folders", [])
-    if path_str in pinned:
-        pinned.remove(path_str)
-    data["pinned_folders"] = pinned
-    _save(data)
-
-
-def is_folder_pinned(path: Path) -> bool:
-    """Return True if *path* is currently pinned."""
-    data = _load()
-    return str(path.resolve()) in data.get("pinned_folders", [])
+    for entry in data.get("known_folders", []):
+        if entry["path"] == path_str:
+            entry["favorited"] = not entry.get("favorited", False)
+            _save(data)
+            return bool(entry["favorited"])
+    return False
