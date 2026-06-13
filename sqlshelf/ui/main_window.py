@@ -11,12 +11,10 @@ from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
     QInputDialog,
-    QLabel,
     QMainWindow,
     QMenu,
     QMenuBar,
     QMessageBox,
-    QPlainTextEdit,
     QPushButton,
     QSplitter,
     QStatusBar,
@@ -33,6 +31,7 @@ from ..core.models import SearchResult
 from ..core.scanner import scan_folder
 from ..core.snippets import list_templates
 from ..core.watcher import FolderWatcher
+from .code_editor import CodeEditor
 from .command_palette import CommandPalette
 from .highlighter import SqlHighlighter
 from .metadata_panel import MetadataPanel
@@ -228,15 +227,20 @@ class MainWindow(QMainWindow):
         # Right panel
         right = QWidget()
         right_layout = QVBoxLayout(right)
-        right_layout.setContentsMargins(0, 0, 0, 0)
+        right_layout.setContentsMargins(0, 0, 12, 0)
         right_layout.setSpacing(0)
 
         self._metadata_panel = MetadataPanel()
         self._metadata_panel.table_clicked.connect(self._on_object_clicked)
+        self._metadata_panel.favorite_toggled.connect(self._toggle_favorite)
 
         # Editor toolbar
         self._toolbar = QToolBar()
         self._toolbar.setMovable(False)
+        self._toolbar.setStyleSheet(
+            "QToolBar { background-color: #1c1c2e; border: none; padding: 2px 8px; spacing: 2px; }"
+            "QPushButton { padding: 1px 10px; font-size: 12px; max-height: 24px; }"
+        )
 
         self._edit_toggle_btn = QPushButton("✏  Edit")
         self._edit_toggle_btn.setCheckable(True)
@@ -252,22 +256,11 @@ class MainWindow(QMainWindow):
         self._cancel_btn.setEnabled(False)
         self._cancel_btn.clicked.connect(self._cancel_edit)
 
-        self._fav_btn = QPushButton("☆  Favorite")
-        self._fav_btn.setToolTip("Toggle favorite (click to star/unstar)")
-        self._fav_btn.setMinimumWidth(90)
-        self._fav_btn.clicked.connect(self._toggle_favorite)
-
         self._toolbar.addWidget(self._edit_toggle_btn)
         self._toolbar.addWidget(self._save_btn)
         self._toolbar.addWidget(self._cancel_btn)
-        self._toolbar.addSeparator()
-        self._toolbar.addWidget(self._fav_btn)
-        self._toolbar.addSeparator()
-        self._path_label = QLabel("")
-        self._path_label.setStyleSheet("color: #888888; padding-left: 4px;")
-        self._toolbar.addWidget(self._path_label)
 
-        self._editor = QPlainTextEdit()
+        self._editor = CodeEditor()
         self._editor.setReadOnly(True)
         font = QFont("Cascadia Code")
         font.setStyleHint(QFont.StyleHint.Monospace)
@@ -275,9 +268,28 @@ class MainWindow(QMainWindow):
         self._editor.setFont(font)
         self._highlighter = SqlHighlighter(self._editor.document())
 
-        right_layout.addWidget(self._metadata_panel)
-        right_layout.addWidget(self._toolbar)
-        right_layout.addWidget(self._editor, stretch=1)
+        # Top section — metadata + toolbar share a dark card background
+        top_section = QWidget()
+        top_section.setObjectName("EditorTopSection")
+        top_section.setStyleSheet(
+            "QWidget#EditorTopSection { background-color: #1c1c2e; "
+            "border-bottom: 2px solid #3a3a60; }"
+        )
+        ts_layout = QVBoxLayout(top_section)
+        ts_layout.setContentsMargins(0, 0, 0, 0)
+        ts_layout.setSpacing(0)
+        ts_layout.addWidget(self._metadata_panel)
+        ts_layout.addWidget(self._toolbar)
+
+        # Editor wrapper — top/bottom breathing room (right margin comes from right_layout)
+        editor_wrapper = QWidget()
+        ew_layout = QVBoxLayout(editor_wrapper)
+        ew_layout.setContentsMargins(0, 4, 0, 6)
+        ew_layout.setSpacing(0)
+        ew_layout.addWidget(self._editor)
+
+        right_layout.addWidget(top_section)
+        right_layout.addWidget(editor_wrapper, stretch=1)
 
         # Splitter
         splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -294,6 +306,8 @@ class MainWindow(QMainWindow):
     def _build_shortcuts(self) -> None:
         from PySide6.QtGui import QShortcut
 
+        from PySide6.QtCore import Qt as _Qt
+
         QShortcut(QKeySequence("Ctrl+F"), self).activated.connect(self._search_bar.focus)
         QShortcut(QKeySequence("Ctrl+S"), self).activated.connect(self.save_current)
         QShortcut(QKeySequence("Ctrl+E"), self).activated.connect(
@@ -301,6 +315,9 @@ class MainWindow(QMainWindow):
         )
         QShortcut(QKeySequence("Ctrl+N"), self).activated.connect(self.new_query)
         QShortcut(QKeySequence("Ctrl+P"), self).activated.connect(self.open_command_palette)
+        esc = QShortcut(QKeySequence(_Qt.Key.Key_Escape), self)
+        esc.setContext(_Qt.ShortcutContext.WindowShortcut)
+        esc.activated.connect(self._cancel_edit_mode)
 
     # ------------------------------------------------------------------
     # Folder / indexing
@@ -399,8 +416,6 @@ class MainWindow(QMainWindow):
         self._editor.setReadOnly(True)
         self._editor.clear()
         self._metadata_panel.clear()
-        self._path_label.setText("")
-        self._fav_btn.setText("☆  Favorite")
         self._save_btn.setEnabled(False)
         self._cancel_btn.setEnabled(False)
         self._edit_toggle_btn.setChecked(False)
@@ -492,7 +507,6 @@ class MainWindow(QMainWindow):
             return
 
         self._current_metadata = metadata
-        self._path_label.setText(result.rel_path)
         self._editor.setPlainText(body)
 
         objects: dict[str, list[str]] = {"table": [], "column": []}
@@ -514,9 +528,9 @@ class MainWindow(QMainWindow):
         if self._db is not None:
             try:
                 is_fav = self._db.is_favorite(result.rel_path)
-                self._fav_btn.setText("★  Favorite" if is_fav else "☆  Favorite")
+                self._metadata_panel.set_favorite(is_fav)
             except Exception:
-                self._fav_btn.setText("☆  Favorite")
+                self._metadata_panel.set_favorite(False)
 
     # ------------------------------------------------------------------
     # Search / tag / sidebar filtering
@@ -634,9 +648,8 @@ class MainWindow(QMainWindow):
             is_fav = self._db.toggle_favorite(result.rel_path)
         except Exception:
             return
-        label = "★  Favorite" if is_fav else "☆  Favorite"
         if self._current_result and self._current_result.rel_path == result.rel_path:
-            self._fav_btn.setText(label)
+            self._metadata_panel.set_favorite(is_fav)
         self._status_bar.showMessage(
             f"{'Added to' if is_fav else 'Removed from'} favorites: {result.rel_path}"
         )
