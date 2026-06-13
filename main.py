@@ -14,7 +14,12 @@ _tokens.set_active_palette(_theme_name)
 i18n.set_language(cfg.get_language())
 
 # ── Now it is safe to import UI modules ─────────────────────────────────────
+from pathlib import Path
+
+from PySide6.QtGui import QIcon  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
+
+_FAVICON = Path(__file__).parent / "images" / "FavIcon.png"
 
 from sqlshelf.ui.main_window import MainWindow  # noqa: E402
 from sqlshelf.ui.theme.tokens import QT_MATERIAL_THEMES, app_stylesheet  # noqa: E402
@@ -28,6 +33,8 @@ except ImportError:
 
 def main() -> None:
     app = QApplication(sys.argv)
+    if _FAVICON.exists():
+        app.setWindowIcon(QIcon(str(_FAVICON)))
 
     if HAS_QT_MATERIAL:
         qt_theme = QT_MATERIAL_THEMES.get(_theme_name, "dark_teal.xml")
