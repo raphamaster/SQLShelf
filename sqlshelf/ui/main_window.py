@@ -153,6 +153,13 @@ class MainWindow(QMainWindow):
 
         file_menu.addSeparator()
 
+        self._pin_folder_act = QAction("📌  Pin Folder", self)
+        self._pin_folder_act.setEnabled(False)
+        self._pin_folder_act.triggered.connect(self._toggle_pin_folder)
+        file_menu.addAction(self._pin_folder_act)
+
+        file_menu.addSeparator()
+
         reindex_act = QAction(
             _icon(QStyle.StandardPixmap.SP_BrowserReload), "Force Reindex", self
         )
@@ -190,6 +197,9 @@ class MainWindow(QMainWindow):
         self._sidebar.tag_selected.connect(self._on_tag_selected)
         self._sidebar.favorites_selected.connect(self._on_favorites_selected)
         self._sidebar.recent_selected.connect(self._on_recent_selected)
+        self._sidebar.pinned_folder_selected.connect(self.load_folder)
+        self._sidebar.unpin_folder_requested.connect(self._on_unpin_folder_requested)
+        self._sidebar.set_pinned_folders(cfg.get_pinned_folders())
 
         # Middle panel
         middle = QWidget()
@@ -304,6 +314,7 @@ class MainWindow(QMainWindow):
         self._db = IndexDB(folder)
         cfg.add_recent_project(folder)
         self._rebuild_recent_menu()
+        self._refresh_pin_action()
 
         self.setWindowTitle(f"SQLShelf — {folder.name}")
         self._status_bar.showMessage("Indexing…")
@@ -518,6 +529,36 @@ class MainWindow(QMainWindow):
         elif action == "reveal":
             self._query_list.select_by_rel_path(result.rel_path)
             self.reveal_in_explorer()
+
+    # ------------------------------------------------------------------
+    # Pinned folders
+    # ------------------------------------------------------------------
+
+    def _toggle_pin_folder(self) -> None:
+        if self._folder is None:
+            return
+        if cfg.is_folder_pinned(self._folder):
+            cfg.unpin_folder(self._folder)
+        else:
+            cfg.pin_folder(self._folder)
+        self._refresh_pin_action()
+        self._sidebar.set_pinned_folders(cfg.get_pinned_folders())
+
+    def _on_unpin_folder_requested(self, folder: Path) -> None:
+        cfg.unpin_folder(folder)
+        self._refresh_pin_action()
+        self._sidebar.set_pinned_folders(cfg.get_pinned_folders())
+
+    def _refresh_pin_action(self) -> None:
+        if self._folder is None:
+            self._pin_folder_act.setEnabled(False)
+            self._pin_folder_act.setText("📌  Pin Folder")
+            return
+        self._pin_folder_act.setEnabled(True)
+        if cfg.is_folder_pinned(self._folder):
+            self._pin_folder_act.setText("📌  Unpin Folder")
+        else:
+            self._pin_folder_act.setText("📌  Pin Folder")
 
     # ------------------------------------------------------------------
     # Favorites
