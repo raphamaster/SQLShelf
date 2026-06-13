@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, QTimer, Signal
-from PySide6.QtGui import QAction, QFont, QIcon, QKeySequence
+from PySide6.QtGui import QAction, QActionGroup, QFont, QIcon, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -291,6 +291,23 @@ class MainWindow(QMainWindow):
 
         view_menu = QMenu("&View", self)
         mb.addMenu(view_menu)
+
+        settings_menu = QMenu("&Settings", self)
+        mb.addMenu(settings_menu)
+
+        theme_menu = QMenu("Theme", self)
+        settings_menu.addMenu(theme_menu)
+
+        current_theme = cfg.get_theme()
+        theme_group = QActionGroup(self)
+        theme_group.setExclusive(True)
+        for key, label in [("dark", "Dark"), ("light", "Light")]:
+            act = QAction(label, self)
+            act.setCheckable(True)
+            act.setChecked(key == current_theme)
+            act.triggered.connect(lambda checked, k=key: self._change_theme(k))
+            theme_group.addAction(act)
+            theme_menu.addAction(act)
 
         help_menu = QMenu("&Help", self)
         mb.addMenu(help_menu)
@@ -1212,6 +1229,18 @@ class MainWindow(QMainWindow):
             "Organizes, describes, categorizes and searches SQL files<br>"
             "by content, table, field or tag.<br><br>"
             "Author: Raphael Franco",
+        )
+
+    # ------------------------------------------------------------------
+    # Theme
+    # ------------------------------------------------------------------
+
+    def _change_theme(self, name: str) -> None:
+        cfg.set_theme(name)
+        QMessageBox.information(
+            self,
+            "Theme Changed",
+            "The new theme will be applied the next time you start SQLShelf.",
         )
 
     # ------------------------------------------------------------------
