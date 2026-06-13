@@ -269,9 +269,6 @@ def app_stylesheet() -> str:
             background-color: {CARD};
             border-bottom: 1px solid {BORDER};
         }}
-        QWidget#EditorWrapper {{
-            background-color: {EDITOR_BG};
-        }}
         QWidget#EditorToolBar {{
             background-color: {CARD};
         }}
@@ -346,6 +343,7 @@ def app_stylesheet() -> str:
         }}
         QWidget#EditorToolBar QPushButton:hover {{
             background-color: {HOVER_BG_STRONG};
+            border-radius: 4px;
             border: 1px solid {BORDER_EMPH};
         }}
         QPlainTextEdit {{
