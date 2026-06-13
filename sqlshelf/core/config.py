@@ -22,6 +22,10 @@ def _save(data: dict) -> None:
     _CONFIG_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
+# ---------------------------------------------------------------------------
+# Recent projects (File menu history)
+# ---------------------------------------------------------------------------
+
 def get_recent_projects() -> list[Path]:
     """Return list of recently opened project folders (most-recent first)."""
     data = _load()
@@ -49,3 +53,52 @@ def get_last_project() -> Path | None:
     """Return the last opened project folder, or None."""
     recent = get_recent_projects()
     return recent[0] if recent else None
+
+
+# ---------------------------------------------------------------------------
+# Known folders (sidebar explorer)
+# Each entry: {"path": str, "favorited": bool}
+# ---------------------------------------------------------------------------
+
+def get_known_folders() -> list[tuple[Path, bool]]:
+    """Return (path, is_favorited) for each known folder that still exists on disk."""
+    data = _load()
+    result = []
+    for entry in data.get("known_folders", []):
+        path = Path(entry["path"])
+        if path.is_dir():
+            result.append((path, bool(entry.get("favorited", False))))
+    return result
+
+
+def add_known_folder(path: Path) -> None:
+    """Add *path* to known folders (no-op if already present)."""
+    data = _load()
+    path_str = str(path.resolve())
+    folders: list[dict] = data.get("known_folders", [])
+    if not any(f["path"] == path_str for f in folders):
+        folders.append({"path": path_str, "favorited": False})
+        data["known_folders"] = folders
+        _save(data)
+
+
+def remove_known_folder(path: Path) -> None:
+    """Remove *path* from known folders."""
+    data = _load()
+    path_str = str(path.resolve())
+    data["known_folders"] = [
+        f for f in data.get("known_folders", []) if f["path"] != path_str
+    ]
+    _save(data)
+
+
+def toggle_folder_favorite(path: Path) -> bool:
+    """Toggle favorite flag for *path*; return new flag value."""
+    data = _load()
+    path_str = str(path.resolve())
+    for entry in data.get("known_folders", []):
+        if entry["path"] == path_str:
+            entry["favorited"] = not entry.get("favorited", False)
+            _save(data)
+            return bool(entry["favorited"])
+    return False
