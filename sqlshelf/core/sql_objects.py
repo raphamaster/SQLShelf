@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import contextlib
+import io
 import sqlglot
 from sqlglot import exp
 
@@ -21,9 +23,11 @@ def extract_objects(sql_body: str, dialect: str = "tsql") -> dict[str, set[str]]
         return empty
 
     try:
-        tree = sqlglot.parse_one(
-            sql_body, dialect=dialect, error_level=sqlglot.ErrorLevel.IGNORE
-        )
+        # sqlglot prints fallback warnings to stderr even with IGNORE level; suppress them.
+        with contextlib.redirect_stderr(io.StringIO()):
+            tree = sqlglot.parse_one(
+                sql_body, dialect=dialect, error_level=sqlglot.ErrorLevel.IGNORE
+            )
     except Exception:
         return empty
 
