@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, QTimer, Signal
-from PySide6.QtGui import QAction, QFont, QIcon, QKeySequence
+from PySide6.QtGui import QAction, QActionGroup, QFont, QIcon, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -36,6 +36,7 @@ from ..core.scanner import scan_folder
 from ..core.snippets import list_templates
 from ..core.watcher import FolderWatcher
 from .code_editor import CodeEditor
+from .theme import tokens as _tk
 from .theme.tokens import ACCENT, ACCENT_BORDER, ACCENT_FILL, TEXT_SECONDARY, TEXT_TERTIARY
 from .command_palette import CommandPalette
 from .highlighter import SqlHighlighter
@@ -292,6 +293,23 @@ class MainWindow(QMainWindow):
         view_menu = QMenu("&View", self)
         mb.addMenu(view_menu)
 
+        settings_menu = QMenu("&Settings", self)
+        mb.addMenu(settings_menu)
+
+        theme_menu = QMenu("Theme", self)
+        settings_menu.addMenu(theme_menu)
+
+        current_theme = cfg.get_theme()
+        theme_group = QActionGroup(self)
+        theme_group.setExclusive(True)
+        for key, label in [("dark", "Dark"), ("light", "Light")]:
+            act = QAction(label, self)
+            act.setCheckable(True)
+            act.setChecked(key == current_theme)
+            act.triggered.connect(lambda checked, k=key: self._change_theme(k))
+            theme_group.addAction(act)
+            theme_menu.addAction(act)
+
         help_menu = QMenu("&Help", self)
         mb.addMenu(help_menu)
         help_act = QAction("Help", self)
@@ -433,16 +451,19 @@ class MainWindow(QMainWindow):
         ob_icon = QLabel("📂")
         ob_icon.setStyleSheet(f"font-size: 56px; color: {TEXT_TERTIARY};")
         ob_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._ob_icon = ob_icon
 
         ob_title = QLabel("No folder open")
         ob_title.setStyleSheet(
             f"font-size: 17px; font-weight: bold; color: {TEXT_SECONDARY};"
         )
         ob_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._ob_title = ob_title
 
         ob_sub = QLabel("Open a folder to start browsing your SQL queries.")
         ob_sub.setStyleSheet(f"font-size: 12px; color: {TEXT_TERTIARY};")
         ob_sub.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._ob_sub = ob_sub
 
         ob_btn = QPushButton("📂  Open Folder")
         ob_btn.setObjectName("OpenFolderBtn")
@@ -975,7 +996,7 @@ class MainWindow(QMainWindow):
         self._save_action.setVisible(True)
         self._cancel_action.setVisible(True)
         self._editor_wrapper.setStyleSheet(
-            f"#EditorWrapper {{ border: 1px solid {ACCENT_BORDER}; border-radius: 4px; }}"
+            f"#EditorWrapper {{ border: 1px solid {_tk.ACCENT_BORDER}; border-radius: 4px; }}"
         )
         self._edit_toggle_btn.setText("✏  Editing…")
 
@@ -1213,6 +1234,48 @@ class MainWindow(QMainWindow):
             "by content, table, field or tag.<br><br>"
             "Author: Raphael Franco",
         )
+
+    # ------------------------------------------------------------------
+    # Theme
+    # ------------------------------------------------------------------
+
+    def _change_theme(self, name: str) -> None:
+        cfg.set_theme(name)
+        self._apply_theme_live(name)
+
+    def _apply_theme_live(self, name: str) -> None:
+        from .theme.tokens import QT_MATERIAL_THEMES, app_stylesheet, set_active_palette
+
+        set_active_palette(name)
+
+        app = QApplication.instance()
+        if app is None:
+            return
+
+        try:
+            import qt_material
+            qt_material.apply_stylesheet(
+                app, theme=QT_MATERIAL_THEMES.get(name, "dark_teal.xml")
+            )
+        except ImportError:
+            pass
+
+        app.setStyleSheet(app.styleSheet() + app_stylesheet())
+
+        # Refresh widgets that manage their own stylesheets
+        self._search_bar.refresh_theme()
+        self._query_list.refresh_theme()
+        self._sidebar.refresh_theme()
+        self._metadata_panel.refresh_theme()
+        self._editor.refresh_theme()
+        self._highlighter.refresh_theme()
+
+        # Refresh onboarding labels
+        self._ob_icon.setStyleSheet(f"font-size: 56px; color: {_tk.TEXT_TERTIARY};")
+        self._ob_title.setStyleSheet(
+            f"font-size: 17px; font-weight: bold; color: {_tk.TEXT_SECONDARY};"
+        )
+        self._ob_sub.setStyleSheet(f"font-size: 12px; color: {_tk.TEXT_TERTIARY};")
 
     # ------------------------------------------------------------------
     # Lifecycle

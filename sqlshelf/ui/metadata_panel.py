@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 )
 
 from .tag_widget import FlowLayout, TagDisplayWidget, TagInputWidget
+from .theme import tokens as _tk
 from .theme.tokens import (
     ACCENT,
     ACCENT_FILL,
@@ -29,16 +30,18 @@ from .theme.tokens import (
     TEXT_TERTIARY,
 )
 
-_CHIP_STYLE = (
-    f"QPushButton {{ background-color: {TAG_BG}; color: {TEXT_SECONDARY}; "
-    f"border: 1px solid {BORDER_EMPH}; border-radius: {TAG_RADIUS}px; "
-    f"padding: 1px 8px; font-size: 11px; max-height: 20px; }} "
-    f"QPushButton:hover {{ background-color: {BORDER_EMPH}; color: {TEXT_PRIMARY}; }}"
-)
 
-_SECTION_LABEL_STYLE = (
-    f"color: {TEXT_TERTIARY}; font-size: 9px; font-weight: bold; letter-spacing: 0.5px;"
-)
+def _chip_style() -> str:
+    return (
+        f"QPushButton {{ background-color: {_tk.TAG_BG}; color: {_tk.TEXT_SECONDARY}; "
+        f"border: 1px solid {_tk.BORDER_EMPH}; border-radius: {_tk.TAG_RADIUS}px; "
+        f"padding: 1px 8px; font-size: 11px; max-height: 20px; }} "
+        f"QPushButton:hover {{ background-color: {_tk.BORDER_EMPH}; color: {_tk.TEXT_PRIMARY}; }}"
+    )
+
+
+def _section_label_style() -> str:
+    return f"color: {_tk.TEXT_TERTIARY}; font-size: 9px; font-weight: bold; letter-spacing: 0.5px;"
 
 
 class MetadataPanel(QWidget):
@@ -199,7 +202,7 @@ class MetadataPanel(QWidget):
 
         for table in sorted(self._tables):
             btn = QPushButton(table)
-            btn.setStyleSheet(_CHIP_STYLE)
+            btn.setStyleSheet(_chip_style())
             btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
             btn.clicked.connect(
                 lambda checked=False, t=table: self.filter_requested.emit("table", t)
@@ -208,7 +211,7 @@ class MetadataPanel(QWidget):
 
         for col in sorted(self._columns):
             btn = QPushButton(col)
-            btn.setStyleSheet(_CHIP_STYLE)
+            btn.setStyleSheet(_chip_style())
             btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
             btn.clicked.connect(
                 lambda checked=False, c=col: self.filter_requested.emit("col", c)
@@ -279,6 +282,35 @@ class MetadataPanel(QWidget):
         tags = self._tags_input.get_tags()
         return title, description, tags
 
+    def refresh_theme(self) -> None:
+        self._title_label.setStyleSheet(
+            f"font-weight: bold; font-size: 13px; color: {_tk.TEXT_PRIMARY};"
+        )
+        self._desc_label.setStyleSheet(f"color: {_tk.TEXT_SECONDARY}; font-size: 12px;")
+        self._shortcut_hint.setStyleSheet(
+            f"color: {_tk.TEXT_TERTIARY}; font-size: 9px; padding-right: 4px;"
+        )
+        self._path_btn.setStyleSheet(
+            f"QPushButton {{ background: transparent; border: none; text-align: left; "
+            f"color: {_tk.TEXT_SECONDARY}; font-size: 11px; padding: 0px 0px 1px 0px; }} "
+            f"QPushButton:hover {{ color: {_tk.ACCENT}; }}"
+        )
+        is_fav = self._star_btn.text() == "★"
+        self.set_favorite(is_fav)
+        self._rebuild_object_chips()
+        # Refresh section labels
+        from PySide6.QtWidgets import QLabel
+        style = _section_label_style()
+        for section in [
+            self._tags_section,
+            self._tables_section,
+            self._columns_section,
+            self._path_section,
+        ]:
+            lbl = section.layout().itemAt(0).widget() if section.layout() else None
+            if isinstance(lbl, QLabel):
+                lbl.setStyleSheet(style)
+
     def clear(self) -> None:
         self._title_label.setText("")
         self._desc_label.setText("")
@@ -302,7 +334,7 @@ def _section_container(label_text: str, content: QWidget) -> QWidget:
     vb.setContentsMargins(0, 0, 0, 0)
     vb.setSpacing(2)
     lbl = QLabel(label_text)
-    lbl.setStyleSheet(_SECTION_LABEL_STYLE)
+    lbl.setStyleSheet(_section_label_style())
     vb.addWidget(lbl)
     vb.addWidget(content)
     return w

@@ -1,6 +1,7 @@
 from PySide6.QtCore import QRegularExpression
 from PySide6.QtGui import QColor, QFont, QSyntaxHighlighter, QTextCharFormat
 
+from .theme import tokens as _tk
 from .theme.tokens import SYN_COMMENT, SYN_KEYWORD, SYN_NUMBER, SYN_STRING
 
 SQL_KEYWORDS = [
@@ -16,19 +17,16 @@ SQL_KEYWORDS = [
 
 
 class SqlHighlighter(QSyntaxHighlighter):
-    """Highlighter simples por regex — suficiente para o esqueleto.
-
-    Será substituído/complementado por sqlglot na Fase 1 do Core
-    (extração de tabelas/colunas), mas o highlight visual continua
-    sendo regex puro mesmo depois.
-    """
-
     def __init__(self, document):
         super().__init__(document)
         self._rules: list[tuple[QRegularExpression, QTextCharFormat]] = []
+        self._build_rules()
+
+    def _build_rules(self) -> None:
+        self._rules = []
 
         keyword_format = QTextCharFormat()
-        keyword_format.setForeground(QColor(SYN_KEYWORD))
+        keyword_format.setForeground(QColor(_tk.SYN_KEYWORD))
         keyword_format.setFontWeight(QFont.Weight.Bold)
         for word in SQL_KEYWORDS:
             pattern = QRegularExpression(
@@ -38,16 +36,20 @@ class SqlHighlighter(QSyntaxHighlighter):
             self._rules.append((pattern, keyword_format))
 
         string_format = QTextCharFormat()
-        string_format.setForeground(QColor(SYN_STRING))
+        string_format.setForeground(QColor(_tk.SYN_STRING))
         self._rules.append((QRegularExpression(r"'[^']*'"), string_format))
 
         number_format = QTextCharFormat()
-        number_format.setForeground(QColor(SYN_NUMBER))
+        number_format.setForeground(QColor(_tk.SYN_NUMBER))
         self._rules.append((QRegularExpression(r"\b\d+\b"), number_format))
 
         self._comment_format = QTextCharFormat()
-        self._comment_format.setForeground(QColor(SYN_COMMENT))
+        self._comment_format.setForeground(QColor(_tk.SYN_COMMENT))
         self._rules.append((QRegularExpression(r"--[^\n]*"), self._comment_format))
+
+    def refresh_theme(self) -> None:
+        self._build_rules()
+        self.rehighlight()
 
     def highlightBlock(self, text: str) -> None:
         for pattern, fmt in self._rules:
