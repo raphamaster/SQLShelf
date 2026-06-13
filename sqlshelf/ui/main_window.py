@@ -16,7 +16,6 @@ from PySide6.QtWidgets import (
     QMenu,
     QMenuBar,
     QMessageBox,
-    QPlainTextEdit,
     QPushButton,
     QSplitter,
     QStatusBar,
@@ -33,6 +32,7 @@ from ..core.models import SearchResult
 from ..core.scanner import scan_folder
 from ..core.snippets import list_templates
 from ..core.watcher import FolderWatcher
+from .code_editor import CodeEditor
 from .command_palette import CommandPalette
 from .highlighter import SqlHighlighter
 from .metadata_panel import MetadataPanel
@@ -237,6 +237,10 @@ class MainWindow(QMainWindow):
         # Editor toolbar
         self._toolbar = QToolBar()
         self._toolbar.setMovable(False)
+        self._toolbar.setStyleSheet(
+            "QToolBar { padding: 2px 4px; spacing: 2px; }"
+            "QPushButton { padding: 1px 10px; font-size: 12px; max-height: 24px; }"
+        )
 
         self._edit_toggle_btn = QPushButton("✏  Edit")
         self._edit_toggle_btn.setCheckable(True)
@@ -254,7 +258,6 @@ class MainWindow(QMainWindow):
 
         self._fav_btn = QPushButton("☆  Favorite")
         self._fav_btn.setToolTip("Toggle favorite (click to star/unstar)")
-        self._fav_btn.setMinimumWidth(90)
         self._fav_btn.clicked.connect(self._toggle_favorite)
 
         self._toolbar.addWidget(self._edit_toggle_btn)
@@ -264,10 +267,10 @@ class MainWindow(QMainWindow):
         self._toolbar.addWidget(self._fav_btn)
         self._toolbar.addSeparator()
         self._path_label = QLabel("")
-        self._path_label.setStyleSheet("color: #888888; padding-left: 4px;")
+        self._path_label.setStyleSheet("color: #888888; padding-left: 4px; font-size: 11px;")
         self._toolbar.addWidget(self._path_label)
 
-        self._editor = QPlainTextEdit()
+        self._editor = CodeEditor()
         self._editor.setReadOnly(True)
         font = QFont("Cascadia Code")
         font.setStyleHint(QFont.StyleHint.Monospace)
