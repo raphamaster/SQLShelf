@@ -3,13 +3,16 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QHBoxLayout,
     QLabel,
     QListWidget,
     QListWidgetItem,
     QMenu,
     QPushButton,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -18,55 +21,82 @@ _ALL_ITEM_TEXT = "All queries"
 _FAVORITES_ITEM_TEXT = "★  Favorites"
 _RECENT_ITEM_TEXT = "⌛  Recent"
 
+_ROLE_PATH = Qt.ItemDataRole.UserRole
+
 
 class SidebarWidget(QWidget):
-    """Left panel: Open Folder button, pinned folders, Favorites/Recent, tag browser.
+    """Left panel: folder explorer, Favorites/Recent shortcuts, and tag browser.
 
     Signals:
-        open_folder_requested  — user clicked Open Folder.
-        tag_selected(str)      — user clicked a tag; empty string = all queries.
-        favorites_selected     — user clicked Favorites.
-        recent_selected        — user clicked Recent.
-        pinned_folder_selected(Path) — user clicked a pinned folder.
-        unpin_folder_requested(Path) — user chose Unpin from context menu.
+        open_folder_requested      — user clicked the top "Open Folder…" button.
+        folder_selected(Path)      — user clicked a known folder to open/switch to it.
+        folder_remove_requested(Path)   — user chose Remove from context menu.
+        folder_favorite_toggled(Path)   — user chose Favorite/Unfavorite.
+        tag_selected(str)          — user clicked a tag; empty string = show all.
+        favorites_selected         — user clicked Favorites.
+        recent_selected            — user clicked Recent.
     """
 
     open_folder_requested = Signal()
+    folder_selected = Signal(object)         # Path
+    folder_remove_requested = Signal(object) # Path
+    folder_favorite_toggled = Signal(object) # Path
     tag_selected = Signal(str)
     favorites_selected = Signal()
     recent_selected = Signal()
-    pinned_folder_selected = Signal(object)   # Path
-    unpin_folder_requested = Signal(object)   # Path
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setMinimumWidth(140)
+        self.setMinimumWidth(150)
 
+        self._active_folder: Path | None = None
+
+        # ── Title ───────────────────────────────────────────────────────────
         app_title = QLabel("SQLSHELF")
-        app_title.setStyleSheet("font-weight: bold; font-size: 14px; letter-spacing: 1px;")
+        app_title.setStyleSheet(
+            "font-weight: bold; font-size: 14px; letter-spacing: 1px;"
+        )
 
+        # ── Open / Add Folder button ─────────────────────────────────────────
         self._open_btn = QPushButton("📂  Open Folder…")
         self._open_btn.clicked.connect(self.open_folder_requested)
 
-        # --- Pinned folders section ---
-        self._pinned_label = QLabel("PINNED")
-        self._pinned_label.setStyleSheet("font-weight: bold; margin-top: 12px; color: #aaaaaa;")
+        # ── FOLDERS section ──────────────────────────────────────────────────
+        folders_header = QHBoxLayout()
+        folders_header.setContentsMargins(0, 12, 0, 2)
 
-        self._pinned_list = QListWidget()
-        self._pinned_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        self._pinned_list.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self._pinned_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self._pinned_list.itemClicked.connect(self._on_pinned_item_clicked)
-        self._pinned_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self._pinned_list.customContextMenuRequested.connect(self._show_pinned_context_menu)
+        folders_lbl = QLabel("FOLDERS")
+        folders_lbl.setStyleSheet("font-weight: bold; color: #aaaaaa;")
 
-        # --- Browse section ---
+        folders_header.addWidget(folders_lbl)
+        folders_header.addStretch()
+
+        folders_header_widget = QWidget()
+        folders_header_widget.setLayout(folders_header)
+
+        self._empty_label = QLabel("No folders yet.\nClick 'Open Folder' to add one.")
+        self._empty_label.setStyleSheet("color: #777777; font-size: 11px;")
+        self._empty_label.setWordWrap(True)
+        self._empty_label.setContentsMargins(4, 4, 4, 4)
+
+        self._folders_list = QListWidget()
+        self._folders_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self._folders_list.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum
+        )
+        self._folders_list.setMaximumHeight(220)
+        self._folders_list.itemClicked.connect(self._on_folder_item_clicked)
+        self._folders_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self._folders_list.customContextMenuRequested.connect(
+            self._show_folder_context_menu
+        )
+
+        # ── BROWSE section ───────────────────────────────────────────────────
         nav_label = QLabel("BROWSE")
         nav_label.setStyleSheet("font-weight: bold; margin-top: 12px; color: #aaaaaa;")
 
         self._nav_list = QListWidget()
         self._nav_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        # Disable scrollbars — the 3 nav items must always be fully visible
         self._nav_list.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self._nav_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
@@ -77,89 +107,115 @@ class SidebarWidget(QWidget):
         self._nav_list.addItem(self._fav_item)
         self._nav_list.addItem(self._recent_item)
         self._nav_list.setCurrentItem(self._all_item)
-
-        # Use itemClicked so re-clicking the already-selected item also fires
         self._nav_list.itemClicked.connect(self._on_nav_item_clicked)
 
+        # ── TAGS section ─────────────────────────────────────────────────────
         tags_label = QLabel("TAGS")
         tags_label.setStyleSheet("font-weight: bold; margin-top: 8px; color: #aaaaaa;")
 
         self._tag_list = QListWidget()
         self._tag_list.itemClicked.connect(self._on_tag_item_clicked)
 
+        # ── Layout ───────────────────────────────────────────────────────────
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(2)
         layout.addWidget(app_title)
         layout.addWidget(self._open_btn)
-        layout.addWidget(self._pinned_label)
-        layout.addWidget(self._pinned_list)
+        layout.addWidget(folders_header_widget)
+        layout.addWidget(self._empty_label)
+        layout.addWidget(self._folders_list)
         layout.addWidget(nav_label)
         layout.addWidget(self._nav_list)
         layout.addWidget(tags_label)
         layout.addWidget(self._tag_list, stretch=1)
 
         self._update_nav_height()
-        self._set_pinned_visible(False)
+        self._set_folders_state([])
 
     # ------------------------------------------------------------------
-    # Pinned folders
+    # Folder explorer public API
     # ------------------------------------------------------------------
 
-    def set_pinned_folders(self, folders: list[Path]) -> None:
-        """Rebuild the pinned folders section."""
-        self._pinned_list.clear()
-        for folder in folders:
-            item = QListWidgetItem(f"📌  {folder.name}")
-            item.setToolTip(str(folder))
-            item.setData(Qt.ItemDataRole.UserRole, folder)
-            self._pinned_list.addItem(item)
-        visible = len(folders) > 0
-        self._set_pinned_visible(visible)
-        if visible:
-            self._update_pinned_height()
+    def set_folders(
+        self,
+        entries: list[tuple[Path, bool]],
+        active: Path | None,
+    ) -> None:
+        """Rebuild the folders list.
 
-    def _set_pinned_visible(self, visible: bool) -> None:
-        self._pinned_label.setVisible(visible)
-        self._pinned_list.setVisible(visible)
+        *entries* is a list of (path, is_favorited).
+        *active* is the currently loaded folder path (may be None).
+        """
+        self._active_folder = active
+        self._folders_list.blockSignals(True)
+        self._folders_list.clear()
 
-    def _update_pinned_height(self) -> None:
-        self._pinned_list.adjustSize()
-        total = sum(
-            self._pinned_list.sizeHintForRow(i) for i in range(self._pinned_list.count())
-        )
-        self._pinned_list.setFixedHeight(total + 6)
+        bold = QFont()
+        bold.setBold(True)
 
-    def _on_pinned_item_clicked(self, item: QListWidgetItem) -> None:
-        folder: Path = item.data(Qt.ItemDataRole.UserRole)
-        self._pinned_list.clearSelection()
-        self.pinned_folder_selected.emit(folder)
+        for path, favorited in entries:
+            prefix = "★  " if favorited else "    "
+            item = QListWidgetItem(prefix + path.name)
+            item.setToolTip(str(path))
+            item.setData(_ROLE_PATH, path)
+            if active is not None and path.resolve() == active.resolve():
+                item.setFont(bold)
+            self._folders_list.addItem(item)
 
-    def _show_pinned_context_menu(self, pos) -> None:
-        item = self._pinned_list.itemAt(pos)
+        self._folders_list.blockSignals(False)
+        self._set_folders_state(entries)
+
+    def set_active_folder(self, active: Path | None) -> None:
+        """Update only the active-folder highlight without rebuilding the list."""
+        self._active_folder = active
+        bold = QFont()
+        bold.setBold(True)
+        normal = QFont()
+        for i in range(self._folders_list.count()):
+            item = self._folders_list.item(i)
+            path: Path = item.data(_ROLE_PATH)
+            is_active = active is not None and path.resolve() == active.resolve()
+            item.setFont(bold if is_active else normal)
+
+    # ------------------------------------------------------------------
+    # Folder explorer — internal
+    # ------------------------------------------------------------------
+
+    def _set_folders_state(self, entries: list) -> None:
+        has = len(entries) > 0
+        self._empty_label.setVisible(not has)
+        self._folders_list.setVisible(has)
+
+    def _on_folder_item_clicked(self, item: QListWidgetItem) -> None:
+        path: Path = item.data(_ROLE_PATH)
+        self.folder_selected.emit(path)
+
+    def _show_folder_context_menu(self, pos) -> None:
+        item = self._folders_list.itemAt(pos)
         if item is None:
             return
-        folder: Path = item.data(Qt.ItemDataRole.UserRole)
+        path: Path = item.data(_ROLE_PATH)
+        is_fav = "★" in item.text()
+
         menu = QMenu(self)
-        open_act = menu.addAction(f"Open  {folder.name}")
+        open_act = menu.addAction(f'Open  "{path.name}"')
         menu.addSeparator()
-        unpin_act = menu.addAction("Unpin")
-        chosen = menu.exec(self._pinned_list.mapToGlobal(pos))
+        fav_act = menu.addAction("Unfavorite" if is_fav else "Favorite")
+        menu.addSeparator()
+        remove_act = menu.addAction("Remove from sidebar")
+
+        chosen = menu.exec(self._folders_list.mapToGlobal(pos))
         if chosen == open_act:
-            self.pinned_folder_selected.emit(folder)
-        elif chosen == unpin_act:
-            self.unpin_folder_requested.emit(folder)
+            self.folder_selected.emit(path)
+        elif chosen == fav_act:
+            self.folder_favorite_toggled.emit(path)
+        elif chosen == remove_act:
+            self.folder_remove_requested.emit(path)
 
     # ------------------------------------------------------------------
-    # Nav / tags
+    # Tags
     # ------------------------------------------------------------------
-
-    def _update_nav_height(self) -> None:
-        """Size the nav list to exactly fit its 3 items with no scrollbar."""
-        self._nav_list.adjustSize()
-        total = sum(
-            self._nav_list.sizeHintForRow(i) for i in range(self._nav_list.count())
-        )
-        self._nav_list.setFixedHeight(total + 6)
 
     def set_tags(self, tags: list[str]) -> None:
         """Refresh the tag list. Preserves current selection if still valid."""
@@ -176,6 +232,10 @@ class SidebarWidget(QWidget):
                     return
         self._tag_list.clearSelection()
 
+    # ------------------------------------------------------------------
+    # Nav
+    # ------------------------------------------------------------------
+
     def select_all(self) -> None:
         """Programmatically switch the nav selection back to 'All queries'."""
         self._nav_list.blockSignals(True)
@@ -183,12 +243,18 @@ class SidebarWidget(QWidget):
         self._nav_list.blockSignals(False)
         self._tag_list.clearSelection()
 
+    def _update_nav_height(self) -> None:
+        self._nav_list.adjustSize()
+        total = sum(
+            self._nav_list.sizeHintForRow(i) for i in range(self._nav_list.count())
+        )
+        self._nav_list.setFixedHeight(total + 6)
+
     def _selected_tag(self) -> str:
         item = self._tag_list.currentItem()
         return item.text() if item else ""
 
     def _on_nav_item_clicked(self, item: QListWidgetItem) -> None:
-        # Deselect tag list when a nav item is clicked
         self._tag_list.blockSignals(True)
         self._tag_list.clearSelection()
         self._tag_list.blockSignals(False)
@@ -201,7 +267,6 @@ class SidebarWidget(QWidget):
             self.tag_selected.emit("")
 
     def _on_tag_item_clicked(self, item: QListWidgetItem) -> None:
-        # Switch nav to "All" silently when a tag is clicked
         self._nav_list.blockSignals(True)
         self._nav_list.setCurrentItem(self._all_item)
         self._nav_list.blockSignals(False)

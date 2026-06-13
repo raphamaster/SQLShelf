@@ -153,13 +153,6 @@ class MainWindow(QMainWindow):
 
         file_menu.addSeparator()
 
-        self._pin_folder_act = QAction("📌  Pin Folder", self)
-        self._pin_folder_act.setEnabled(False)
-        self._pin_folder_act.triggered.connect(self._toggle_pin_folder)
-        file_menu.addAction(self._pin_folder_act)
-
-        file_menu.addSeparator()
-
         reindex_act = QAction(
             _icon(QStyle.StandardPixmap.SP_BrowserReload), "Force Reindex", self
         )
@@ -194,12 +187,13 @@ class MainWindow(QMainWindow):
         # Left panel
         self._sidebar = SidebarWidget()
         self._sidebar.open_folder_requested.connect(self.open_folder)
+        self._sidebar.folder_selected.connect(self.load_folder)
+        self._sidebar.folder_remove_requested.connect(self._on_folder_remove_requested)
+        self._sidebar.folder_favorite_toggled.connect(self._on_folder_favorite_toggled)
         self._sidebar.tag_selected.connect(self._on_tag_selected)
         self._sidebar.favorites_selected.connect(self._on_favorites_selected)
         self._sidebar.recent_selected.connect(self._on_recent_selected)
-        self._sidebar.pinned_folder_selected.connect(self.load_folder)
-        self._sidebar.unpin_folder_requested.connect(self._on_unpin_folder_requested)
-        self._sidebar.set_pinned_folders(cfg.get_pinned_folders())
+        self._sidebar.set_folders(cfg.get_known_folders(), None)
 
         # Middle panel
         middle = QWidget()
@@ -313,8 +307,9 @@ class MainWindow(QMainWindow):
         self._folder = folder
         self._db = IndexDB(folder)
         cfg.add_recent_project(folder)
+        cfg.add_known_folder(folder)
         self._rebuild_recent_menu()
-        self._refresh_pin_action()
+        self._sidebar.set_folders(cfg.get_known_folders(), folder)
 
         self.setWindowTitle(f"SQLShelf — {folder.name}")
         self._status_bar.showMessage("Indexing…")
@@ -531,34 +526,16 @@ class MainWindow(QMainWindow):
             self.reveal_in_explorer()
 
     # ------------------------------------------------------------------
-    # Pinned folders
+    # Sidebar folder explorer handlers
     # ------------------------------------------------------------------
 
-    def _toggle_pin_folder(self) -> None:
-        if self._folder is None:
-            return
-        if cfg.is_folder_pinned(self._folder):
-            cfg.unpin_folder(self._folder)
-        else:
-            cfg.pin_folder(self._folder)
-        self._refresh_pin_action()
-        self._sidebar.set_pinned_folders(cfg.get_pinned_folders())
+    def _on_folder_remove_requested(self, folder: Path) -> None:
+        cfg.remove_known_folder(folder)
+        self._sidebar.set_folders(cfg.get_known_folders(), self._folder)
 
-    def _on_unpin_folder_requested(self, folder: Path) -> None:
-        cfg.unpin_folder(folder)
-        self._refresh_pin_action()
-        self._sidebar.set_pinned_folders(cfg.get_pinned_folders())
-
-    def _refresh_pin_action(self) -> None:
-        if self._folder is None:
-            self._pin_folder_act.setEnabled(False)
-            self._pin_folder_act.setText("📌  Pin Folder")
-            return
-        self._pin_folder_act.setEnabled(True)
-        if cfg.is_folder_pinned(self._folder):
-            self._pin_folder_act.setText("📌  Unpin Folder")
-        else:
-            self._pin_folder_act.setText("📌  Pin Folder")
+    def _on_folder_favorite_toggled(self, folder: Path) -> None:
+        cfg.toggle_folder_favorite(folder)
+        self._sidebar.set_folders(cfg.get_known_folders(), self._folder)
 
     # ------------------------------------------------------------------
     # Favorites
