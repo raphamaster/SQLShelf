@@ -265,10 +265,6 @@ class MainWindow(QMainWindow):
         self._new_act.triggered.connect(self.new_query)
         self._file_menu.addAction(self._new_act)
 
-        self._new_template_act = QAction(tr("menu.new_from_template"), self)
-        self._new_template_act.triggered.connect(self.new_from_template)
-        self._file_menu.addAction(self._new_template_act)
-
         self._duplicate_act = QAction(
             _icon(QStyle.StandardPixmap.SP_FileLinkIcon), tr("menu.duplicate_query"), self
         )
@@ -576,7 +572,6 @@ class MainWindow(QMainWindow):
         # Actions
         self._open_act.setText(tr("menu.open_folder"))
         self._new_act.setText(tr("menu.new_query"))
-        self._new_template_act.setText(tr("menu.new_from_template"))
         self._duplicate_act.setText(tr("menu.duplicate_query"))
         self._recent_menu.setTitle(tr("menu.recent_projects"))
         self._reindex_act.setText(tr("menu.force_reindex"))
