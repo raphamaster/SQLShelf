@@ -13,19 +13,54 @@ from PySide6.QtWidgets import (
     QMenu,
     QPushButton,
     QSizePolicy,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
-_ALL_ITEM_TEXT = "All queries"
-_FAVORITES_ITEM_TEXT = "★  Favorites"
-_RECENT_ITEM_TEXT = "⌛  Recent"
+from .theme.tokens import ACCENT, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_TERTIARY
 
 _ROLE_PATH = Qt.ItemDataRole.UserRole
 
 
+class CollapsibleSection(QWidget):
+    """Header QToolButton with a chevron arrow that toggles content visibility."""
+
+    def __init__(
+        self,
+        title: str,
+        content_widget: QWidget,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self._content = content_widget
+
+        self._header = QToolButton()
+        self._header.setObjectName("SectionHeader")
+        self._header.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self._header.setArrowType(Qt.ArrowType.DownArrow)
+        self._header.setText(title)
+        self._header.setCheckable(True)
+        self._header.setChecked(True)
+        self._header.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self._header.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._header.toggled.connect(self._on_toggled)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 4, 0, 0)
+        layout.setSpacing(2)
+        layout.addWidget(self._header)
+        layout.addWidget(content_widget)
+
+    def _on_toggled(self, checked: bool) -> None:
+        self._content.setVisible(checked)
+        self._header.setArrowType(
+            Qt.ArrowType.DownArrow if checked else Qt.ArrowType.RightArrow
+        )
+
+
 class SidebarWidget(QWidget):
-    """Left panel: folder explorer, Favorites/Recent shortcuts, and tag browser.
+    """Left panel: Browse shortcuts (top), collapsible Folders, collapsible Tags.
 
     Signals:
         open_folder_requested      — user clicked the top "Open Folder…" button.
@@ -38,9 +73,9 @@ class SidebarWidget(QWidget):
     """
 
     open_folder_requested = Signal()
-    folder_selected = Signal(object)         # Path
-    folder_remove_requested = Signal(object) # Path
-    folder_favorite_toggled = Signal(object) # Path
+    folder_selected = Signal(object)          # Path
+    folder_remove_requested = Signal(object)  # Path
+    folder_favorite_toggled = Signal(object)  # Path
     tag_selected = Signal(str)
     favorites_selected = Signal()
     recent_selected = Signal()
@@ -48,35 +83,68 @@ class SidebarWidget(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setMinimumWidth(150)
+        self.setObjectName("SidebarWidget")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
 
         self._active_folder: Path | None = None
         self._active_item: QListWidgetItem | None = None
+        self._active_nav_btn: QPushButton | None = None
 
-        # ── Title ───────────────────────────────────────────────────────────
-        app_title = QLabel("SQLSHELF")
-        app_title.setStyleSheet(
-            "font-weight: bold; font-size: 14px; letter-spacing: 1px;"
+        # ── App icon + title row ──────────────────────────────────────────────
+        title_row = QWidget()
+        title_row.setObjectName("TitleRow")
+        title_row.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        tr_layout = QHBoxLayout(title_row)
+        tr_layout.setContentsMargins(0, 2, 0, 4)
+        tr_layout.setSpacing(6)
+
+        icon_lbl = QLabel("≡")
+        icon_lbl.setStyleSheet(
+            f"color: {ACCENT}; font-size: 18px; font-weight: bold; background: transparent;"
+        )
+        icon_lbl.setFixedWidth(18)
+
+        name_lbl = QLabel("SQLShelf")
+        name_lbl.setStyleSheet(
+            f"font-weight: 600; font-size: 14px; color: {TEXT_PRIMARY};"
+            " background: transparent; letter-spacing: 0.3px;"
         )
 
-        # ── Open / Add Folder button ─────────────────────────────────────────
-        self._open_btn = QPushButton("📂  Open Folder…")
+        tr_layout.addWidget(icon_lbl)
+        tr_layout.addWidget(name_lbl)
+        tr_layout.addStretch()
+
+        # ── Open Folder button ────────────────────────────────────────────────
+        self._open_btn = QPushButton("📂  Open Folder")
+        self._open_btn.setObjectName("OpenFolderBtn")
         self._open_btn.clicked.connect(self.open_folder_requested)
 
-        # ── FOLDERS section ──────────────────────────────────────────────────
-        folders_header = QHBoxLayout()
-        folders_header.setContentsMargins(0, 12, 0, 2)
+        # ── BROWSE section ───────────────────────────────────────────────────
+        browse_label = QLabel("BROWSE")
+        browse_label.setObjectName("SectionLabel")
+        browse_label.setContentsMargins(4, 10, 0, 2)
 
-        folders_lbl = QLabel("FOLDERS")
-        folders_lbl.setStyleSheet("font-weight: bold; color: #aaaaaa;")
+        self._btn_all = self._make_nav_btn("☰  All queries")
+        self._btn_fav = self._make_nav_btn("☆  Favorites")
+        self._btn_recent = self._make_nav_btn("⌚  Recent")
 
-        folders_header.addWidget(folders_lbl)
-        folders_header.addStretch()
+        self._btn_all.clicked.connect(self._on_all_clicked)
+        self._btn_fav.clicked.connect(self._on_fav_clicked)
+        self._btn_recent.clicked.connect(self._on_recent_clicked)
 
-        folders_header_widget = QWidget()
-        folders_header_widget.setLayout(folders_header)
+        browse_widget = QWidget()
+        browse_widget.setObjectName("BrowseWidget")
+        browse_widget.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        browse_layout = QVBoxLayout(browse_widget)
+        browse_layout.setContentsMargins(0, 0, 0, 0)
+        browse_layout.setSpacing(1)
+        browse_layout.addWidget(self._btn_all)
+        browse_layout.addWidget(self._btn_fav)
+        browse_layout.addWidget(self._btn_recent)
 
+        # ── FOLDERS section content ──────────────────────────────────────────
         self._empty_label = QLabel("No folders yet.\nClick 'Open Folder' to add one.")
-        self._empty_label.setStyleSheet("color: #777777; font-size: 11px;")
+        self._empty_label.setStyleSheet(f"color: {TEXT_TERTIARY}; font-size: 11px;")
         self._empty_label.setWordWrap(True)
         self._empty_label.setContentsMargins(4, 4, 4, 4)
 
@@ -92,54 +160,35 @@ class SidebarWidget(QWidget):
             self._show_folder_context_menu
         )
 
-        # ── BROWSE section ───────────────────────────────────────────────────
-        nav_label = QLabel("BROWSE")
-        nav_label.setStyleSheet("font-weight: bold; margin-top: 12px; color: #aaaaaa;")
+        folders_content = QWidget()
+        folders_inner = QVBoxLayout(folders_content)
+        folders_inner.setContentsMargins(0, 0, 0, 0)
+        folders_inner.setSpacing(0)
+        folders_inner.addWidget(self._empty_label)
+        folders_inner.addWidget(self._folders_list)
 
-        self._nav_list = QListWidget()
-        self._nav_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        self._nav_list.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self._nav_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        # Let the list grow vertically to fit all items; never squeeze it
-        self._nav_list.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self._folders_section = CollapsibleSection("FOLDERS", folders_content)
 
-        self._all_item = QListWidgetItem(_ALL_ITEM_TEXT)
-        self._fav_item = QListWidgetItem(_FAVORITES_ITEM_TEXT)
-        self._recent_item = QListWidgetItem(_RECENT_ITEM_TEXT)
-        self._nav_list.addItem(self._all_item)
-        self._nav_list.addItem(self._fav_item)
-        self._nav_list.addItem(self._recent_item)
-        self._nav_list.setCurrentItem(self._all_item)
-        self._nav_list.itemClicked.connect(self._on_nav_item_clicked)
-
-        # ── TAGS section ─────────────────────────────────────────────────────
-        tags_label = QLabel("TAGS")
-        tags_label.setStyleSheet("font-weight: bold; margin-top: 8px; color: #aaaaaa;")
-
+        # ── TAGS section content ─────────────────────────────────────────────
         self._tag_list = QListWidget()
         self._tag_list.itemClicked.connect(self._on_tag_item_clicked)
 
+        self._tags_section = CollapsibleSection("TAGS", self._tag_list)
+
         # ── Layout ───────────────────────────────────────────────────────────
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(2)
-        layout.addWidget(app_title)
+        layout.addWidget(title_row)
+        layout.addSpacing(6)
         layout.addWidget(self._open_btn)
-        layout.addWidget(folders_header_widget)
-        layout.addWidget(self._empty_label)
-        layout.addWidget(self._folders_list)
-        layout.addWidget(nav_label)
-        layout.addWidget(self._nav_list)
-        layout.addWidget(tags_label)
-        layout.addWidget(self._tag_list, stretch=1)
+        layout.addWidget(browse_label)
+        layout.addWidget(browse_widget)
+        layout.addWidget(self._folders_section)
+        layout.addWidget(self._tags_section, stretch=1)
 
-        self._update_nav_height()
+        self._set_active_btn(self._btn_all)
         self._set_folders_state([])
-
-    def showEvent(self, event) -> None:
-        """Recalculate nav height after the widget is fully rendered."""
-        super().showEvent(event)
-        self._update_nav_height()
 
     # ------------------------------------------------------------------
     # Folder explorer public API
@@ -173,7 +222,6 @@ class SidebarWidget(QWidget):
                 self._active_item = item
             self._folders_list.addItem(item)
 
-        # Keep the selection highlight visible even when focus is elsewhere
         if self._active_item is not None:
             self._folders_list.setCurrentItem(self._active_item)
         else:
@@ -263,50 +311,54 @@ class SidebarWidget(QWidget):
 
     def select_all(self) -> None:
         """Programmatically switch the nav selection back to 'All queries'."""
-        self._nav_list.blockSignals(True)
-        self._nav_list.setCurrentItem(self._all_item)
-        self._nav_list.blockSignals(False)
+        self._set_active_btn(self._btn_all)
         self._tag_list.clearSelection()
 
-    def add_nav_item(self, text: str) -> QListWidgetItem:
-        """Append an item to the BROWSE section and resize the list to fit."""
-        item = QListWidgetItem(text)
-        self._nav_list.addItem(item)
-        self._update_nav_height()
-        return item
+    # ------------------------------------------------------------------
+    # Nav — internal
+    # ------------------------------------------------------------------
 
-    def _update_nav_height(self) -> None:
-        """Fix the nav list height to exactly fit all items (no scrollbar).
+    @staticmethod
+    def _make_nav_btn(text: str) -> QPushButton:
+        btn = QPushButton(text)
+        btn.setObjectName("NavButton")
+        btn.setProperty("active", False)
+        btn.setFlat(True)
+        btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        return btn
 
-        sizeHintForRow returns -1 before the widget is rendered, so we fall
-        back to a 28 px estimate; showEvent calls this again with real values.
-        """
-        n = self._nav_list.count()
-        if n == 0:
+    def _set_active_btn(self, btn: QPushButton) -> None:
+        if self._active_nav_btn is btn:
             return
-        row_h = self._nav_list.sizeHintForRow(0)
-        if row_h < 1:
-            row_h = 28  # pre-render fallback
-        self._nav_list.setFixedHeight(n * row_h + 4)
+        if self._active_nav_btn is not None:
+            self._active_nav_btn.setProperty("active", False)
+            self._active_nav_btn.style().unpolish(self._active_nav_btn)
+            self._active_nav_btn.style().polish(self._active_nav_btn)
+        self._active_nav_btn = btn
+        btn.setProperty("active", True)
+        btn.style().unpolish(btn)
+        btn.style().polish(btn)
+
+    def _on_all_clicked(self) -> None:
+        self._set_active_btn(self._btn_all)
+        self._tag_list.clearSelection()
+        self.tag_selected.emit("")
+
+    def _on_fav_clicked(self) -> None:
+        self._set_active_btn(self._btn_fav)
+        self._tag_list.clearSelection()
+        self.favorites_selected.emit()
+
+    def _on_recent_clicked(self) -> None:
+        self._set_active_btn(self._btn_recent)
+        self._tag_list.clearSelection()
+        self.recent_selected.emit()
+
+    def _on_tag_item_clicked(self, item: QListWidgetItem) -> None:
+        self._set_active_btn(self._btn_all)
+        self.tag_selected.emit(item.text())
 
     def _selected_tag(self) -> str:
         item = self._tag_list.currentItem()
         return item.text() if item else ""
-
-    def _on_nav_item_clicked(self, item: QListWidgetItem) -> None:
-        self._tag_list.blockSignals(True)
-        self._tag_list.clearSelection()
-        self._tag_list.blockSignals(False)
-        text = item.text()
-        if text == _FAVORITES_ITEM_TEXT:
-            self.favorites_selected.emit()
-        elif text == _RECENT_ITEM_TEXT:
-            self.recent_selected.emit()
-        else:
-            self.tag_selected.emit("")
-
-    def _on_tag_item_clicked(self, item: QListWidgetItem) -> None:
-        self._nav_list.blockSignals(True)
-        self._nav_list.setCurrentItem(self._all_item)
-        self._nav_list.blockSignals(False)
-        self.tag_selected.emit(item.text())

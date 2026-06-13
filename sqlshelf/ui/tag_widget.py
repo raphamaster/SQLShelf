@@ -12,11 +12,21 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .theme.tokens import (
+    ACCENT,
+    ACCENT_FILL,
+    CHIP_DELETE_BG,
+    CHIP_DELETE_FG,
+    TAG_BG,
+    TAG_RADIUS,
+    TAG_TEXT,
+)
+
 # ---------------------------------------------------------------------------
 # Flow layout (wrapping horizontal layout)
 # ---------------------------------------------------------------------------
 
-class _FlowLayout(QLayout):
+class FlowLayout(QLayout):
     """Items flow left-to-right and wrap to the next row when width is exceeded."""
 
     def __init__(self, parent: QWidget | None = None, h_gap: int = 4, v_gap: int = 4) -> None:
@@ -89,19 +99,19 @@ class _FlowLayout(QLayout):
 def _display_chip_style(bg: str, fg: str) -> str:
     return (
         f"background-color: {bg}; color: {fg}; "
-        "border-radius: 9px; padding: 2px 9px; font-size: 11px;"
+        f"border-radius: {TAG_RADIUS}px; padding: 2px 9px; font-size: 11px;"
     )
 
 
 def _input_chip_style(bg: str, fg: str) -> str:
     return (
         f"QPushButton {{ background-color: {bg}; color: {fg}; border: none; "
-        "border-radius: 8px; padding: 1px 6px; font-size: 11px; text-align: left; max-height: 20px; } "
-        "QPushButton:hover { background-color: #5c1a1a; color: #ffaaaa; }"
+        f"border-radius: {TAG_RADIUS - 1}px; padding: 1px 6px; font-size: 11px; text-align: left; max-height: 20px; }} "
+        f"QPushButton:hover {{ background-color: {CHIP_DELETE_BG}; color: {CHIP_DELETE_FG}; }}"
     )
 
-_CHIP_BG = "#1a3d5c"
-_CHIP_FG = "#7ec8e3"
+_CHIP_BG = TAG_BG
+_CHIP_FG = TAG_TEXT
 
 
 # ---------------------------------------------------------------------------
@@ -113,14 +123,15 @@ class TagDisplayWidget(QWidget):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self._flow = _FlowLayout(self, h_gap=4, v_gap=2)
+        self._flow = FlowLayout(self, h_gap=4, v_gap=2)
         self.setLayout(self._flow)
 
-    def set_tags(self, tags: list[str]) -> None:
+    def set_tags(self, tags: list[str], *, accent: bool = False) -> None:
         self._clear()
+        bg, fg = (ACCENT_FILL, ACCENT) if accent else (_CHIP_BG, _CHIP_FG)
         for tag in tags:
             chip = QLabel(f"#{tag}")
-            chip.setStyleSheet(_display_chip_style(_CHIP_BG, _CHIP_FG))
+            chip.setStyleSheet(_display_chip_style(bg, fg))
             chip.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
             self._flow.addWidget(chip)
         self.updateGeometry()
@@ -149,7 +160,7 @@ class TagInputWidget(QWidget):
 
         # Container for chips + input, all in a flow layout
         self._flow_widget = QWidget()
-        self._flow = _FlowLayout(self._flow_widget, h_gap=4, v_gap=3)
+        self._flow = FlowLayout(self._flow_widget, h_gap=4, v_gap=3)
         self._flow_widget.setLayout(self._flow)
 
         self._input = QLineEdit()

@@ -1,6 +1,8 @@
 from PySide6.QtCore import QRegularExpression
 from PySide6.QtGui import QColor, QFont, QSyntaxHighlighter, QTextCharFormat
 
+from .theme.tokens import SYN_COMMENT, SYN_KEYWORD, SYN_NUMBER, SYN_STRING
+
 SQL_KEYWORDS = [
     "SELECT", "FROM", "WHERE", "JOIN", "INNER", "LEFT", "RIGHT", "OUTER",
     "FULL", "ON", "GROUP", "BY", "ORDER", "HAVING", "INSERT", "INTO",
@@ -26,7 +28,7 @@ class SqlHighlighter(QSyntaxHighlighter):
         self._rules: list[tuple[QRegularExpression, QTextCharFormat]] = []
 
         keyword_format = QTextCharFormat()
-        keyword_format.setForeground(QColor("#569CD6"))
+        keyword_format.setForeground(QColor(SYN_KEYWORD))
         keyword_format.setFontWeight(QFont.Weight.Bold)
         for word in SQL_KEYWORDS:
             pattern = QRegularExpression(
@@ -36,15 +38,15 @@ class SqlHighlighter(QSyntaxHighlighter):
             self._rules.append((pattern, keyword_format))
 
         string_format = QTextCharFormat()
-        string_format.setForeground(QColor("#CE9178"))
+        string_format.setForeground(QColor(SYN_STRING))
         self._rules.append((QRegularExpression(r"'[^']*'"), string_format))
 
         number_format = QTextCharFormat()
-        number_format.setForeground(QColor("#B5CEA8"))
+        number_format.setForeground(QColor(SYN_NUMBER))
         self._rules.append((QRegularExpression(r"\b\d+\b"), number_format))
 
         self._comment_format = QTextCharFormat()
-        self._comment_format.setForeground(QColor("#6A9955"))
+        self._comment_format.setForeground(QColor(SYN_COMMENT))
         self._rules.append((QRegularExpression(r"--[^\n]*"), self._comment_format))
 
     def highlightBlock(self, text: str) -> None:
