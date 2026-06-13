@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..core.i18n import tr
 from .tag_widget import FlowLayout, TagDisplayWidget, TagInputWidget
 from .theme import tokens as _tk
 from .theme.tokens import (
@@ -77,7 +78,7 @@ class MetadataPanel(QWidget):
             f"color: {TEXT_TERTIARY}; padding: 0; }} "
             f"QPushButton:hover {{ color: {STAR_HOVER}; }}"
         )
-        self._star_btn.setToolTip("Toggle favorite")
+        self._star_btn.setToolTip(tr("metadata.toggle_favorite"))
         self._star_btn.clicked.connect(self.favorite_toggled)
 
         self._title_label = QLabel()
@@ -90,7 +91,7 @@ class MetadataPanel(QWidget):
         self._shortcut_hint.setStyleSheet(
             f"color: {TEXT_TERTIARY}; font-size: 9px; padding-right: 4px;"
         )
-        self._shortcut_hint.setToolTip("Command palette")
+        self._shortcut_hint.setToolTip(tr("metadata.command_palette"))
 
         title_row = QHBoxLayout()
         title_row.setContentsMargins(0, 0, 0, 0)
@@ -107,21 +108,21 @@ class MetadataPanel(QWidget):
 
         # ── Tags section (mint chips) ──────────────────────────────────────
         self._tags_display = TagDisplayWidget()
-        self._tags_section = _section_container("TAGS", self._tags_display)
+        self._tags_section = _section_container(tr("metadata.section_tags"), self._tags_display)
         self._tags_section.setVisible(False)
 
         # ── Tables section (clickable neutral chips) ───────────────────────
         self._tables_flow_widget = QWidget()
         self._tables_flow = FlowLayout(self._tables_flow_widget, h_gap=4, v_gap=4)
         self._tables_flow_widget.setLayout(self._tables_flow)
-        self._tables_section = _section_container("TABLES", self._tables_flow_widget)
+        self._tables_section = _section_container(tr("metadata.section_tables"), self._tables_flow_widget)
         self._tables_section.setVisible(False)
 
         # ── Columns section (clickable neutral chips) ──────────────────────
         self._columns_flow_widget = QWidget()
         self._columns_flow = FlowLayout(self._columns_flow_widget, h_gap=4, v_gap=4)
         self._columns_flow_widget.setLayout(self._columns_flow)
-        self._columns_section = _section_container("COLUMNS", self._columns_flow_widget)
+        self._columns_section = _section_container(tr("metadata.section_columns"), self._columns_flow_widget)
         self._columns_section.setVisible(False)
 
         # ── File path (clickable) ──────────────────────────────────────────
@@ -134,7 +135,7 @@ class MetadataPanel(QWidget):
             f"QPushButton:hover {{ color: {ACCENT}; }}"
         )
         self._path_btn.clicked.connect(self.reveal_requested)
-        self._path_section = _section_container("FILE", self._path_btn)
+        self._path_section = _section_container(tr("metadata.section_file"), self._path_btn)
         self._path_section.setVisible(False)
 
         # ── Read-only container ────────────────────────────────────────────
@@ -153,21 +154,22 @@ class MetadataPanel(QWidget):
 
         # ── Edit-mode widgets ──────────────────────────────────────────────
         self._title_edit = QLineEdit()
-        self._title_edit.setPlaceholderText("Title")
+        self._title_edit.setPlaceholderText(tr("metadata.title_placeholder"))
 
         self._desc_edit = QPlainTextEdit()
-        self._desc_edit.setPlaceholderText("Description")
+        self._desc_edit.setPlaceholderText(tr("metadata.desc_placeholder"))
         self._desc_edit.setMaximumHeight(70)
 
         self._tags_input = TagInputWidget()
 
-        edit_layout = QFormLayout()
-        edit_layout.setContentsMargins(10, 10, 10, 8)
-        edit_layout.setSpacing(6)
-        edit_layout.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
-        edit_layout.addRow("Title:", self._title_edit)
-        edit_layout.addRow("Description:", self._desc_edit)
-        edit_layout.addRow("Tags:", self._tags_input)
+        self._edit_form = QFormLayout()
+        self._edit_form.setContentsMargins(10, 10, 10, 8)
+        self._edit_form.setSpacing(6)
+        self._edit_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+        self._edit_form.addRow(tr("metadata.label_title"), self._title_edit)
+        self._edit_form.addRow(tr("metadata.label_desc"), self._desc_edit)
+        self._edit_form.addRow(tr("metadata.label_tags"), self._tags_input)
+        edit_layout = self._edit_form
 
         self._edit_widget = QWidget()
         self._edit_widget.setLayout(edit_layout)
@@ -281,6 +283,32 @@ class MetadataPanel(QWidget):
         description = self._desc_edit.toPlainText().strip()
         tags = self._tags_input.get_tags()
         return title, description, tags
+
+    def retranslate_ui(self) -> None:
+        self._star_btn.setToolTip(tr("metadata.toggle_favorite"))
+        self._shortcut_hint.setToolTip(tr("metadata.command_palette"))
+        self._title_edit.setPlaceholderText(tr("metadata.title_placeholder"))
+        self._desc_edit.setPlaceholderText(tr("metadata.desc_placeholder"))
+        # Section labels
+        for section, key in [
+            (self._tags_section, "metadata.section_tags"),
+            (self._tables_section, "metadata.section_tables"),
+            (self._columns_section, "metadata.section_columns"),
+            (self._path_section, "metadata.section_file"),
+        ]:
+            lbl = section.layout().itemAt(0).widget() if section.layout() else None
+            if isinstance(lbl, QLabel):
+                lbl.setText(tr(key))
+        # Form row labels
+        lbl = self._edit_form.labelForField(self._title_edit)
+        if lbl:
+            lbl.setText(tr("metadata.label_title"))
+        lbl = self._edit_form.labelForField(self._desc_edit)
+        if lbl:
+            lbl.setText(tr("metadata.label_desc"))
+        lbl = self._edit_form.labelForField(self._tags_input)
+        if lbl:
+            lbl.setText(tr("metadata.label_tags"))
 
     def refresh_theme(self) -> None:
         self._title_label.setStyleSheet(

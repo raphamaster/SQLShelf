@@ -118,3 +118,19 @@ def set_theme(name: str) -> None:
     data = _load()
     data["theme"] = name
     _save(data)
+
+
+# ---------------------------------------------------------------------------
+# Language preference
+# ---------------------------------------------------------------------------
+
+def get_language() -> str:
+    """Return the saved language code; defaults to 'en'."""
+    return _load().get("language", "en")
+
+
+def set_language(lang: str) -> None:
+    """Persist *lang* as the active UI language."""
+    data = _load()
+    data["language"] = lang
+    _save(data)

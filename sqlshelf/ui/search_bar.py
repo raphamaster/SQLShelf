@@ -4,6 +4,7 @@ from PySide6.QtCore import QPointF, QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QHBoxLayout, QLineEdit, QPushButton, QWidget
 
+from ..core.i18n import tr
 from .theme import tokens as _tk
 from .theme.tokens import (
     ACCENT,
@@ -15,15 +16,6 @@ from .theme.tokens import (
     SELECTION_BG,
     TEXT_PRIMARY,
     TEXT_TERTIARY,
-)
-
-_HELP_TOOLTIP = (
-    "Search operators:\n"
-    "  table:name   queries referencing a table\n"
-    "  col:name     queries referencing a column\n"
-    "  tag:name     queries tagged with name\n"
-    "  free text    full-text search across title & body\n\n"
-    "Tip: combine operators, e.g.  table:orders  tag:report"
 )
 
 # Style is applied to the QLineEdit itself — reliable even with qt-material overrides.
@@ -84,9 +76,7 @@ class SearchBar(QWidget):
 
         self._edit = QLineEdit()
         self._edit.setObjectName("SearchInput")
-        self._edit.setPlaceholderText(
-            "Search queries — or try  table:X · col:X · tag:X"
-        )
+        self._edit.setPlaceholderText(tr("search.placeholder"))
         self._edit.setClearButtonEnabled(True)
         self._edit.textChanged.connect(self.search_changed)
         # Magnifying glass icon lives inside the QLineEdit (native Qt feature).
@@ -94,21 +84,25 @@ class SearchBar(QWidget):
             _make_search_icon(), QLineEdit.ActionPosition.LeadingPosition
         )
 
-        help_btn = QPushButton("?")
-        help_btn.setObjectName("SearchHelpBtn")
-        help_btn.setFixedWidth(24)
-        help_btn.setFlat(True)
-        help_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        help_btn.setToolTip(_HELP_TOOLTIP)
-        help_btn.setCursor(Qt.CursorShape.WhatsThisCursor)
+        self._help_btn = QPushButton("?")
+        self._help_btn.setObjectName("SearchHelpBtn")
+        self._help_btn.setFixedWidth(24)
+        self._help_btn.setFlat(True)
+        self._help_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self._help_btn.setToolTip(tr("search.help"))
+        self._help_btn.setCursor(Qt.CursorShape.WhatsThisCursor)
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(6)
         layout.addWidget(self._edit, stretch=1)
-        layout.addWidget(help_btn)
+        layout.addWidget(self._help_btn)
 
         self.setStyleSheet(_STYLESHEET)
+
+    def retranslate_ui(self) -> None:
+        self._edit.setPlaceholderText(tr("search.placeholder"))
+        self._help_btn.setToolTip(tr("search.help"))
 
     def refresh_theme(self) -> None:
         self.setStyleSheet(
