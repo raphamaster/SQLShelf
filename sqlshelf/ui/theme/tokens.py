@@ -59,6 +59,15 @@ def app_stylesheet() -> str:
         QSplitter {{
             background-color: {BG_APP};
         }}
+        QWidget#SidebarWidget {{
+            background-color: {BG_APP};
+        }}
+        QWidget#BrowseWidget {{
+            background-color: transparent;
+        }}
+        QWidget#TitleRow {{
+            background-color: transparent;
+        }}
         QSplitter::handle {{
             background-color: {BORDER};
             width: 1px;
@@ -131,5 +140,41 @@ def app_stylesheet() -> str:
             color: {TEXT_TERTIARY};
             font-size: 9px;
             font-weight: bold;
+        }}
+        QToolButton#SectionHeader:hover {{
+            color: {TEXT_SECONDARY};
+            background-color: rgba(255,255,255,0.04);
+            border-radius: 3px;
+        }}
+        QPushButton#OpenFolderBtn {{
+            background-color: {ACCENT_FILL};
+            border: 1px solid {ACCENT_BORDER};
+            color: {ACCENT};
+            border-radius: {RADIUS}px;
+            padding: 6px 10px;
+            font-size: 12px;
+        }}
+        QPushButton#OpenFolderBtn:hover {{
+            background-color: rgba(10,222,153,0.18);
+            border-color: {ACCENT};
+        }}
+        QPushButton#OpenFolderBtn:pressed {{
+            background-color: rgba(10,222,153,0.25);
+        }}
+        QPushButton#SearchHelpBtn {{
+            color: {TEXT_TERTIARY};
+            background: transparent;
+            border: none;
+            border-radius: 3px;
+            padding: 2px 4px;
+        }}
+        QPushButton#SearchHelpBtn:hover {{
+            color: {TEXT_PRIMARY};
+            background-color: rgba(255,255,255,0.06);
+        }}
+        QToolBar#EditorToolBar QPushButton:hover {{
+            background-color: rgba(255,255,255,0.08);
+            border-radius: 4px;
+            border: 1px solid {BORDER_EMPH};
         }}
     """
