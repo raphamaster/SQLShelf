@@ -86,31 +86,19 @@ class _FlowLayout(QLayout):
 # Shared chip styles
 # ---------------------------------------------------------------------------
 
-_DISPLAY_CHIP = """
-    QLabel {{
-        background-color: {bg};
-        color: {fg};
-        border-radius: 9px;
-        padding: 2px 9px;
-        font-size: 11px;
-    }}
-"""
+def _display_chip_style(bg: str, fg: str) -> str:
+    return (
+        f"background-color: {bg}; color: {fg}; "
+        "border-radius: 9px; padding: 2px 9px; font-size: 11px;"
+    )
 
-_INPUT_CHIP = """
-    QPushButton {{
-        background-color: {bg};
-        color: {fg};
-        border: none;
-        border-radius: 9px;
-        padding: 2px 9px;
-        font-size: 11px;
-        text-align: left;
-    }}
-    QPushButton:hover {{
-        background-color: #5c1a1a;
-        color: #ffaaaa;
-    }}
-"""
+
+def _input_chip_style(bg: str, fg: str) -> str:
+    return (
+        f"QPushButton {{ background-color: {bg}; color: {fg}; border: none; "
+        "border-radius: 8px; padding: 1px 6px; font-size: 11px; text-align: left; max-height: 20px; } "
+        "QPushButton:hover { background-color: #5c1a1a; color: #ffaaaa; }"
+    )
 
 _CHIP_BG = "#1a3d5c"
 _CHIP_FG = "#7ec8e3"
@@ -132,7 +120,7 @@ class TagDisplayWidget(QWidget):
         self._clear()
         for tag in tags:
             chip = QLabel(f"#{tag}")
-            chip.setStyleSheet(_DISPLAY_CHIP.format(bg=_CHIP_BG, fg=_CHIP_FG))
+            chip.setStyleSheet(_display_chip_style(_CHIP_BG, _CHIP_FG))
             chip.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
             self._flow.addWidget(chip)
         self.updateGeometry()
@@ -166,8 +154,9 @@ class TagInputWidget(QWidget):
 
         self._input = QLineEdit()
         self._input.setPlaceholderText("Add tag, press Enter…")
+        self._input.setFixedHeight(20)
         self._input.setStyleSheet(
-            "border: none; background: transparent; min-width: 120px;"
+            "border: none; background: transparent; min-width: 100px; font-size: 11px;"
         )
         self._input.returnPressed.connect(self._add_from_input)
         # Also trigger on comma
@@ -178,6 +167,7 @@ class TagInputWidget(QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
         outer.addWidget(self._flow_widget)
+        self.setMaximumHeight(44)
 
     # ------------------------------------------------------------------
     # Public API
@@ -209,7 +199,7 @@ class TagInputWidget(QWidget):
         # Re-insert chips before the input
         for tag in self._tags:
             chip = QPushButton(f"#{tag}  ×")
-            chip.setStyleSheet(_INPUT_CHIP.format(bg=_CHIP_BG, fg=_CHIP_FG))
+            chip.setStyleSheet(_input_chip_style(_CHIP_BG, _CHIP_FG))
             chip.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
             chip.clicked.connect(lambda checked=False, t=tag: self._remove_tag(t))
             # Insert before the input field
