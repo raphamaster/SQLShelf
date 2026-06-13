@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..core.frontmatter import write_sql_file
+from ..core.i18n import tr
 from ..core.snippets import apply_template, extract_params, list_templates
 
 
@@ -43,7 +44,7 @@ class TemplateDialog(QDialog):
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
-        self.setWindowTitle("New from Template")
+        self.setWindowTitle(tr("dialog.template.title"))
         self.resize(640, 520)
         self._project_root = project_root
         self.created_path: Path | None = None
@@ -62,13 +63,13 @@ class TemplateDialog(QDialog):
         self._template_combo.currentIndexChanged.connect(self._on_template_changed)
 
         self._title_edit = QLineEdit()
-        self._title_edit.setPlaceholderText("New query title")
+        self._title_edit.setPlaceholderText(tr("dialog.template.title_placeholder"))
 
         self._tags_edit = QLineEdit()
-        self._tags_edit.setPlaceholderText("Tags (comma-separated)")
+        self._tags_edit.setPlaceholderText(tr("dialog.template.tags_placeholder"))
 
         self._folder_combo = QComboBox()
-        self._folder_combo.addItem("(project root)")
+        self._folder_combo.addItem(tr("dialog.new_query.project_root"), userData="__root__")
         for sf in sorted(subfolders):
             self._folder_combo.addItem(sf)
 
@@ -76,7 +77,7 @@ class TemplateDialog(QDialog):
 
         self._preview = QPlainTextEdit()
         self._preview.setReadOnly(True)
-        self._preview.setPlaceholderText("Template preview…")
+        self._preview.setPlaceholderText(tr("dialog.template.preview_placeholder"))
         self._preview.setMaximumHeight(140)
 
         buttons = QDialogButtonBox(
@@ -86,19 +87,19 @@ class TemplateDialog(QDialog):
         buttons.rejected.connect(self.reject)
 
         layout = QVBoxLayout(self)
-        layout.addWidget(QLabel("Template:"))
+        layout.addWidget(QLabel(tr("dialog.template.template_label")))
         layout.addWidget(self._template_combo)
-        layout.addWidget(QLabel("Query title:"))
+        layout.addWidget(QLabel(tr("dialog.template.query_title_label")))
         layout.addWidget(self._title_edit)
 
         form = QFormLayout()
-        form.addRow("Tags:", self._tags_edit)
-        form.addRow("Folder:", self._folder_combo)
+        form.addRow(tr("dialog.new_query.label_tags"), self._tags_edit)
+        form.addRow(tr("dialog.new_query.label_folder"), self._folder_combo)
         layout.addLayout(form)
 
-        layout.addWidget(QLabel("Template parameters:"))
+        layout.addWidget(QLabel(tr("dialog.template.params_label")))
         layout.addLayout(self._params_form)
-        layout.addWidget(QLabel("Preview:"))
+        layout.addWidget(QLabel(tr("dialog.template.preview_label")))
         layout.addWidget(self._preview)
         layout.addWidget(buttons)
 
@@ -141,22 +142,29 @@ class TemplateDialog(QDialog):
     def _on_accept(self) -> None:
         title = self._title_edit.text().strip()
         if not title:
-            QMessageBox.warning(self, "Validation", "Title is required.")
+            QMessageBox.warning(
+                self,
+                tr("dialog.template.validation_title"),
+                tr("dialog.template.title_required"),
+            )
             return
 
         body = self._current_template_body()
         if not body:
-            QMessageBox.warning(self, "Validation", "No template selected or template is empty.")
+            QMessageBox.warning(
+                self,
+                tr("dialog.template.validation_title"),
+                tr("dialog.template.no_template"),
+            )
             return
 
         params = {k: w.text() for k, w in self._params_widgets.items()}
         filled_body = apply_template(body, params)
 
-        folder_text = self._folder_combo.currentText()
-        if folder_text == "(project root)":
+        if self._folder_combo.currentData() == "__root__":
             target_dir = self._project_root
         else:
-            target_dir = self._project_root / folder_text
+            target_dir = self._project_root / self._folder_combo.currentText()
             target_dir.mkdir(parents=True, exist_ok=True)
 
         filename = _safe_filename(title) + ".sql"

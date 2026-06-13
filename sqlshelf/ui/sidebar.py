@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..core.i18n import tr
 from .theme import tokens as _tk
 from .theme.tokens import ACCENT, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_TERTIARY
 
@@ -52,6 +53,9 @@ class CollapsibleSection(QWidget):
         layout.setSpacing(2)
         layout.addWidget(self._header)
         layout.addWidget(content_widget)
+
+    def set_title(self, title: str) -> None:
+        self._header.setText(title)
 
     def _on_toggled(self, checked: bool) -> None:
         self._content.setVisible(checked)
@@ -117,18 +121,18 @@ class SidebarWidget(QWidget):
         tr_layout.addStretch()
 
         # ── Open Folder button ────────────────────────────────────────────────
-        self._open_btn = QPushButton("📂  Open Folder")
+        self._open_btn = QPushButton(tr("sidebar.open_folder"))
         self._open_btn.setObjectName("OpenFolderBtn")
         self._open_btn.clicked.connect(self.open_folder_requested)
 
         # ── BROWSE section ───────────────────────────────────────────────────
-        browse_label = QLabel("BROWSE")
-        browse_label.setObjectName("SectionLabel")
-        browse_label.setContentsMargins(4, 10, 0, 2)
+        self._browse_label = QLabel(tr("sidebar.browse"))
+        self._browse_label.setObjectName("SectionLabel")
+        self._browse_label.setContentsMargins(4, 10, 0, 2)
 
-        self._btn_all = self._make_nav_btn("☰  All queries")
-        self._btn_fav = self._make_nav_btn("☆  Favorites")
-        self._btn_recent = self._make_nav_btn("⌚  Recent")
+        self._btn_all = self._make_nav_btn(tr("sidebar.all_queries"))
+        self._btn_fav = self._make_nav_btn(tr("sidebar.favorites"))
+        self._btn_recent = self._make_nav_btn(tr("sidebar.recent"))
 
         self._btn_all.clicked.connect(self._on_all_clicked)
         self._btn_fav.clicked.connect(self._on_fav_clicked)
@@ -145,7 +149,7 @@ class SidebarWidget(QWidget):
         browse_layout.addWidget(self._btn_recent)
 
         # ── FOLDERS section content ──────────────────────────────────────────
-        self._empty_label = QLabel("No folders yet.\nClick 'Open Folder' to add one.")
+        self._empty_label = QLabel(tr("sidebar.no_folders"))
         self._empty_label.setStyleSheet(f"color: {TEXT_TERTIARY}; font-size: 11px;")
         self._empty_label.setWordWrap(True)
         self._empty_label.setContentsMargins(4, 4, 4, 4)
@@ -169,13 +173,13 @@ class SidebarWidget(QWidget):
         folders_inner.addWidget(self._empty_label)
         folders_inner.addWidget(self._folders_list)
 
-        self._folders_section = CollapsibleSection("FOLDERS", folders_content)
+        self._folders_section = CollapsibleSection(tr("sidebar.folders_section"), folders_content)
 
         # ── TAGS section content ─────────────────────────────────────────────
         self._tag_list = QListWidget()
         self._tag_list.itemClicked.connect(self._on_tag_item_clicked)
 
-        self._tags_section = CollapsibleSection("TAGS", self._tag_list)
+        self._tags_section = CollapsibleSection(tr("sidebar.tags_section"), self._tag_list)
 
         # ── Layout ───────────────────────────────────────────────────────────
         layout = QVBoxLayout(self)
@@ -184,13 +188,27 @@ class SidebarWidget(QWidget):
         layout.addWidget(title_row)
         layout.addSpacing(6)
         layout.addWidget(self._open_btn)
-        layout.addWidget(browse_label)
+        layout.addWidget(self._browse_label)
         layout.addWidget(browse_widget)
         layout.addWidget(self._folders_section)
         layout.addWidget(self._tags_section, stretch=1)
 
         self._set_active_btn(self._btn_all)
         self._set_folders_state([])
+
+    # ------------------------------------------------------------------
+    # i18n
+    # ------------------------------------------------------------------
+
+    def retranslate_ui(self) -> None:
+        self._open_btn.setText(tr("sidebar.open_folder"))
+        self._browse_label.setText(tr("sidebar.browse"))
+        self._btn_all.setText(tr("sidebar.all_queries"))
+        self._btn_fav.setText(tr("sidebar.favorites"))
+        self._btn_recent.setText(tr("sidebar.recent"))
+        self._empty_label.setText(tr("sidebar.no_folders"))
+        self._folders_section.set_title(tr("sidebar.folders_section"))
+        self._tags_section.set_title(tr("sidebar.tags_section"))
 
     # ------------------------------------------------------------------
     # Folder explorer public API
@@ -282,12 +300,14 @@ class SidebarWidget(QWidget):
         is_fav = "★" in item.text()
 
         menu = QMenu(self)
-        open_act = menu.addAction(f'Open  "{path.name}"')
+        open_act = menu.addAction(tr("sidebar.ctx_open", name=path.name))
         menu.addSeparator()
-        fav_act = menu.addAction("Unfavorite" if is_fav else "Favorite")
+        fav_act = menu.addAction(
+            tr("sidebar.ctx_unfavorite") if is_fav else tr("sidebar.ctx_favorite")
+        )
         menu.addSeparator()
-        remove_act = menu.addAction("Remove from sidebar")
-        deindex_act = menu.addAction("Deindex folder…")
+        remove_act = menu.addAction(tr("sidebar.ctx_remove"))
+        deindex_act = menu.addAction(tr("sidebar.ctx_deindex"))
 
         chosen = menu.exec(self._folders_list.mapToGlobal(pos))
         if chosen == open_act:
