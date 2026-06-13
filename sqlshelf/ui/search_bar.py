@@ -4,7 +4,17 @@ from PySide6.QtCore import QPointF, QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QHBoxLayout, QLineEdit, QPushButton, QWidget
 
-from .theme.tokens import ACCENT, ACCENT_BORDER, ACCENT_FILL, RADIUS
+from .theme.tokens import (
+    ACCENT,
+    ACCENT_BORDER,
+    ACCENT_FILL,
+    ACCENT_FOCUS_BG,
+    HOVER_BG_MEDIUM,
+    RADIUS,
+    SELECTION_BG,
+    TEXT_PRIMARY,
+    TEXT_TERTIARY,
+)
 
 _HELP_TOOLTIP = (
     "Search operators:\n"
@@ -21,25 +31,25 @@ _STYLESHEET = f"""
         background-color: {ACCENT_FILL};
         border: 1px solid {ACCENT_BORDER};
         border-radius: {RADIUS}px;
-        color: rgba(255,255,255,0.92);
+        color: {TEXT_PRIMARY};
         font-size: 13px;
         min-height: 44px;
-        selection-background-color: #264F78;
+        selection-background-color: {SELECTION_BG};
     }}
     QLineEdit#SearchInput:focus {{
-        background-color: rgba(10,222,153,0.15);
+        background-color: {ACCENT_FOCUS_BG};
         border: 2px solid {ACCENT};
     }}
     QPushButton#SearchHelpBtn {{
-        color: rgba(255,255,255,0.38);
+        color: {TEXT_TERTIARY};
         background: transparent;
         border: none;
         border-radius: 3px;
         padding: 2px 4px;
     }}
     QPushButton#SearchHelpBtn:hover {{
-        color: rgba(255,255,255,0.92);
-        background-color: rgba(255,255,255,0.06);
+        color: {TEXT_PRIMARY};
+        background-color: {HOVER_BG_MEDIUM};
     }}
 """
 
@@ -51,7 +61,9 @@ def _make_search_icon() -> QIcon:
     pix.fill(Qt.GlobalColor.transparent)
     p = QPainter(pix)
     p.setRenderHint(QPainter.RenderHint.Antialiasing)
-    pen = QPen(QColor(10, 222, 153, 160), 1.8)   # ACCENT at ~63 % opacity
+    col = QColor(ACCENT)
+    col.setAlpha(160)
+    pen = QPen(col, 1.8)
     pen.setCapStyle(Qt.PenCapStyle.RoundCap)
     p.setPen(pen)
     p.setBrush(Qt.BrushStyle.NoBrush)

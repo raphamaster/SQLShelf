@@ -102,3 +102,19 @@ def toggle_folder_favorite(path: Path) -> bool:
             _save(data)
             return bool(entry["favorited"])
     return False
+
+
+# ---------------------------------------------------------------------------
+# Theme preference
+# ---------------------------------------------------------------------------
+
+def get_theme() -> str:
+    """Return the saved theme name; defaults to 'dark'."""
+    return _load().get("theme", "dark")
+
+
+def set_theme(name: str) -> None:
+    """Persist *name* as the active theme."""
+    data = _load()
+    data["theme"] = name
+    _save(data)
