@@ -13,7 +13,15 @@ from PySide6.QtWidgets import (
 )
 
 from ..core.models import SearchResult
-from .theme.tokens import TEXT_SECONDARY
+from .theme.tokens import (
+    ACCENT_BORDER,
+    BORDER_EMPH,
+    CARD,
+    SURFACE,
+    TEXT_PRIMARY,
+    TEXT_SECONDARY,
+    TEXT_TERTIARY,
+)
 
 
 class CommandPalette(QDialog):
@@ -41,14 +49,45 @@ class CommandPalette(QDialog):
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
         self.resize(560, 400)
+        self.setStyleSheet(f"""
+            QDialog {{
+                background-color: {CARD};
+                border: 1px solid {BORDER_EMPH};
+            }}
+            QLineEdit {{
+                background-color: {SURFACE};
+                border: 1px solid {BORDER_EMPH};
+                color: {TEXT_PRIMARY};
+                border-radius: 4px;
+                padding: 5px 8px;
+            }}
+            QLineEdit:focus {{
+                border-color: {ACCENT_BORDER};
+            }}
+            QListWidget {{
+                background-color: {SURFACE};
+                border: 1px solid {BORDER_EMPH};
+            }}
+            QListWidget::item {{
+                color: {TEXT_PRIMARY};
+                padding: 6px 8px;
+            }}
+            QListWidget::item:hover {{
+                background-color: {CARD};
+            }}
+            QListWidget::item:selected {{
+                background-color: {CARD};
+                color: {TEXT_PRIMARY};
+            }}
+        """)
 
         self._all_results = results
 
-        hint = QLabel("Type to filter queries — Enter to open")
-        hint.setStyleSheet(f"color: {TEXT_SECONDARY}; font-size: 11px; padding: 2px 4px;")
+        hint = QLabel("Type to filter — Enter to open — Esc to close")
+        hint.setStyleSheet(f"color: {TEXT_TERTIARY}; font-size: 11px; padding: 2px 4px;")
 
         self._search = QLineEdit()
-        self._search.setPlaceholderText("Search queries…")
+        self._search.setPlaceholderText("Search queries… (table:X  col:X  tag:X  or name)")
         self._search.textChanged.connect(self._filter)
         self._search.installEventFilter(self)
 

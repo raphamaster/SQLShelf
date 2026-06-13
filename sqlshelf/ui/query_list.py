@@ -231,6 +231,7 @@ class QueryListWidget(QWidget):
         )
 
         self._list.selectionModel().currentRowChanged.connect(self._on_row_changed)
+        self._list.activated.connect(self._on_activated)
         self._list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self._list.customContextMenuRequested.connect(self._show_context_menu)
 
@@ -295,6 +296,11 @@ class QueryListWidget(QWidget):
 
     def _on_row_changed(self, current: QModelIndex, _previous: QModelIndex) -> None:
         row = current.row()
+        if 0 <= row < len(self._results):
+            self.query_selected.emit(self._results[row])
+
+    def _on_activated(self, index: QModelIndex) -> None:
+        row = index.row()
         if 0 <= row < len(self._results):
             self.query_selected.emit(self._results[row])
 

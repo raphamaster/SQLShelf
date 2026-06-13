@@ -11,12 +11,14 @@ from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
     QInputDialog,
+    QLabel,
     QMainWindow,
     QMenu,
     QMenuBar,
     QMessageBox,
     QPushButton,
     QSplitter,
+    QStackedWidget,
     QStatusBar,
     QStyle,
     QToolBar,
@@ -32,7 +34,7 @@ from ..core.scanner import scan_folder
 from ..core.snippets import list_templates
 from ..core.watcher import FolderWatcher
 from .code_editor import CodeEditor
-from .theme.tokens import ACCENT_BORDER
+from .theme.tokens import ACCENT, ACCENT_BORDER, ACCENT_FILL, TEXT_SECONDARY, TEXT_TERTIARY
 from .command_palette import CommandPalette
 from .highlighter import SqlHighlighter
 from .metadata_panel import MetadataPanel
@@ -121,6 +123,8 @@ class MainWindow(QMainWindow):
                     pass
         if self._known_dbs:
             self._refresh_ui()
+        else:
+            self._update_content_view()
 
     # ------------------------------------------------------------------
     # UI construction
@@ -212,7 +216,7 @@ class MainWindow(QMainWindow):
         # Middle panel
         middle = QWidget()
         mid_layout = QVBoxLayout(middle)
-        mid_layout.setContentsMargins(0, 4, 0, 0)
+        mid_layout.setContentsMargins(8, 8, 8, 4)
         mid_layout.setSpacing(4)
 
         self._search_bar = SearchBar()
@@ -286,12 +290,55 @@ class MainWindow(QMainWindow):
         right_layout.addWidget(top_section)
         right_layout.addWidget(self._editor_wrapper, stretch=1)
 
-        # Splitter
+        # ── Empty / onboarding state ─────────────────────────────────────────
+        self._onboarding = QWidget()
+        self._onboarding.setObjectName("OnboardingPane")
+        ob_layout = QVBoxLayout(self._onboarding)
+        ob_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        ob_layout.setSpacing(10)
+
+        ob_icon = QLabel("📂")
+        ob_icon.setStyleSheet(f"font-size: 56px; color: {TEXT_TERTIARY};")
+        ob_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        ob_title = QLabel("No folder open")
+        ob_title.setStyleSheet(
+            f"font-size: 17px; font-weight: bold; color: {TEXT_SECONDARY};"
+        )
+        ob_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        ob_sub = QLabel("Open a folder to start browsing your SQL queries.")
+        ob_sub.setStyleSheet(f"font-size: 12px; color: {TEXT_TERTIARY};")
+        ob_sub.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        ob_btn = QPushButton("📂  Open Folder")
+        ob_btn.setObjectName("OpenFolderBtn")
+        ob_btn.setFixedWidth(160)
+        ob_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        ob_btn.clicked.connect(self.open_folder)
+
+        ob_layout.addWidget(ob_icon)
+        ob_layout.addSpacing(4)
+        ob_layout.addWidget(ob_title)
+        ob_layout.addWidget(ob_sub)
+        ob_layout.addSpacing(12)
+        ob_layout.addWidget(ob_btn, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        # ── Content stack: normal (middle + right) OR onboarding ─────────────
+        self._inner_splitter = QSplitter(Qt.Orientation.Horizontal)
+        self._inner_splitter.addWidget(middle)
+        self._inner_splitter.addWidget(right)
+        self._inner_splitter.setSizes([320, 900])
+
+        self._content_stack = QStackedWidget()
+        self._content_stack.addWidget(self._inner_splitter)  # index 0 — normal view
+        self._content_stack.addWidget(self._onboarding)      # index 1 — onboarding
+
+        # ── Outer splitter: sidebar | content ────────────────────────────────
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(self._sidebar)
-        splitter.addWidget(middle)
-        splitter.addWidget(right)
-        splitter.setSizes([180, 320, 900])
+        splitter.addWidget(self._content_stack)
+        splitter.setSizes([180, 1220])
         self.setCentralWidget(splitter)
 
         self._status_bar = QStatusBar()
@@ -309,7 +356,7 @@ class MainWindow(QMainWindow):
             lambda: self._edit_toggle_btn.click()
         )
         QShortcut(QKeySequence("Ctrl+N"), self).activated.connect(self.new_query)
-        QShortcut(QKeySequence("Ctrl+P"), self).activated.connect(self.open_command_palette)
+        QShortcut(QKeySequence("Ctrl+K"), self).activated.connect(self.open_command_palette)
         esc = QShortcut(QKeySequence(_Qt.Key.Key_Escape), self)
         esc.setContext(_Qt.ShortcutContext.WindowShortcut)
         esc.activated.connect(self._cancel_edit_mode)
@@ -423,7 +470,16 @@ class MainWindow(QMainWindow):
     # UI refresh
     # ------------------------------------------------------------------
 
+    def _update_content_view(self) -> None:
+        """Switch between the normal split view and the onboarding empty state."""
+        if self._known_dbs:
+            self._content_stack.setCurrentIndex(0)
+        else:
+            self._content_stack.setCurrentIndex(1)
+            self._status_bar.showMessage("No folder loaded — File → Open Folder…")
+
     def _refresh_ui(self) -> None:
+        self._update_content_view()
         if not self._known_dbs:
             return
         if self._browse_folder is not None:
@@ -652,13 +708,28 @@ class MainWindow(QMainWindow):
         )
 
     # ------------------------------------------------------------------
-    # Command palette (Ctrl+P)
+    # Command palette (Ctrl+K)
     # ------------------------------------------------------------------
 
     def open_command_palette(self) -> None:
-        if self._db is None:
+        if not self._known_dbs:
             return
-        results = self._db.search("")
+        results: list[SearchResult] = []
+        if self._browse_folder is not None:
+            db = self._known_dbs.get(self._browse_folder)
+            if db:
+                results = db.search("")
+                for r in results:
+                    r.folder = self._browse_folder
+        else:
+            for folder, db in self._known_dbs.items():
+                try:
+                    folder_results = db.search("")
+                    for r in folder_results:
+                        r.folder = folder
+                    results.extend(folder_results)
+                except Exception:
+                    pass
         palette = CommandPalette(results, self)
         palette.query_selected.connect(self._on_palette_selected)
         geo = self.geometry()
@@ -667,7 +738,10 @@ class MainWindow(QMainWindow):
         palette.exec()
 
     def _on_palette_selected(self, result: SearchResult) -> None:
-        self._sidebar.select_all()
+        if result.folder is not None and result.folder in self._known_dbs:
+            self._browse_folder = result.folder
+            self._db = self._known_dbs[result.folder]
+            self._sidebar.set_folders(cfg.get_known_folders(), result.folder)
         self._search_bar.blockSignals(True)
         self._search_bar.clear()
         self._search_bar.blockSignals(False)
