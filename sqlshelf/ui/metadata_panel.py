@@ -13,7 +13,30 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .tag_widget import TagDisplayWidget, TagInputWidget
+from .tag_widget import FlowLayout, TagDisplayWidget, TagInputWidget
+from .theme.tokens import (
+    ACCENT,
+    ACCENT_FILL,
+    BORDER_EMPH,
+    STAR_ACTIVE,
+    STAR_HOVER,
+    TAG_BG,
+    TAG_RADIUS,
+    TEXT_PRIMARY,
+    TEXT_SECONDARY,
+    TEXT_TERTIARY,
+)
+
+_CHIP_STYLE = (
+    f"QPushButton {{ background-color: {TAG_BG}; color: {TEXT_SECONDARY}; "
+    f"border: 1px solid {BORDER_EMPH}; border-radius: {TAG_RADIUS}px; "
+    f"padding: 1px 8px; font-size: 11px; max-height: 20px; }} "
+    f"QPushButton:hover {{ background-color: {BORDER_EMPH}; color: {TEXT_PRIMARY}; }}"
+)
+
+_SECTION_LABEL_STYLE = (
+    f"color: {TEXT_TERTIARY}; font-size: 9px; font-weight: bold; letter-spacing: 0.5px;"
+)
 
 
 class MetadataPanel(QWidget):
@@ -23,93 +46,91 @@ class MetadataPanel(QWidget):
     Edit mode: title / description / tags are editable.
 
     Signals:
-        table_clicked(str)  — user clicked a table or column link (reverse search).
+        filter_requested(kind, value) — user clicked a table/column chip.
+        favorite_toggled              — star button pressed.
     """
 
-    table_clicked = Signal(str)
+    filter_requested = Signal(str, str)
     favorite_toggled = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._edit_mode = False
+        self._tables: list[str] = []
+        self._columns: list[str] = []
 
-        # ------------------------------------------------------------------
-        # Canvas background
-        # ------------------------------------------------------------------
         self.setObjectName("MetadataPanel")
-        self.setStyleSheet("""
-            QWidget#MetadataPanel {
-                background-color: #1c1c2e;
-                border-bottom: 1px solid #2e2e50;
-            }
-        """)
         self.setAutoFillBackground(True)
 
-        # ------------------------------------------------------------------
-        # Read-only widgets
-        # ------------------------------------------------------------------
+        # ── Star / title / Ctrl+K hint ─────────────────────────────────────
         self._star_btn = QPushButton("☆")
         self._star_btn.setFixedSize(22, 22)
         self._star_btn.setStyleSheet(
-            "QPushButton { background: transparent; border: none; font-size: 15px; "
-            "color: #555570; padding: 0; } "
-            "QPushButton:hover { color: #ffd700; }"
+            f"QPushButton {{ background: transparent; border: none; font-size: 15px; "
+            f"color: {TEXT_TERTIARY}; padding: 0; }} "
+            f"QPushButton:hover {{ color: {STAR_HOVER}; }}"
         )
         self._star_btn.setToolTip("Toggle favorite")
         self._star_btn.clicked.connect(self.favorite_toggled)
 
         self._title_label = QLabel()
-        self._title_label.setStyleSheet("font-weight: bold; font-size: 13px; color: #e8e8f0;")
+        self._title_label.setStyleSheet(
+            f"font-weight: bold; font-size: 13px; color: {TEXT_PRIMARY};"
+        )
         self._title_label.setWordWrap(True)
+
+        self._shortcut_hint = QLabel("Ctrl+K")
+        self._shortcut_hint.setStyleSheet(
+            f"color: {TEXT_TERTIARY}; font-size: 9px; padding-right: 4px;"
+        )
+        self._shortcut_hint.setToolTip("Command palette (coming soon)")
 
         title_row = QHBoxLayout()
         title_row.setContentsMargins(0, 0, 0, 0)
         title_row.setSpacing(4)
         title_row.addWidget(self._star_btn)
         title_row.addWidget(self._title_label, stretch=1)
+        title_row.addStretch()
+        title_row.addWidget(self._shortcut_hint)
 
+        # ── Description ────────────────────────────────────────────────────
         self._desc_label = QLabel()
         self._desc_label.setWordWrap(True)
-        self._desc_label.setStyleSheet("color: #9090a8; font-size: 12px;")
+        self._desc_label.setStyleSheet(f"color: {TEXT_SECONDARY}; font-size: 12px;")
 
+        # ── Tags section (mint chips) ──────────────────────────────────────
         self._tags_display = TagDisplayWidget()
+        self._tags_section = _section_container("TAGS", self._tags_display)
+        self._tags_section.setVisible(False)
 
-        # Tables and columns on separate lines
-        self._tables: list[str] = []
-        self._columns: list[str] = []
-        self._hovered_link: str = ""
+        # ── Tables section (clickable neutral chips) ───────────────────────
+        self._tables_flow_widget = QWidget()
+        self._tables_flow = FlowLayout(self._tables_flow_widget, h_gap=4, v_gap=4)
+        self._tables_flow_widget.setLayout(self._tables_flow)
+        self._tables_section = _section_container("TABLES", self._tables_flow_widget)
+        self._tables_section.setVisible(False)
 
-        self._tables_label = QLabel()
-        self._tables_label.setWordWrap(True)
-        self._tables_label.setStyleSheet("font-size: 11px;")
-        self._tables_label.setTextFormat(Qt.TextFormat.RichText)
-        self._tables_label.setOpenExternalLinks(False)
-        self._tables_label.linkActivated.connect(self.table_clicked)
-        self._tables_label.linkHovered.connect(self._on_link_hovered)
+        # ── Columns section (clickable neutral chips) ──────────────────────
+        self._columns_flow_widget = QWidget()
+        self._columns_flow = FlowLayout(self._columns_flow_widget, h_gap=4, v_gap=4)
+        self._columns_flow_widget.setLayout(self._columns_flow)
+        self._columns_section = _section_container("COLUMNS", self._columns_flow_widget)
+        self._columns_section.setVisible(False)
 
-        self._columns_label = QLabel()
-        self._columns_label.setWordWrap(True)
-        self._columns_label.setStyleSheet("font-size: 11px;")
-        self._columns_label.setTextFormat(Qt.TextFormat.RichText)
-        self._columns_label.setOpenExternalLinks(False)
-        self._columns_label.linkActivated.connect(self.table_clicked)
-        self._columns_label.linkHovered.connect(self._on_link_hovered)
-
+        # ── Read-only container ────────────────────────────────────────────
         ro_layout = QVBoxLayout()
         ro_layout.setContentsMargins(10, 10, 10, 8)
-        ro_layout.setSpacing(4)
+        ro_layout.setSpacing(6)
         ro_layout.addLayout(title_row)
         ro_layout.addWidget(self._desc_label)
-        ro_layout.addWidget(self._tags_display)
-        ro_layout.addWidget(self._tables_label)
-        ro_layout.addWidget(self._columns_label)
+        ro_layout.addWidget(self._tags_section)
+        ro_layout.addWidget(self._tables_section)
+        ro_layout.addWidget(self._columns_section)
 
         self._ro_widget = QWidget()
         self._ro_widget.setLayout(ro_layout)
 
-        # ------------------------------------------------------------------
-        # Edit-mode widgets
-        # ------------------------------------------------------------------
+        # ── Edit-mode widgets ──────────────────────────────────────────────
         self._title_edit = QLineEdit()
         self._title_edit.setPlaceholderText("Title")
 
@@ -131,9 +152,7 @@ class MetadataPanel(QWidget):
         self._edit_widget.setLayout(edit_layout)
         self._edit_widget.setVisible(False)
 
-        # ------------------------------------------------------------------
-        # Main layout
-        # ------------------------------------------------------------------
+        # ── Main layout ────────────────────────────────────────────────────
         main = QVBoxLayout(self)
         main.setContentsMargins(0, 0, 0, 0)
         main.setSpacing(0)
@@ -144,9 +163,44 @@ class MetadataPanel(QWidget):
         sp.setVerticalPolicy(QSizePolicy.Policy.Maximum)
         self.setSizePolicy(sp)
 
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
+    # ── Helpers ────────────────────────────────────────────────────────────
+
+    def _clear_flow(self, flow: FlowLayout) -> None:
+        while flow.count():
+            item = flow.takeAt(0)
+            if item and item.widget():
+                item.widget().hide()
+                item.widget().deleteLater()
+
+    def _rebuild_object_chips(self) -> None:
+        self._clear_flow(self._tables_flow)
+        self._clear_flow(self._columns_flow)
+
+        self._tables_section.setVisible(bool(self._tables))
+        self._columns_section.setVisible(bool(self._columns))
+
+        for table in sorted(self._tables):
+            btn = QPushButton(table)
+            btn.setStyleSheet(_CHIP_STYLE)
+            btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+            btn.clicked.connect(
+                lambda checked=False, t=table: self.filter_requested.emit("table", t)
+            )
+            self._tables_flow.addWidget(btn)
+
+        for col in sorted(self._columns):
+            btn = QPushButton(col)
+            btn.setStyleSheet(_CHIP_STYLE)
+            btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+            btn.clicked.connect(
+                lambda checked=False, c=col: self.filter_requested.emit("col", c)
+            )
+            self._columns_flow.addWidget(btn)
+
+        self._tables_flow_widget.updateGeometry()
+        self._columns_flow_widget.updateGeometry()
+
+    # ── Public API ─────────────────────────────────────────────────────────
 
     def set_query(
         self,
@@ -158,60 +212,30 @@ class MetadataPanel(QWidget):
     ) -> None:
         self._title_label.setText(title)
         self._desc_label.setText(description)
-        self._tags_display.set_tags(tags)
+        self._tags_display.set_tags(tags, accent=True)
+        self._tags_section.setVisible(bool(tags))
         self._tables = list(tables)
         self._columns = list(columns)
-        self._hovered_link = ""
-        self._rebuild_links()
+        self._rebuild_object_chips()
 
-        # Pre-fill edit widgets
         self._title_edit.setText(title)
         self._desc_edit.setPlainText(description)
         self._tags_input.set_tags(tags)
-
-    def _on_link_hovered(self, href: str) -> None:
-        self._hovered_link = href
-        self._rebuild_links()
-
-    def _rebuild_links(self) -> None:
-        prefix_style = 'color:#9090c0;'
-        if self._tables:
-            self._tables_label.setText(
-                f'<span style="{prefix_style}">Tables:</span> '
-                + self._make_links(self._tables, "table:")
-            )
-        else:
-            self._tables_label.setText("")
-
-        if self._columns:
-            self._columns_label.setText(
-                f'<span style="{prefix_style}">Columns:</span> '
-                + self._make_links(self._columns, "col:")
-            )
-        else:
-            self._columns_label.setText("")
-
-    def _make_links(self, items: list[str], prefix: str) -> str:
-        return " ".join(
-            f'<a href="{prefix}{t}" style="color:#7aaa7a; '
-            f'text-decoration:{"underline" if self._hovered_link == prefix + t else "none"};">{t}</a>'
-            for t in sorted(items)
-        )
 
     def set_favorite(self, is_fav: bool) -> None:
         if is_fav:
             self._star_btn.setText("★")
             self._star_btn.setStyleSheet(
-                "QPushButton { background: transparent; border: none; font-size: 15px; "
-                "color: #ffd700; padding: 0; } "
-                "QPushButton:hover { color: #ffec6e; }"
+                f"QPushButton {{ background: transparent; border: none; font-size: 15px; "
+                f"color: {STAR_ACTIVE}; padding: 0; }} "
+                f"QPushButton:hover {{ color: {STAR_HOVER}; }}"
             )
         else:
             self._star_btn.setText("☆")
             self._star_btn.setStyleSheet(
-                "QPushButton { background: transparent; border: none; font-size: 15px; "
-                "color: #555570; padding: 0; } "
-                "QPushButton:hover { color: #ffd700; }"
+                f"QPushButton {{ background: transparent; border: none; font-size: 15px; "
+                f"color: {TEXT_TERTIARY}; padding: 0; }} "
+                f"QPushButton:hover {{ color: {STAR_HOVER}; }}"
             )
 
     def set_edit_mode(self, enabled: bool) -> None:
@@ -222,7 +246,6 @@ class MetadataPanel(QWidget):
             self._title_edit.setFocus()
 
     def get_edited_values(self) -> tuple[str, str, list[str]]:
-        """Return (title, description, tags) from the edit widgets."""
         title = self._title_edit.text().strip()
         description = self._desc_edit.toPlainText().strip()
         tags = self._tags_input.get_tags()
@@ -231,13 +254,26 @@ class MetadataPanel(QWidget):
     def clear(self) -> None:
         self._title_label.setText("")
         self._desc_label.setText("")
-        self._tags_display.set_tags([])
+        self._tags_display.set_tags([], accent=True)
+        self._tags_section.setVisible(False)
         self._tables = []
         self._columns = []
-        self._hovered_link = ""
-        self._tables_label.setText("")
-        self._columns_label.setText("")
+        self._rebuild_object_chips()
         self._title_edit.clear()
         self._desc_edit.clear()
         self._tags_input.set_tags([])
         self.set_favorite(False)
+
+
+# ── Module-level helper (avoids repeating section-building boilerplate) ────────
+
+def _section_container(label_text: str, content: QWidget) -> QWidget:
+    w = QWidget()
+    vb = QVBoxLayout(w)
+    vb.setContentsMargins(0, 0, 0, 0)
+    vb.setSpacing(2)
+    lbl = QLabel(label_text)
+    lbl.setStyleSheet(_SECTION_LABEL_STYLE)
+    vb.addWidget(lbl)
+    vb.addWidget(content)
+    return w

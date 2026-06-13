@@ -33,3 +33,7 @@ class SearchResult:
     tags: list[str] = field(default_factory=list)
     # Set by multi-folder search to know which project the result belongs to
     folder: Path | None = None
+    # Populated by search/index for UI display
+    tables: list[str] = field(default_factory=list)
+    updated_at: str | None = None
+    is_favorite: bool = False
