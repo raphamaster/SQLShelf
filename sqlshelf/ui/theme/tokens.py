@@ -43,6 +43,8 @@ DARK: dict[str, object] = {
     "LINK_PREFIX":    "#9090c0",
     "CHIP_DELETE_BG": "#5c1a1a",
     "CHIP_DELETE_FG": "#ffaaaa",
+    # QueryList item hover background (solid, for custom delegate)
+    "LIST_ITEM_HOVER_BG": "#0E141F",
     # CodeEditor gutter
     "GUTTER_BG":           "#141C2B",
     "GUTTER_NUM_INACTIVE": "#4A5568",
@@ -94,6 +96,8 @@ LIGHT: dict[str, object] = {
     "LINK_PREFIX":    "#5050A0",
     "CHIP_DELETE_BG": "#FFE0E0",
     "CHIP_DELETE_FG": "#C00000",
+    # QueryList item hover background (solid, for custom delegate)
+    "LIST_ITEM_HOVER_BG": "#D8E0EC",
     # CodeEditor gutter
     "GUTTER_BG":           "#E4EAF2",
     "GUTTER_NUM_INACTIVE": "#8090A0",
@@ -165,6 +169,9 @@ LINK            = DARK["LINK"]
 LINK_PREFIX     = DARK["LINK_PREFIX"]
 CHIP_DELETE_BG  = DARK["CHIP_DELETE_BG"]
 CHIP_DELETE_FG  = DARK["CHIP_DELETE_FG"]
+
+# QueryList item hover
+LIST_ITEM_HOVER_BG = DARK["LIST_ITEM_HOVER_BG"]
 
 # CodeEditor gutter
 GUTTER_BG           = DARK["GUTTER_BG"]
