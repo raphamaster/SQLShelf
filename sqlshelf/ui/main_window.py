@@ -448,8 +448,9 @@ class MainWindow(QMainWindow):
         # Top section — metadata + toolbar share a dark card background
         top_section = QWidget()
         top_section.setObjectName("EditorTopSection")
+        top_section.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         ts_layout = QVBoxLayout(top_section)
-        ts_layout.setContentsMargins(0, 0, 0, 0)
+        ts_layout.setContentsMargins(0, 0, 0, 8)
         ts_layout.setSpacing(0)
         ts_layout.addWidget(self._metadata_panel)
         ts_layout.addWidget(self._toolbar)
