@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from PySide6.QtCore import QEvent, Qt, Signal
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QLineEdit, QPushButton, QWidget
+from PySide6.QtCore import QPointF, QRectF, Qt, Signal
+from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap
+from PySide6.QtWidgets import QHBoxLayout, QLineEdit, QPushButton, QWidget
 
 from .theme.tokens import ACCENT, ACCENT_BORDER, ACCENT_FILL, RADIUS
 
@@ -14,47 +15,50 @@ _HELP_TOOLTIP = (
     "Tip: combine operators, e.g.  table:orders  tag:report"
 )
 
-_STYLE_NORMAL = f"""
-    QWidget#SearchBar {{
+# Style is applied to the QLineEdit itself — reliable even with qt-material overrides.
+_STYLESHEET = f"""
+    QLineEdit#SearchInput {{
         background-color: {ACCENT_FILL};
         border: 1px solid {ACCENT_BORDER};
         border-radius: {RADIUS}px;
-    }}
-    QWidget#SearchBar QLineEdit {{
-        background: transparent;
-        border: none;
         color: rgba(255,255,255,0.92);
         font-size: 13px;
         min-height: 36px;
         selection-background-color: #264F78;
     }}
-    QLabel#SearchIcon {{
-        font-size: 15px;
-        color: {ACCENT_BORDER};
+    QLineEdit#SearchInput:focus {{
+        background-color: rgba(10,222,153,0.15);
+        border: 2px solid {ACCENT};
+    }}
+    QPushButton#SearchHelpBtn {{
+        color: rgba(255,255,255,0.38);
         background: transparent;
+        border: none;
+        border-radius: 3px;
+        padding: 2px 4px;
+    }}
+    QPushButton#SearchHelpBtn:hover {{
+        color: rgba(255,255,255,0.92);
+        background-color: rgba(255,255,255,0.06);
     }}
 """
 
-_STYLE_FOCUSED = f"""
-    QWidget#SearchBar {{
-        background-color: rgba(10,222,153,0.15);
-        border: 2px solid {ACCENT};
-        border-radius: {RADIUS}px;
-    }}
-    QWidget#SearchBar QLineEdit {{
-        background: transparent;
-        border: none;
-        color: rgba(255,255,255,0.92);
-        font-size: 13px;
-        min-height: 36px;
-        selection-background-color: #264F78;
-    }}
-    QLabel#SearchIcon {{
-        font-size: 15px;
-        color: {ACCENT};
-        background: transparent;
-    }}
-"""
+
+def _make_search_icon() -> QIcon:
+    """Draw a minimal magnifying glass icon in the accent colour."""
+    size = 16
+    pix = QPixmap(size, size)
+    pix.fill(Qt.GlobalColor.transparent)
+    p = QPainter(pix)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    pen = QPen(QColor(10, 222, 153, 160), 1.8)   # ACCENT at ~63 % opacity
+    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+    p.setPen(pen)
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.drawEllipse(QRectF(1.5, 1.5, 9.0, 9.0))        # lens
+    p.drawLine(QPointF(9.5, 9.5), QPointF(14.0, 14.0))  # handle
+    p.end()
+    return QIcon(pix)
 
 
 class SearchBar(QWidget):
@@ -64,13 +68,6 @@ class SearchBar(QWidget):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setObjectName("SearchBar")
-        self.setMinimumHeight(42)
-
-        icon = QLabel("🔍")
-        icon.setObjectName("SearchIcon")
-        icon.setFixedWidth(26)
-        icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self._edit = QLineEdit()
         self._edit.setObjectName("SearchInput")
@@ -79,40 +76,24 @@ class SearchBar(QWidget):
         )
         self._edit.setClearButtonEnabled(True)
         self._edit.textChanged.connect(self.search_changed)
-        self._edit.installEventFilter(self)
+        # Magnifying glass icon lives inside the QLineEdit (native Qt feature).
+        self._edit.addAction(_make_search_icon(), QLineEdit.ActionPosition.LeadingPosition)
 
         help_btn = QPushButton("?")
         help_btn.setObjectName("SearchHelpBtn")
-        help_btn.setFixedWidth(22)
+        help_btn.setFixedWidth(24)
         help_btn.setFlat(True)
         help_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         help_btn.setToolTip(_HELP_TOOLTIP)
         help_btn.setCursor(Qt.CursorShape.WhatsThisCursor)
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(8, 0, 6, 0)
-        layout.setSpacing(4)
-        layout.addWidget(icon)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
         layout.addWidget(self._edit, stretch=1)
         layout.addWidget(help_btn)
 
-        self.setStyleSheet(_STYLE_NORMAL)
-
-    # ------------------------------------------------------------------
-    # Focus tracking
-    # ------------------------------------------------------------------
-
-    def eventFilter(self, obj: object, event: QEvent) -> bool:
-        if obj is self._edit:
-            if event.type() == QEvent.Type.FocusIn:
-                self.setStyleSheet(_STYLE_FOCUSED)
-            elif event.type() == QEvent.Type.FocusOut:
-                self.setStyleSheet(_STYLE_NORMAL)
-        return super().eventFilter(obj, event)
-
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
+        self.setStyleSheet(_STYLESHEET)
 
     def text(self) -> str:
         return self._edit.text()
