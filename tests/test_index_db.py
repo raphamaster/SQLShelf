@@ -309,3 +309,198 @@ class TestScannerIntegration:
         db.close()
         assert row[0] == "plain"
         assert row[1] == 0
+
+
+# ---------------------------------------------------------------------------
+# Schema v2 tables
+# ---------------------------------------------------------------------------
+
+
+class TestSchemaV2:
+    def test_favorites_table_exists(self, project_dir: Path) -> None:
+        db = IndexDB(project_dir)
+        row = db._conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='favorites'"
+        ).fetchone()
+        db.close()
+        assert row is not None
+
+    def test_recently_viewed_table_exists(self, project_dir: Path) -> None:
+        db = IndexDB(project_dir)
+        row = db._conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='recently_viewed'"
+        ).fetchone()
+        db.close()
+        assert row is not None
+
+    def test_schema_version_is_2(self, project_dir: Path) -> None:
+        db = IndexDB(project_dir)
+        row = db._conn.execute(
+            "SELECT value FROM meta WHERE key='schema_version'"
+        ).fetchone()
+        db.close()
+        assert row is not None and row[0] == "2"
+
+    def test_migration_v1_to_v2(self, project_dir: Path) -> None:
+        """Simulate a v1 DB and verify migration adds the new tables."""
+        import re
+        import sqlite3
+        from importlib.resources import files
+
+        db_path = project_dir / ".sqlshelf" / "index.db"
+        (project_dir / ".sqlshelf").mkdir(parents=True, exist_ok=True)
+        schema_sql = (
+            files("sqlshelf.core").joinpath("schema.sql").read_text(encoding="utf-8")
+        )
+        # Strip the v2 CREATE TABLE blocks to produce a v1-equivalent schema
+        v1_schema = re.sub(
+            r"CREATE TABLE (favorites|recently_viewed)\s*\([^)]*\);",
+            "",
+            schema_sql,
+            flags=re.DOTALL,
+        ).strip()
+
+        conn = sqlite3.connect(str(db_path))
+        conn.executescript(v1_schema)
+        conn.execute("BEGIN")
+        conn.execute("INSERT INTO meta (key, value) VALUES ('schema_version', '1')")
+        conn.execute(
+            "INSERT INTO meta (key, value) VALUES ('project_root', ?)",
+            (str(project_dir),),
+        )
+        conn.execute("COMMIT")
+        conn.close()
+
+        # Now open with IndexDB — should run migration
+        db = IndexDB(project_dir)
+        row = db._conn.execute(
+            "SELECT value FROM meta WHERE key='schema_version'"
+        ).fetchone()
+        fav_table = db._conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='favorites'"
+        ).fetchone()
+        rv_table = db._conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='recently_viewed'"
+        ).fetchone()
+        db.close()
+        assert row[0] == "2"
+        assert fav_table is not None
+        assert rv_table is not None
+
+
+# ---------------------------------------------------------------------------
+# Favorites
+# ---------------------------------------------------------------------------
+
+
+class TestFavorites:
+    def _indexed_db(self, project_dir: Path) -> tuple[IndexDB, str]:
+        p = make_sql_file(project_dir, "q.sql", "SELECT 1")
+        db = IndexDB(project_dir)
+        db.index_all([Query(path=p, title="Q", body="SELECT 1")])
+        return db, "q.sql"
+
+    def test_toggle_adds_favorite(self, project_dir: Path) -> None:
+        db, rel = self._indexed_db(project_dir)
+        result = db.toggle_favorite(rel)
+        db.close()
+        assert result is True
+
+    def test_toggle_removes_favorite(self, project_dir: Path) -> None:
+        db, rel = self._indexed_db(project_dir)
+        db.toggle_favorite(rel)
+        result = db.toggle_favorite(rel)
+        db.close()
+        assert result is False
+
+    def test_is_favorite_false_by_default(self, project_dir: Path) -> None:
+        db, rel = self._indexed_db(project_dir)
+        assert db.is_favorite(rel) is False
+        db.close()
+
+    def test_is_favorite_true_after_toggle(self, project_dir: Path) -> None:
+        db, rel = self._indexed_db(project_dir)
+        db.toggle_favorite(rel)
+        assert db.is_favorite(rel) is True
+        db.close()
+
+    def test_get_favorites_returns_results(self, project_dir: Path) -> None:
+        db, rel = self._indexed_db(project_dir)
+        db.toggle_favorite(rel)
+        results = db.get_favorites()
+        db.close()
+        assert len(results) == 1
+        assert results[0].rel_path == rel
+
+    def test_get_favorites_empty_when_none(self, project_dir: Path) -> None:
+        db, _ = self._indexed_db(project_dir)
+        assert db.get_favorites() == []
+        db.close()
+
+    def test_unfavorited_query_not_in_get_favorites(self, project_dir: Path) -> None:
+        db, rel = self._indexed_db(project_dir)
+        db.toggle_favorite(rel)
+        db.toggle_favorite(rel)
+        assert db.get_favorites() == []
+        db.close()
+
+
+# ---------------------------------------------------------------------------
+# Recently viewed
+# ---------------------------------------------------------------------------
+
+
+class TestRecentlyViewed:
+    def _indexed_db(self, project_dir: Path, n: int = 1) -> tuple[IndexDB, list[str]]:
+        rels = []
+        queries = []
+        for i in range(n):
+            p = make_sql_file(project_dir, f"q{i}.sql", f"SELECT {i}")
+            queries.append(Query(path=p, title=f"Q{i}", body=f"SELECT {i}"))
+            rels.append(f"q{i}.sql")
+        db = IndexDB(project_dir)
+        db.index_all(queries)
+        return db, rels
+
+    def test_add_recently_viewed_persisted(self, project_dir: Path) -> None:
+        db, rels = self._indexed_db(project_dir)
+        db.add_recently_viewed(rels[0])
+        results = db.get_recently_viewed()
+        db.close()
+        assert len(results) == 1
+        assert results[0].rel_path == rels[0]
+
+    def test_most_recent_first(self, project_dir: Path) -> None:
+        db, rels = self._indexed_db(project_dir, n=3)
+        for rel in rels:
+            db.add_recently_viewed(rel)
+        results = db.get_recently_viewed()
+        db.close()
+        # Last added should be first
+        assert results[0].rel_path == rels[-1]
+
+    def test_duplicate_view_moves_to_top(self, project_dir: Path) -> None:
+        db, rels = self._indexed_db(project_dir, n=2)
+        db.add_recently_viewed(rels[0])
+        db.add_recently_viewed(rels[1])
+        db.add_recently_viewed(rels[0])  # re-view the first one
+        results = db.get_recently_viewed()
+        db.close()
+        assert results[0].rel_path == rels[0]
+
+    def test_limit_respected(self, project_dir: Path) -> None:
+        db, rels = self._indexed_db(project_dir, n=3)
+        for rel in rels:
+            db.add_recently_viewed(rel)
+        results = db.get_recently_viewed(limit=2)
+        db.close()
+        assert len(results) == 2
+
+    def test_deleted_query_not_in_recent(self, project_dir: Path) -> None:
+        db, rels = self._indexed_db(project_dir, n=2)
+        for rel in rels:
+            db.add_recently_viewed(rel)
+        db.remove_file(project_dir / rels[0])
+        results = db.get_recently_viewed()
+        db.close()
+        assert all(r.rel_path != rels[0] for r in results)

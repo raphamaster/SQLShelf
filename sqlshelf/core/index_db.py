@@ -22,7 +22,7 @@ class IndexDB:
     the file-watcher thread can share one instance safely.
     """
 
-    SCHEMA_VERSION = "1"
+    SCHEMA_VERSION = "2"
 
     def __init__(self, project_root: Path) -> None:
         self._project_root = project_root
@@ -45,22 +45,79 @@ class IndexDB:
             row = self._conn.execute(
                 "SELECT name FROM sqlite_master WHERE type='table' AND name='meta'"
             ).fetchone()
-            if row is not None:
-                return
-            schema_sql = (
-                files("sqlshelf.core").joinpath("schema.sql").read_text(encoding="utf-8")
-            )
-            self._conn.executescript(schema_sql)
-            self._conn.execute("BEGIN")
-            self._conn.execute(
-                "INSERT INTO meta (key, value) VALUES ('schema_version', ?)",
-                (self.SCHEMA_VERSION,),
-            )
-            self._conn.execute(
-                "INSERT INTO meta (key, value) VALUES ('project_root', ?)",
-                (str(self._project_root),),
-            )
-            self._conn.execute("COMMIT")
+            if row is None:
+                self._create_fresh_schema()
+            else:
+                version_row = self._conn.execute(
+                    "SELECT value FROM meta WHERE key='schema_version'"
+                ).fetchone()
+                v = version_row[0] if version_row else "1"
+                if not self._is_schema_compatible():
+                    # Schema is too old or corrupted — rebuild cleanly
+                    self._drop_all_tables()
+                    self._create_fresh_schema()
+                elif v == "1":
+                    self._migrate_v1_to_v2()
+
+    def _is_schema_compatible(self) -> bool:
+        """Return True if the queries table has all required columns."""
+        cols = {
+            row[1]
+            for row in self._conn.execute("PRAGMA table_info(queries)").fetchall()
+        }
+        required = {
+            "id", "rel_path", "title", "description", "body",
+            "file_mtime", "file_size", "content_hash",
+            "has_frontmatter", "created_at", "updated_at",
+        }
+        return required.issubset(cols)
+
+    def _drop_all_tables(self) -> None:
+        """Wipe the DB by closing, deleting the file, and reopening it.
+
+        The index is fully regenerable from disk — this is always safe.
+        Deleting the file sidesteps ordering constraints (FK, FTS, triggers).
+        """
+        self._conn.close()
+        if self._db_path.exists():
+            self._db_path.unlink()
+        self._conn = sqlite3.connect(
+            str(self._db_path), check_same_thread=False, isolation_level=None
+        )
+        self._conn.execute("PRAGMA foreign_keys = ON")
+
+    def _create_fresh_schema(self) -> None:
+        schema_sql = (
+            files("sqlshelf.core").joinpath("schema.sql").read_text(encoding="utf-8")
+        )
+        self._conn.executescript(schema_sql)
+        self._conn.execute("BEGIN")
+        self._conn.execute(
+            "INSERT OR IGNORE INTO meta (key, value) VALUES ('schema_version', ?)",
+            (self.SCHEMA_VERSION,),
+        )
+        self._conn.execute(
+            "INSERT OR IGNORE INTO meta (key, value) VALUES ('project_root', ?)",
+            (str(self._project_root),),
+        )
+        self._conn.execute("COMMIT")
+
+    def _migrate_v1_to_v2(self) -> None:
+        """Add favorites and recently_viewed tables (v1 → v2)."""
+        self._conn.executescript("""
+            CREATE TABLE IF NOT EXISTS favorites (
+                rel_path TEXT PRIMARY KEY
+            );
+            CREATE TABLE IF NOT EXISTS recently_viewed (
+                rel_path  TEXT NOT NULL PRIMARY KEY,
+                viewed_at TEXT NOT NULL
+            );
+        """)
+        self._conn.execute("BEGIN")
+        self._conn.execute(
+            "INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '2')"
+        )
+        self._conn.execute("COMMIT")
 
     # ------------------------------------------------------------------
     # Public API — bulk operations
@@ -74,17 +131,21 @@ class IndexDB:
         """Full reindex: delete everything and insert all given queries."""
         with self._lock:
             self._conn.execute("BEGIN")
-            self._conn.execute("DELETE FROM query_objects")
-            self._conn.execute("DELETE FROM query_tags")
-            self._conn.execute("DELETE FROM queries")
-            self._conn.execute("DELETE FROM tags")
-            for query in queries:
-                self._insert_query(query)
-            self._conn.execute(
-                "INSERT OR REPLACE INTO meta (key, value) VALUES ('last_full_scan', ?)",
-                (datetime.now(timezone.utc).isoformat(),),
-            )
-            self._conn.execute("COMMIT")
+            try:
+                self._conn.execute("DELETE FROM query_objects")
+                self._conn.execute("DELETE FROM query_tags")
+                self._conn.execute("DELETE FROM queries")
+                self._conn.execute("DELETE FROM tags")
+                for query in queries:
+                    self._insert_query(query)
+                self._conn.execute(
+                    "INSERT OR REPLACE INTO meta (key, value) VALUES ('last_full_scan', ?)",
+                    (datetime.now(timezone.utc).isoformat(),),
+                )
+                self._conn.execute("COMMIT")
+            except Exception:
+                self._conn.execute("ROLLBACK")
+                raise
 
     def index_incremental(self, queries: list[Query]) -> int:
         """Smart reindex: skip files whose mtime+hash are unchanged.
@@ -229,6 +290,73 @@ class IndexDB:
             return _search(self._conn, text)
 
     # ------------------------------------------------------------------
+    # Public API — favorites
+    # ------------------------------------------------------------------
+
+    def toggle_favorite(self, rel_path: str) -> bool:
+        """Toggle favorite. Returns True if the query is now favorited."""
+        with self._lock:
+            exists = self._conn.execute(
+                "SELECT 1 FROM favorites WHERE rel_path=?", (rel_path,)
+            ).fetchone()
+            if exists:
+                self._conn.execute("DELETE FROM favorites WHERE rel_path=?", (rel_path,))
+                return False
+            else:
+                self._conn.execute(
+                    "INSERT INTO favorites (rel_path) VALUES (?)", (rel_path,)
+                )
+                return True
+
+    def is_favorite(self, rel_path: str) -> bool:
+        with self._lock:
+            return bool(
+                self._conn.execute(
+                    "SELECT 1 FROM favorites WHERE rel_path=?", (rel_path,)
+                ).fetchone()
+            )
+
+    def get_favorites(self) -> list[SearchResult]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT q.id, q.rel_path, q.title, COALESCE(q.description, ''), '', 0.0"
+                " FROM queries q"
+                " JOIN favorites f ON f.rel_path = q.rel_path"
+                " ORDER BY q.title"
+            ).fetchall()
+            return _rows_to_results_locked(self._conn, rows)
+
+    # ------------------------------------------------------------------
+    # Public API — recently viewed
+    # ------------------------------------------------------------------
+
+    def add_recently_viewed(self, rel_path: str) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        with self._lock:
+            self._conn.execute(
+                "INSERT OR REPLACE INTO recently_viewed (rel_path, viewed_at)"
+                " VALUES (?, ?)",
+                (rel_path, now),
+            )
+            self._conn.execute(
+                "DELETE FROM recently_viewed WHERE rel_path NOT IN ("
+                "  SELECT rel_path FROM recently_viewed ORDER BY viewed_at DESC LIMIT 20"
+                ")"
+            )
+
+    def get_recently_viewed(self, limit: int = 20) -> list[SearchResult]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT q.id, q.rel_path, q.title, COALESCE(q.description, ''), '', 0.0"
+                " FROM queries q"
+                " JOIN recently_viewed rv ON rv.rel_path = q.rel_path"
+                " ORDER BY rv.viewed_at DESC"
+                " LIMIT ?",
+                (limit,),
+            ).fetchall()
+            return _rows_to_results_locked(self._conn, rows)
+
+    # ------------------------------------------------------------------
     # Internal helpers (called while _lock is held)
     # ------------------------------------------------------------------
 
@@ -297,3 +425,12 @@ class IndexDB:
                 " VALUES (?, ?, ?, ?, ?)",
                 (query_id, query.title, query.description, query.body, objects_text),
             )
+
+
+def _rows_to_results_locked(
+    conn: sqlite3.Connection, rows: list[tuple]
+) -> list[SearchResult]:
+    """Build SearchResult list from raw rows (caller must hold the DB lock)."""
+    from .search import _rows_to_results
+
+    return _rows_to_results(conn, rows)
