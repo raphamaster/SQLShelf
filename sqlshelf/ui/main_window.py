@@ -104,9 +104,23 @@ class MainWindow(QMainWindow):
         self._current_metadata: dict = {}
         self._edit_mode = False
 
+        # Multi-folder support
+        self._known_dbs: dict[Path, IndexDB] = {}
+        self._browse_folder: Path | None = None  # None = show all known folders
+
         self._build_menu()
         self._build_ui()
         self._build_shortcuts()
+
+        # Pre-open DBs for known folders so global view works on startup
+        for folder, _ in cfg.get_known_folders():
+            if folder.is_dir():
+                try:
+                    self._known_dbs[folder] = IndexDB(folder)
+                except Exception:
+                    pass
+        if self._known_dbs:
+            self._refresh_ui()
 
     # ------------------------------------------------------------------
     # UI construction
@@ -187,7 +201,7 @@ class MainWindow(QMainWindow):
         # Left panel
         self._sidebar = SidebarWidget()
         self._sidebar.open_folder_requested.connect(self.open_folder)
-        self._sidebar.folder_selected.connect(self.load_folder)
+        self._sidebar.folder_selected.connect(self._on_sidebar_folder_selected)
         self._sidebar.folder_remove_requested.connect(self._on_folder_remove_requested)
         self._sidebar.folder_favorite_toggled.connect(self._on_folder_favorite_toggled)
         self._sidebar.tag_selected.connect(self._on_tag_selected)
@@ -298,14 +312,15 @@ class MainWindow(QMainWindow):
             self.load_folder(Path(folder))
 
     def load_folder(self, folder: Path) -> None:
+        """Open *folder*, index it (incremental), and start watching it."""
         if not folder.is_dir():
             return
         self._stop_watcher()
-        if self._db is not None:
-            self._db.close()
 
         self._folder = folder
-        self._db = IndexDB(folder)
+        self._browse_folder = folder
+        db = self._get_or_open_db(folder)
+        self._db = db
         cfg.add_recent_project(folder)
         cfg.add_known_folder(folder)
         self._rebuild_recent_menu()
@@ -315,7 +330,7 @@ class MainWindow(QMainWindow):
         self._status_bar.showMessage("Indexing…")
         self._reset_editor()
 
-        worker = _IndexWorker(self._db, folder)
+        worker = _IndexWorker(db, folder)
         worker.signals.finished.connect(self._on_index_finished)
         worker.signals.error.connect(
             lambda msg: self._status_bar.showMessage(f"Index error: {msg}")
@@ -326,6 +341,25 @@ class MainWindow(QMainWindow):
         self._watcher_bridge.files_changed.connect(self._handle_files_changed)
         self._watcher = FolderWatcher(folder, self._watcher_bridge.on_changed)
         self._watcher.start()
+
+    def _on_sidebar_folder_selected(self, folder: Path) -> None:
+        """Switch the query list to *folder* without a full reindex."""
+        if not folder.is_dir():
+            return
+        self._folder = folder
+        self._browse_folder = folder
+        self._db = self._get_or_open_db(folder)
+        self._search_bar.blockSignals(True)
+        self._search_bar.clear()
+        self._search_bar.blockSignals(False)
+        self._sidebar.set_folders(cfg.get_known_folders(), folder)
+        self._status_bar.showMessage(f"Folder: {folder.name}")
+        self._refresh_ui()
+
+    def _get_or_open_db(self, folder: Path) -> IndexDB:
+        if folder not in self._known_dbs:
+            self._known_dbs[folder] = IndexDB(folder)
+        return self._known_dbs[folder]
 
     def _on_index_finished(self, count: int) -> None:
         self._status_bar.showMessage(f"{count} queries indexed")
@@ -379,17 +413,43 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _refresh_ui(self) -> None:
-        if self._db is None:
+        if not self._known_dbs:
             return
-        tags = self._db.get_all_tags()
+        if self._browse_folder is not None:
+            db = self._known_dbs.get(self._browse_folder)
+            tags = db.get_all_tags() if db else []
+        else:
+            tags_set: set[str] = set()
+            for db in self._known_dbs.values():
+                try:
+                    tags_set.update(db.get_all_tags())
+                except Exception:
+                    pass
+            tags = sorted(tags_set)
         self._sidebar.set_tags(tags)
         self._run_search()
 
     def _run_search(self) -> None:
-        if self._db is None:
+        if not self._known_dbs:
             return
         text = self._search_bar.text()
-        results = self._db.search(text)
+        results: list[SearchResult] = []
+        if self._browse_folder is not None:
+            db = self._known_dbs.get(self._browse_folder)
+            if db:
+                results = db.search(text)
+                for r in results:
+                    r.folder = self._browse_folder
+        else:
+            for folder, db in self._known_dbs.items():
+                try:
+                    folder_results = db.search(text)
+                    for r in folder_results:
+                        r.folder = folder
+                    results.extend(folder_results)
+                except Exception:
+                    pass
+            results.sort(key=lambda r: r.rank)
         self._query_list.set_results(results)
 
     # ------------------------------------------------------------------
@@ -406,6 +466,11 @@ class MainWindow(QMainWindow):
             self._cancel_btn.setEnabled(False)
             self._edit_toggle_btn.setChecked(False)
             self._edit_toggle_btn.setText("✏  Edit")
+
+        # Resolve the folder this result comes from (important in multi-folder mode)
+        if result.folder is not None and result.folder.is_dir():
+            self._folder = result.folder
+            self._db = self._known_dbs.get(result.folder, self._db)
 
         self._current_result = result
         if self._folder is None:
@@ -458,42 +523,58 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _on_search_changed(self, _text: str) -> None:
-        self._sidebar.select_all()
         self._run_search()
 
     def _on_tag_selected(self, tag: str) -> None:
+        if not tag:
+            # "All queries" clicked — switch to global multi-folder mode
+            self._browse_folder = None
+            self._sidebar.set_folders(cfg.get_known_folders(), None)
         self._search_bar.blockSignals(True)
         self._search_bar._edit.setText(f"tag:{tag}" if tag else "")
         self._search_bar.blockSignals(False)
-        self._run_search()
+        self._refresh_ui()
 
     def _on_favorites_selected(self) -> None:
-        if self._db is None:
-            return
         self._search_bar.blockSignals(True)
         self._search_bar.clear()
         self._search_bar.blockSignals(False)
-        try:
-            results = self._db.get_favorites()
-        except Exception:
-            results = []
+        results: list[SearchResult] = []
+        dbs = (
+            {self._browse_folder: self._known_dbs[self._browse_folder]}
+            if self._browse_folder and self._browse_folder in self._known_dbs
+            else self._known_dbs
+        )
+        for folder, db in dbs.items():
+            try:
+                for r in db.get_favorites():
+                    r.folder = folder
+                    results.append(r)
+            except Exception:
+                pass
         self._query_list.set_results(results)
 
     def _on_recent_selected(self) -> None:
-        if self._db is None:
-            return
         self._search_bar.blockSignals(True)
         self._search_bar.clear()
         self._search_bar.blockSignals(False)
-        try:
-            results = self._db.get_recently_viewed()
-        except Exception:
-            results = []
+        results: list[SearchResult] = []
+        dbs = (
+            {self._browse_folder: self._known_dbs[self._browse_folder]}
+            if self._browse_folder and self._browse_folder in self._known_dbs
+            else self._known_dbs
+        )
+        for folder, db in dbs.items():
+            try:
+                for r in db.get_recently_viewed():
+                    r.folder = folder
+                    results.append(r)
+            except Exception:
+                pass
         self._query_list.set_results(results)
 
     def _on_object_clicked(self, href: str) -> None:
         """Reverse search: clicking a table/col name filters the query list."""
-        self._sidebar.select_all()
         self._search_bar.blockSignals(True)
         self._search_bar._edit.setText(href)
         self._search_bar.blockSignals(False)
@@ -814,6 +895,9 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event) -> None:
         self._stop_watcher()
-        if self._db is not None:
-            self._db.close()
+        for db in self._known_dbs.values():
+            try:
+                db.close()
+            except Exception:
+                pass
         super().closeEvent(event)

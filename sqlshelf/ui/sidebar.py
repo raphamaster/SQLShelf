@@ -50,6 +50,7 @@ class SidebarWidget(QWidget):
         self.setMinimumWidth(150)
 
         self._active_folder: Path | None = None
+        self._active_item: QListWidgetItem | None = None
 
         # ── Title ───────────────────────────────────────────────────────────
         app_title = QLabel("SQLSHELF")
@@ -148,6 +149,7 @@ class SidebarWidget(QWidget):
         *active* is the currently loaded folder path (may be None).
         """
         self._active_folder = active
+        self._active_item = None
         self._folders_list.blockSignals(True)
         self._folders_list.clear()
 
@@ -161,7 +163,14 @@ class SidebarWidget(QWidget):
             item.setData(_ROLE_PATH, path)
             if active is not None and path.resolve() == active.resolve():
                 item.setFont(bold)
+                self._active_item = item
             self._folders_list.addItem(item)
+
+        # Keep the selection highlight visible even when focus is elsewhere
+        if self._active_item is not None:
+            self._folders_list.setCurrentItem(self._active_item)
+        else:
+            self._folders_list.clearSelection()
 
         self._folders_list.blockSignals(False)
         self._set_folders_state(entries)
@@ -169,14 +178,23 @@ class SidebarWidget(QWidget):
     def set_active_folder(self, active: Path | None) -> None:
         """Update only the active-folder highlight without rebuilding the list."""
         self._active_folder = active
+        self._active_item = None
         bold = QFont()
         bold.setBold(True)
         normal = QFont()
+        self._folders_list.blockSignals(True)
         for i in range(self._folders_list.count()):
             item = self._folders_list.item(i)
             path: Path = item.data(_ROLE_PATH)
             is_active = active is not None and path.resolve() == active.resolve()
             item.setFont(bold if is_active else normal)
+            if is_active:
+                self._active_item = item
+        if self._active_item is not None:
+            self._folders_list.setCurrentItem(self._active_item)
+        else:
+            self._folders_list.clearSelection()
+        self._folders_list.blockSignals(False)
 
     # ------------------------------------------------------------------
     # Folder explorer — internal
