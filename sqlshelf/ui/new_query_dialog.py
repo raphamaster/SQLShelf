@@ -34,6 +34,21 @@ def _safe_filename(title: str) -> str:
     return name or "query"
 
 
+def _get_subfolders(root: Path) -> list[str]:
+    """Return relative subfolder paths, excluding hidden directories."""
+    try:
+        return [
+            str(p.relative_to(root))
+            for p in root.rglob("*")
+            if p.is_dir()
+            and not any(
+                part.startswith(".") for part in p.relative_to(root).parts
+            )
+        ]
+    except OSError:
+        return []
+
+
 _TREE_STYLE = f"""
     QTreeWidget {{
         background-color: {_tk.SURFACE};
@@ -62,51 +77,51 @@ _TREE_STYLE = f"""
 """
 
 
-def _build_folder_tree(
+def _build_project_tree(
     parent_widget: QWidget,
-    subfolders: list[str],
-    root_label: str,
+    all_projects: list[Path],
+    default_project: Path,
 ) -> QTreeWidget:
-    """Build a QTreeWidget where root-level folders are always visible.
+    """Build a tree with known project folders as root nodes.
 
-    Structure:
-        (raiz do projeto)   <- top-level, selectable
-        Backups             <- top-level, selectable, expandable
-          Backup            <- child
-          Restore           <- child
-        CMS                 <- top-level, selectable, expandable
-          CMSProperties     <- child
+    Each project root is a top-level item (always visible).
+    Its subfolders are children (collapsed by default).
+    UserRole stores the absolute Path of each node.
     """
     tree = QTreeWidget(parent_widget)
     tree.setHeaderHidden(True)
     tree.setRootIsDecorated(True)
     tree.setStyleSheet(_TREE_STYLE)
 
-    # "(raiz do projeto)" is the first top-level item
-    root_item = QTreeWidgetItem(tree, [root_label])
-    root_item.setData(0, Qt.ItemDataRole.UserRole, "__root__")
+    default_item: QTreeWidgetItem | None = None
 
-    # node_map: relative-path key -> QTreeWidgetItem
-    node_map: dict[str, QTreeWidgetItem] = {}
+    for project in all_projects:
+        proj_item = QTreeWidgetItem(tree, [project.name])
+        proj_item.setData(0, Qt.ItemDataRole.UserRole, project)
 
-    for sf in sorted(subfolders):
-        parts = Path(sf).parts
-        for i, part in enumerate(parts):
-            key = str(Path(*parts[: i + 1]))
-            if key in node_map:
-                continue
-            if i == 0:
-                # Top-level folder: direct child of the invisible root
-                item = QTreeWidgetItem(tree, [part])
-            else:
-                parent_key = str(Path(*parts[:i]))
-                item = QTreeWidgetItem(node_map[parent_key], [part])
-            item.setData(0, Qt.ItemDataRole.UserRole, key)
-            node_map[key] = item
+        if project.resolve() == default_project.resolve():
+            default_item = proj_item
 
-    # Keep sub-folders collapsed; top-level items are always visible
+        subfolders = _get_subfolders(project)
+        node_map: dict[str, QTreeWidgetItem] = {}
+
+        for sf in sorted(subfolders):
+            parts = Path(sf).parts
+            for i, part in enumerate(parts):
+                key = str(Path(*parts[: i + 1]))
+                if key in node_map:
+                    continue
+                parent_item = node_map[str(Path(*parts[:i]))] if i > 0 else proj_item
+                item = QTreeWidgetItem(parent_item, [part])
+                item.setData(0, Qt.ItemDataRole.UserRole, project / key)
+                node_map[key] = item
+
     tree.collapseAll()
-    tree.setCurrentItem(root_item)
+
+    if default_item is not None:
+        tree.setCurrentItem(default_item)
+        tree.scrollToItem(default_item)
+
     return tree
 
 
@@ -115,22 +130,23 @@ class _FolderPickerDialog(QDialog):
 
     def __init__(
         self,
-        subfolders: list[str],
-        root_label: str,
-        current_key: str,
+        all_projects: list[Path],
+        default_project: Path,
+        current_path: Path | None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle(tr("dialog.new_query.label_folder"))
-        self.setMinimumWidth(380)
-        self.resize(420, 420)
+        self.setMinimumWidth(400)
+        self.resize(440, 440)
 
-        self._tree = _build_folder_tree(self, subfolders, root_label)
+        self._tree = _build_project_tree(self, all_projects, default_project)
         self._tree.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
         )
 
-        self._restore_selection(current_key)
+        if current_path is not None:
+            self._restore_selection(current_path)
 
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
@@ -142,18 +158,11 @@ class _FolderPickerDialog(QDialog):
         layout.addWidget(self._tree)
         layout.addWidget(buttons)
 
-    def _restore_selection(self, key: str) -> None:
-        """Re-select the previously chosen folder and expand its ancestors."""
-        if key == "__root__":
-            # First top-level item is the root label
-            root = self._tree.topLevelItem(0)
-            if root:
-                self._tree.setCurrentItem(root)
-            return
+    def _restore_selection(self, path: Path) -> None:
         for item in self._tree.findItems(
             "", Qt.MatchFlag.MatchContains | Qt.MatchFlag.MatchRecursive
         ):
-            if item.data(0, Qt.ItemDataRole.UserRole) == key:
+            if item.data(0, Qt.ItemDataRole.UserRole) == path:
                 parent = item.parent()
                 while parent:
                     parent.setExpanded(True)
@@ -162,12 +171,12 @@ class _FolderPickerDialog(QDialog):
                 self._tree.scrollToItem(item)
                 return
 
-    def selected_folder(self) -> str:
+    def selected_path(self) -> Path | None:
+        """Return the absolute Path of the selected folder, or None."""
         item = self._tree.currentItem()
         if item is None:
-            return "__root__"
-        data = item.data(0, Qt.ItemDataRole.UserRole)
-        return data if data else "__root__"
+            return None
+        return item.data(0, Qt.ItemDataRole.UserRole)
 
 
 class _FolderSelector(QWidget):
@@ -175,16 +184,16 @@ class _FolderSelector(QWidget):
 
     def __init__(
         self,
-        subfolders: list[str],
-        root_label: str,
+        all_projects: list[Path],
+        default_project: Path,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
-        self._subfolders = subfolders
-        self._root_label = root_label
-        self._current_key = "__root__"
+        self._all_projects = all_projects
+        self._default_project = default_project
+        self._current_path: Path = default_project
 
-        self._label = QLineEdit(root_label)
+        self._label = QLineEdit(default_project.name)
         self._label.setReadOnly(True)
         self._label.setStyleSheet(f"""
             QLineEdit {{
@@ -209,39 +218,51 @@ class _FolderSelector(QWidget):
 
     def _open_picker(self) -> None:
         dlg = _FolderPickerDialog(
-            self._subfolders,
-            self._root_label,
-            self._current_key,
+            self._all_projects,
+            self._default_project,
+            self._current_path,
             self,
         )
         if dlg.exec() == QDialog.DialogCode.Accepted:
-            key = dlg.selected_folder()
-            self._current_key = key
-            self._label.setText(self._root_label if key == "__root__" else key)
+            path = dlg.selected_path()
+            if path is not None:
+                self._current_path = path
+                # Show "ProjectName" or "ProjectName/sub/folder"
+                try:
+                    # Find which project this path belongs to
+                    for proj in self._all_projects:
+                        if path.resolve() == proj.resolve():
+                            self._label.setText(proj.name)
+                            return
+                    for proj in self._all_projects:
+                        rel = path.relative_to(proj)
+                        self._label.setText(f"{proj.name}/{rel}")
+                        return
+                except ValueError:
+                    self._label.setText(str(path))
 
-    def selected_folder(self) -> str:
-        return self._current_key
+    def selected_path(self) -> Path:
+        return self._current_path
 
 
 class NewQueryDialog(QDialog):
     """Dialog for creating a new .sql file with frontmatter.
 
     Usage::
-        dlg = NewQueryDialog(project_root, subfolders, parent)
+        dlg = NewQueryDialog(current_project, all_projects, parent)
         if dlg.exec() == QDialog.DialogCode.Accepted:
             path = dlg.created_path
     """
 
     def __init__(
         self,
-        project_root: Path,
-        subfolders: list[str],
+        current_project: Path,
+        all_projects: list[Path],
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle(tr("dialog.new_query.title"))
         self.resize(600, 450)
-        self._project_root = project_root
         self.created_path: Path | None = None
 
         self._title_edit = QLineEdit()
@@ -254,8 +275,8 @@ class NewQueryDialog(QDialog):
         self._desc_edit.setPlaceholderText(tr("dialog.new_query.desc_placeholder"))
 
         self._folder_selector = _FolderSelector(
-            subfolders,
-            tr("dialog.new_query.project_root"),
+            all_projects,
+            current_project,
         )
 
         self._body_edit = QPlainTextEdit()
@@ -289,12 +310,8 @@ class NewQueryDialog(QDialog):
             )
             return
 
-        folder_key = self._folder_selector.selected_folder()
-        if folder_key == "__root__":
-            target_dir = self._project_root
-        else:
-            target_dir = self._project_root / folder_key
-            target_dir.mkdir(parents=True, exist_ok=True)
+        target_dir = self._folder_selector.selected_path()
+        target_dir.mkdir(parents=True, exist_ok=True)
 
         filename = _safe_filename(title) + ".sql"
         path = target_dir / filename
