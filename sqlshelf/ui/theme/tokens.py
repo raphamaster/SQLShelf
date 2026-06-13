@@ -123,6 +123,8 @@ QT_MATERIAL_THEMES: dict[str, str] = {
 # Module-level constants (initialised to DARK; patched by set_active_palette)
 # ---------------------------------------------------------------------------
 
+ACTIVE_THEME: str = "dark"
+
 # Surfaces
 BG_APP      = DARK["BG_APP"]
 SURFACE     = DARK["SURFACE"]
@@ -202,6 +204,8 @@ def set_active_palette(name: str) -> None:
     so that ``from .theme.tokens import ACCENT`` in widget modules
     picks up the correct value.
     """
+    global ACTIVE_THEME
+    ACTIVE_THEME = name
     p = THEMES.get(name, DARK)
     g = globals()
     for k, v in p.items():

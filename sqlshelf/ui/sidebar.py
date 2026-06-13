@@ -23,7 +23,9 @@ from .theme import tokens as _tk
 from .theme.tokens import ACCENT, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_TERTIARY
 
 _ROLE_PATH = Qt.ItemDataRole.UserRole
-_LOGO_PATH = Path(__file__).parent.parent.parent / "images" / "logo_sqlshelf.png"
+_IMAGES = Path(__file__).parent.parent.parent / "images"
+_LOGO_DARK  = _IMAGES / "logo_sqlshelf.png"
+_LOGO_LIGHT = _IMAGES / "logo_sqlshelf_white.png"
 
 
 class CollapsibleSection(QWidget):
@@ -110,7 +112,8 @@ class SidebarWidget(QWidget):
         self._logo_lbl.setStyleSheet("background: transparent;")
         self._logo_lbl.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
         self._logo_lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
-        self._logo_pix = QPixmap(str(_LOGO_PATH))
+        self._logo_pix_dark  = QPixmap(str(_LOGO_DARK))
+        self._logo_pix_light = QPixmap(str(_LOGO_LIGHT))
         self._update_logo_pixmap()
 
         tr_layout.addWidget(self._logo_lbl)
@@ -389,15 +392,20 @@ class SidebarWidget(QWidget):
         self.tag_selected.emit(item.text())
 
     def _update_logo_pixmap(self) -> None:
-        if self._logo_pix.isNull():
+        pix = (
+            self._logo_pix_light
+            if _tk.ACTIVE_THEME == "light"
+            else self._logo_pix_dark
+        )
+        if pix.isNull():
             self._logo_lbl.setText("SQLShelf")
             return
-        scaled = self._logo_pix.scaledToHeight(
-            28, Qt.TransformationMode.SmoothTransformation
+        self._logo_lbl.setPixmap(
+            pix.scaledToHeight(28, Qt.TransformationMode.SmoothTransformation)
         )
-        self._logo_lbl.setPixmap(scaled)
 
     def refresh_theme(self) -> None:
+        self._update_logo_pixmap()
         self._empty_label.setStyleSheet(f"color: {_tk.TEXT_TERTIARY}; font-size: 11px;")
 
     def _selected_tag(self) -> str:
