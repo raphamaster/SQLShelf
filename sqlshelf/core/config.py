@@ -49,3 +49,42 @@ def get_last_project() -> Path | None:
     """Return the last opened project folder, or None."""
     recent = get_recent_projects()
     return recent[0] if recent else None
+
+
+def get_pinned_folders() -> list[Path]:
+    """Return list of pinned project folders (in order pinned)."""
+    data = _load()
+    paths = []
+    for p in data.get("pinned_folders", []):
+        path = Path(p)
+        if path.is_dir():
+            paths.append(path)
+    return paths
+
+
+def pin_folder(path: Path) -> None:
+    """Add *path* to pinned folders (no-op if already pinned)."""
+    data = _load()
+    path_str = str(path.resolve())
+    pinned: list[str] = data.get("pinned_folders", [])
+    if path_str not in pinned:
+        pinned.append(path_str)
+    data["pinned_folders"] = pinned
+    _save(data)
+
+
+def unpin_folder(path: Path) -> None:
+    """Remove *path* from pinned folders (no-op if not pinned)."""
+    data = _load()
+    path_str = str(path.resolve())
+    pinned: list[str] = data.get("pinned_folders", [])
+    if path_str in pinned:
+        pinned.remove(path_str)
+    data["pinned_folders"] = pinned
+    _save(data)
+
+
+def is_folder_pinned(path: Path) -> bool:
+    """Return True if *path* is currently pinned."""
+    data = _load()
+    return str(path.resolve()) in data.get("pinned_folders", [])
