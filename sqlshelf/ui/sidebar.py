@@ -100,6 +100,8 @@ class SidebarWidget(QWidget):
         self._nav_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self._nav_list.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self._nav_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        # Let the list grow vertically to fit all items; never squeeze it
+        self._nav_list.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
         self._all_item = QListWidgetItem(_ALL_ITEM_TEXT)
         self._fav_item = QListWidgetItem(_FAVORITES_ITEM_TEXT)
@@ -133,6 +135,11 @@ class SidebarWidget(QWidget):
 
         self._update_nav_height()
         self._set_folders_state([])
+
+    def showEvent(self, event) -> None:
+        """Recalculate nav height after the widget is fully rendered."""
+        super().showEvent(event)
+        self._update_nav_height()
 
     # ------------------------------------------------------------------
     # Folder explorer public API
@@ -261,12 +268,26 @@ class SidebarWidget(QWidget):
         self._nav_list.blockSignals(False)
         self._tag_list.clearSelection()
 
+    def add_nav_item(self, text: str) -> QListWidgetItem:
+        """Append an item to the BROWSE section and resize the list to fit."""
+        item = QListWidgetItem(text)
+        self._nav_list.addItem(item)
+        self._update_nav_height()
+        return item
+
     def _update_nav_height(self) -> None:
-        self._nav_list.adjustSize()
-        total = sum(
-            self._nav_list.sizeHintForRow(i) for i in range(self._nav_list.count())
-        )
-        self._nav_list.setFixedHeight(total + 6)
+        """Fix the nav list height to exactly fit all items (no scrollbar).
+
+        sizeHintForRow returns -1 before the widget is rendered, so we fall
+        back to a 28 px estimate; showEvent calls this again with real values.
+        """
+        n = self._nav_list.count()
+        if n == 0:
+            return
+        row_h = self._nav_list.sizeHintForRow(0)
+        if row_h < 1:
+            row_h = 28  # pre-render fallback
+        self._nav_list.setFixedHeight(n * row_h + 4)
 
     def _selected_tag(self) -> str:
         item = self._tag_list.currentItem()
