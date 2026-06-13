@@ -24,10 +24,12 @@ from PySide6.QtWidgets import (
 )
 
 from ..core.models import SearchResult
+from .theme import tokens as _tk
 from .theme.tokens import (
     ACCENT,
     BORDER,
     CARD,
+    LIST_ITEM_HOVER_BG,
     STAR_ACTIVE,
     SURFACE,
     TAG_BG,
@@ -106,13 +108,23 @@ class QueryItemDelegate(QStyledItemDelegate):
         self._f_small.setPointSize(9)
 
         self._c_sel_bg   = _qc(CARD)
-        self._c_hov_bg   = QColor(14, 20, 32)   # midpoint between SURFACE and CARD
+        self._c_hov_bg   = _qc(LIST_ITEM_HOVER_BG)
         self._c_accent   = _qc(ACCENT)
         self._c_primary  = _qc(TEXT_PRIMARY)
         self._c_tertiary = _qc(TEXT_TERTIARY)
         self._c_tag_bg   = _qc(TAG_BG)
         self._c_tag_txt  = _qc(TAG_TEXT)
         self._c_star     = _qc(STAR_ACTIVE)
+
+    def refresh_theme(self) -> None:
+        self._c_sel_bg   = _qc(_tk.CARD)
+        self._c_hov_bg   = _qc(_tk.LIST_ITEM_HOVER_BG)
+        self._c_accent   = _qc(_tk.ACCENT)
+        self._c_primary  = _qc(_tk.TEXT_PRIMARY)
+        self._c_tertiary = _qc(_tk.TEXT_TERTIARY)
+        self._c_tag_bg   = _qc(_tk.TAG_BG)
+        self._c_tag_txt  = _qc(_tk.TAG_TEXT)
+        self._c_star     = _qc(_tk.STAR_ACTIVE)
 
     def sizeHint(self, option, index) -> QSize:  # type: ignore[override]
         return QSize(option.rect.width(), _ITEM_H)
@@ -283,6 +295,17 @@ class QueryListWidget(QWidget):
 
     def count(self) -> int:
         return len(self._results)
+
+    def refresh_theme(self) -> None:
+        delegate = self._list.itemDelegate()
+        if hasattr(delegate, "refresh_theme"):
+            delegate.refresh_theme()
+        self._list.setStyleSheet(
+            f"QListView {{ background-color: {_tk.SURFACE}; border: 1px solid {_tk.BORDER};"
+            f"  outline: none; }}"
+            f"QListView::item {{ border: none; }}"
+        )
+        self._list.viewport().update()
 
     # ------------------------------------------------------------------
     # Internal

@@ -4,7 +4,18 @@ from PySide6.QtCore import QPointF, QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QHBoxLayout, QLineEdit, QPushButton, QWidget
 
-from .theme.tokens import ACCENT, ACCENT_BORDER, ACCENT_FILL, RADIUS
+from .theme import tokens as _tk
+from .theme.tokens import (
+    ACCENT,
+    ACCENT_BORDER,
+    ACCENT_FILL,
+    ACCENT_FOCUS_BG,
+    HOVER_BG_MEDIUM,
+    RADIUS,
+    SELECTION_BG,
+    TEXT_PRIMARY,
+    TEXT_TERTIARY,
+)
 
 _HELP_TOOLTIP = (
     "Search operators:\n"
@@ -21,25 +32,25 @@ _STYLESHEET = f"""
         background-color: {ACCENT_FILL};
         border: 1px solid {ACCENT_BORDER};
         border-radius: {RADIUS}px;
-        color: rgba(255,255,255,0.92);
+        color: {TEXT_PRIMARY};
         font-size: 13px;
         min-height: 44px;
-        selection-background-color: #264F78;
+        selection-background-color: {SELECTION_BG};
     }}
     QLineEdit#SearchInput:focus {{
-        background-color: rgba(10,222,153,0.15);
+        background-color: {ACCENT_FOCUS_BG};
         border: 2px solid {ACCENT};
     }}
     QPushButton#SearchHelpBtn {{
-        color: rgba(255,255,255,0.38);
+        color: {TEXT_TERTIARY};
         background: transparent;
         border: none;
         border-radius: 3px;
         padding: 2px 4px;
     }}
     QPushButton#SearchHelpBtn:hover {{
-        color: rgba(255,255,255,0.92);
-        background-color: rgba(255,255,255,0.06);
+        color: {TEXT_PRIMARY};
+        background-color: {HOVER_BG_MEDIUM};
     }}
 """
 
@@ -51,7 +62,9 @@ def _make_search_icon() -> QIcon:
     pix.fill(Qt.GlobalColor.transparent)
     p = QPainter(pix)
     p.setRenderHint(QPainter.RenderHint.Antialiasing)
-    pen = QPen(QColor(10, 222, 153, 160), 1.8)   # ACCENT at ~63 % opacity
+    col = QColor(_tk.ACCENT)  # reads live value after set_active_palette()
+    col.setAlpha(160)
+    pen = QPen(col, 1.8)
     pen.setCapStyle(Qt.PenCapStyle.RoundCap)
     p.setPen(pen)
     p.setBrush(Qt.BrushStyle.NoBrush)
@@ -77,7 +90,9 @@ class SearchBar(QWidget):
         self._edit.setClearButtonEnabled(True)
         self._edit.textChanged.connect(self.search_changed)
         # Magnifying glass icon lives inside the QLineEdit (native Qt feature).
-        self._edit.addAction(_make_search_icon(), QLineEdit.ActionPosition.LeadingPosition)
+        self._icon_action = self._edit.addAction(
+            _make_search_icon(), QLineEdit.ActionPosition.LeadingPosition
+        )
 
         help_btn = QPushButton("?")
         help_btn.setObjectName("SearchHelpBtn")
@@ -94,6 +109,40 @@ class SearchBar(QWidget):
         layout.addWidget(help_btn)
 
         self.setStyleSheet(_STYLESHEET)
+
+    def refresh_theme(self) -> None:
+        self.setStyleSheet(
+            f"""
+            QLineEdit#SearchInput {{
+                background-color: {_tk.ACCENT_FILL};
+                border: 1px solid {_tk.ACCENT_BORDER};
+                border-radius: {_tk.RADIUS}px;
+                color: {_tk.TEXT_PRIMARY};
+                font-size: 13px;
+                min-height: 44px;
+                selection-background-color: {_tk.SELECTION_BG};
+            }}
+            QLineEdit#SearchInput:focus {{
+                background-color: {_tk.ACCENT_FOCUS_BG};
+                border: 2px solid {_tk.ACCENT};
+            }}
+            QPushButton#SearchHelpBtn {{
+                color: {_tk.TEXT_TERTIARY};
+                background: transparent;
+                border: none;
+                border-radius: 3px;
+                padding: 2px 4px;
+            }}
+            QPushButton#SearchHelpBtn:hover {{
+                color: {_tk.TEXT_PRIMARY};
+                background-color: {_tk.HOVER_BG_MEDIUM};
+            }}
+            """
+        )
+        self._edit.removeAction(self._icon_action)
+        self._icon_action = self._edit.addAction(
+            _make_search_icon(), QLineEdit.ActionPosition.LeadingPosition
+        )
 
     def text(self) -> str:
         return self._edit.text()

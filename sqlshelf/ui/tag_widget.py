@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .theme import tokens as _tk
 from .theme.tokens import (
     ACCENT,
     ACCENT_FILL,
@@ -99,19 +100,16 @@ class FlowLayout(QLayout):
 def _display_chip_style(bg: str, fg: str) -> str:
     return (
         f"background-color: {bg}; color: {fg}; "
-        f"border-radius: {TAG_RADIUS}px; padding: 2px 9px; font-size: 11px;"
+        f"border-radius: {_tk.TAG_RADIUS}px; padding: 2px 9px; font-size: 11px;"
     )
 
 
 def _input_chip_style(bg: str, fg: str) -> str:
     return (
         f"QPushButton {{ background-color: {bg}; color: {fg}; border: none; "
-        f"border-radius: {TAG_RADIUS - 1}px; padding: 1px 6px; font-size: 11px; text-align: left; max-height: 20px; }} "
-        f"QPushButton:hover {{ background-color: {CHIP_DELETE_BG}; color: {CHIP_DELETE_FG}; }}"
+        f"border-radius: {_tk.TAG_RADIUS - 1}px; padding: 1px 6px; font-size: 11px; text-align: left; max-height: 20px; }} "
+        f"QPushButton:hover {{ background-color: {_tk.CHIP_DELETE_BG}; color: {_tk.CHIP_DELETE_FG}; }}"
     )
-
-_CHIP_BG = TAG_BG
-_CHIP_FG = TAG_TEXT
 
 
 # ---------------------------------------------------------------------------
@@ -128,7 +126,7 @@ class TagDisplayWidget(QWidget):
 
     def set_tags(self, tags: list[str], *, accent: bool = False) -> None:
         self._clear()
-        bg, fg = (ACCENT_FILL, ACCENT) if accent else (_CHIP_BG, _CHIP_FG)
+        bg, fg = (_tk.ACCENT_FILL, _tk.ACCENT) if accent else (_tk.TAG_BG, _tk.TAG_TEXT)
         for tag in tags:
             chip = QLabel(f"#{tag}")
             chip.setStyleSheet(_display_chip_style(bg, fg))
@@ -210,7 +208,7 @@ class TagInputWidget(QWidget):
         # Re-insert chips before the input
         for tag in self._tags:
             chip = QPushButton(f"#{tag}  ×")
-            chip.setStyleSheet(_input_chip_style(_CHIP_BG, _CHIP_FG))
+            chip.setStyleSheet(_input_chip_style(_tk.TAG_BG, _tk.TAG_TEXT))
             chip.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
             chip.clicked.connect(lambda checked=False, t=tag: self._remove_tag(t))
             # Insert before the input field
