@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QFormLayout,
@@ -52,6 +54,7 @@ class MetadataPanel(QWidget):
 
     filter_requested = Signal(str, str)
     favorite_toggled = Signal()
+    reveal_requested = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -61,6 +64,7 @@ class MetadataPanel(QWidget):
 
         self.setObjectName("MetadataPanel")
         self.setAutoFillBackground(True)
+        self._file_path: Path | None = None
 
         # ── Star / title / Ctrl+K hint ─────────────────────────────────────
         self._star_btn = QPushButton("☆")
@@ -117,6 +121,19 @@ class MetadataPanel(QWidget):
         self._columns_section = _section_container("COLUMNS", self._columns_flow_widget)
         self._columns_section.setVisible(False)
 
+        # ── File path (clickable) ──────────────────────────────────────────
+        self._path_btn = QPushButton()
+        self._path_btn.setFlat(True)
+        self._path_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._path_btn.setStyleSheet(
+            f"QPushButton {{ background: transparent; border: none; text-align: left; "
+            f"color: {TEXT_SECONDARY}; font-size: 11px; padding: 0px 0px 1px 0px; }} "
+            f"QPushButton:hover {{ color: {ACCENT}; }}"
+        )
+        self._path_btn.clicked.connect(self.reveal_requested)
+        self._path_section = _section_container("FILE", self._path_btn)
+        self._path_section.setVisible(False)
+
         # ── Read-only container ────────────────────────────────────────────
         ro_layout = QVBoxLayout()
         ro_layout.setContentsMargins(10, 10, 10, 8)
@@ -126,6 +143,7 @@ class MetadataPanel(QWidget):
         ro_layout.addWidget(self._tags_section)
         ro_layout.addWidget(self._tables_section)
         ro_layout.addWidget(self._columns_section)
+        ro_layout.addWidget(self._path_section)
 
         self._ro_widget = QWidget()
         self._ro_widget.setLayout(ro_layout)
@@ -222,6 +240,16 @@ class MetadataPanel(QWidget):
         self._desc_edit.setPlainText(description)
         self._tags_input.set_tags(tags)
 
+    def set_path(self, path: Path | None) -> None:
+        self._file_path = path
+        if path is None:
+            self._path_section.setVisible(False)
+            return
+        full = str(path)
+        self._path_btn.setText(full)
+        self._path_btn.setToolTip(full)
+        self._path_section.setVisible(True)
+
     def set_favorite(self, is_fav: bool) -> None:
         if is_fav:
             self._star_btn.setText("★")
@@ -263,6 +291,7 @@ class MetadataPanel(QWidget):
         self._desc_edit.clear()
         self._tags_input.set_tags([])
         self.set_favorite(False)
+        self.set_path(None)
 
 
 # ── Module-level helper (avoids repeating section-building boilerplate) ────────

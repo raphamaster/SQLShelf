@@ -249,6 +249,7 @@ class MainWindow(QMainWindow):
         self._metadata_panel = MetadataPanel()
         self._metadata_panel.filter_requested.connect(self._on_filter_requested)
         self._metadata_panel.favorite_toggled.connect(self._toggle_favorite)
+        self._metadata_panel.reveal_requested.connect(self.reveal_in_explorer)
 
         # Editor toolbar
         self._toolbar = QToolBar()
@@ -596,6 +597,7 @@ class MainWindow(QMainWindow):
             tables=objects.get("table", []),
             columns=objects.get("column", []),
         )
+        self._metadata_panel.set_path(path)
 
         if self._db is not None:
             try:
