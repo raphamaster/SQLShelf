@@ -12,13 +12,21 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .theme.tokens import CHIP_DELETE_BG, CHIP_DELETE_FG, TAG_BG, TAG_RADIUS, TAG_TEXT
+from .theme.tokens import (
+    ACCENT,
+    ACCENT_FILL,
+    CHIP_DELETE_BG,
+    CHIP_DELETE_FG,
+    TAG_BG,
+    TAG_RADIUS,
+    TAG_TEXT,
+)
 
 # ---------------------------------------------------------------------------
 # Flow layout (wrapping horizontal layout)
 # ---------------------------------------------------------------------------
 
-class _FlowLayout(QLayout):
+class FlowLayout(QLayout):
     """Items flow left-to-right and wrap to the next row when width is exceeded."""
 
     def __init__(self, parent: QWidget | None = None, h_gap: int = 4, v_gap: int = 4) -> None:
@@ -115,14 +123,15 @@ class TagDisplayWidget(QWidget):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self._flow = _FlowLayout(self, h_gap=4, v_gap=2)
+        self._flow = FlowLayout(self, h_gap=4, v_gap=2)
         self.setLayout(self._flow)
 
-    def set_tags(self, tags: list[str]) -> None:
+    def set_tags(self, tags: list[str], *, accent: bool = False) -> None:
         self._clear()
+        bg, fg = (ACCENT_FILL, ACCENT) if accent else (_CHIP_BG, _CHIP_FG)
         for tag in tags:
             chip = QLabel(f"#{tag}")
-            chip.setStyleSheet(_display_chip_style(_CHIP_BG, _CHIP_FG))
+            chip.setStyleSheet(_display_chip_style(bg, fg))
             chip.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
             self._flow.addWidget(chip)
         self.updateGeometry()
@@ -151,7 +160,7 @@ class TagInputWidget(QWidget):
 
         # Container for chips + input, all in a flow layout
         self._flow_widget = QWidget()
-        self._flow = _FlowLayout(self._flow_widget, h_gap=4, v_gap=3)
+        self._flow = FlowLayout(self._flow_widget, h_gap=4, v_gap=3)
         self._flow_widget.setLayout(self._flow)
 
         self._input = QLineEdit()
