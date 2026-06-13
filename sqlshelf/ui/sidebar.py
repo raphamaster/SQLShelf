@@ -260,7 +260,15 @@ class SidebarWidget(QWidget):
         self._empty_label.setVisible(not has)
         self._folders_list.setVisible(has)
 
+    def _deactivate_nav_btn(self) -> None:
+        if self._active_nav_btn is not None:
+            self._active_nav_btn.setProperty("active", False)
+            self._active_nav_btn.style().unpolish(self._active_nav_btn)
+            self._active_nav_btn.style().polish(self._active_nav_btn)
+            self._active_nav_btn = None
+
     def _on_folder_item_clicked(self, item: QListWidgetItem) -> None:
+        self._deactivate_nav_btn()
         path: Path = item.data(_ROLE_PATH)
         self.folder_selected.emit(path)
 

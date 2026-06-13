@@ -101,7 +101,7 @@ def app_stylesheet() -> str:
         QToolBar#EditorToolBar {{
             background-color: {CARD};
             border: none;
-            padding: 2px 8px;
+            padding: 2px 8px 2px 10px;
             spacing: 2px;
         }}
         QToolBar#EditorToolBar QPushButton {{
@@ -176,5 +176,44 @@ def app_stylesheet() -> str:
             background-color: rgba(255,255,255,0.08);
             border-radius: 4px;
             border: 1px solid {BORDER_EMPH};
+        }}
+        QPlainTextEdit {{
+            selection-background-color: #264F78;
+            selection-color: #ffffff;
+        }}
+        QMenuBar {{
+            background-color: {BG_APP};
+            color: {TEXT_PRIMARY};
+            border-bottom: 1px solid {BORDER};
+        }}
+        QMenuBar::item {{
+            background: transparent;
+            padding: 4px 8px;
+        }}
+        QMenuBar::item:selected {{
+            background-color: {BORDER_EMPH};
+            color: {TEXT_PRIMARY};
+            border-radius: 3px;
+        }}
+        QMenuBar::item:pressed {{
+            background-color: {CARD};
+            color: {TEXT_PRIMARY};
+        }}
+        QMenu {{
+            background-color: {CARD};
+            border: 1px solid {BORDER_EMPH};
+            color: {TEXT_PRIMARY};
+        }}
+        QMenu::item {{
+            padding: 5px 20px 5px 10px;
+        }}
+        QMenu::item:selected {{
+            background-color: {BORDER_EMPH};
+            color: {TEXT_PRIMARY};
+        }}
+        QMenu::separator {{
+            height: 1px;
+            background-color: {BORDER};
+            margin: 2px 0px;
         }}
     """
