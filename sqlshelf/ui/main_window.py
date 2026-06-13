@@ -1148,8 +1148,10 @@ class MainWindow(QMainWindow):
                 self, tr("msg.no_folder.title"), tr("msg.no_folder.text")
             )
             return
-        subfolders = self._list_subfolders()
-        dlg = NewQueryDialog(self._folder, subfolders, self)
+        all_projects = [p for p, _ in cfg.get_known_folders()]
+        if not all_projects:
+            all_projects = [self._folder]
+        dlg = NewQueryDialog(self._folder, all_projects, self)
         if dlg.exec() == dlg.DialogCode.Accepted and dlg.created_path is not None:
             self._post_create(dlg.created_path)
 
@@ -1166,7 +1168,10 @@ class MainWindow(QMainWindow):
                 tr("msg.no_templates.text", path=str(Path.home() / ".sqlshelf" / "templates")),
             )
             return
-        dlg = TemplateDialog(self._folder, self._list_subfolders(), self)
+        all_projects = [p for p, _ in cfg.get_known_folders()]
+        if not all_projects:
+            all_projects = [self._folder]
+        dlg = TemplateDialog(self._folder, all_projects, self)
         if dlg.exec() == dlg.DialogCode.Accepted and dlg.created_path is not None:
             self._post_create(dlg.created_path)
 
@@ -1225,16 +1230,38 @@ class MainWindow(QMainWindow):
         return [
             str(p.relative_to(self._folder))
             for p in self._folder.rglob("*")
-            if p.is_dir() and ".sqlshelf" not in p.parts
+            if p.is_dir()
+            and not any(part.startswith(".") for part in p.relative_to(self._folder).parts)
         ]
 
     def _post_create(self, path: Path) -> None:
+        # Determine which known project the created file belongs to
+        target_project: Path | None = None
+        for proj, _ in cfg.get_known_folders():
+            try:
+                path.relative_to(proj)
+                target_project = proj
+                break
+            except ValueError:
+                continue
+
+        if target_project is None:
+            self._status_bar.showMessage(tr("status.created", name=path.name))
+            return
+
+        # Switch to the target project if different from the current one
+        if target_project != self._folder:
+            self._on_sidebar_folder_selected(target_project)
+
         if self._folder is None:
             return
         updated = [q for q in scan_folder(self._folder) if q.path == path]
         if updated and self._db is not None:
             self._db.upsert_query(updated[0])
-        self._pending_select = path.relative_to(self._folder).as_posix()
+        try:
+            self._pending_select = path.relative_to(self._folder).as_posix()
+        except ValueError:
+            pass
         self._refresh_ui()
         self._status_bar.showMessage(tr("status.created", name=path.name))
 
