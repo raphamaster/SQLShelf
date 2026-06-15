@@ -1380,8 +1380,13 @@ class MainWindow(QMainWindow):
         header.addStretch()
         layout.addLayout(header)
 
-        # Body text with clickable links
-        body = QLabel(tr("about.text"))
+        # Body text with clickable links — inline style is the only reliable
+        # way to set link color when qt-material overrides the QPalette.
+        from .theme.tokens import ACCENT
+        about_html = tr("about.text").replace(
+            "<a href=", f'<a style="color:{ACCENT};" href='
+        )
+        body = QLabel(about_html)
         body.setWordWrap(True)
         body.setOpenExternalLinks(True)
         body.setTextInteractionFlags(
