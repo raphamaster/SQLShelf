@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1] - 2025-06-14
+
+### Fixed
+- UI labels showing translation keys (e.g. `SIDEBAR.OPEN_FOLDER`) instead of text — `locales/` directory was missing from the PyInstaller bundle
+
+---
+
 ## [1.0.0] - 2025-06-14
 
 First public release of SQLShelf — open-source desktop SQL query manager built with Python + PySide6.
@@ -39,8 +46,8 @@ First public release of SQLShelf — open-source desktop SQL query manager built
 
 | Platform | Artifact |
 |----------|----------|
-| Windows 10/11 x64 | `SQLShelf-1.0.0-windows-x64-setup.exe` (Inno Setup installer) |
-| Linux x86_64 | `SQLShelf-1.0.0-linux-x86_64.AppImage` |
+| Windows 10/11 x64 | `SQLShelf-1.0.1-windows-x64-setup.exe` (Inno Setup installer) |
+| Linux x86_64 | `SQLShelf-1.0.1-linux-x86_64.AppImage` |
 
 ### Requirements (if running from source)
 
