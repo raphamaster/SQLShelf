@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import os
+from datetime import datetime
 from pathlib import Path
 
 import pytest
 
 from sqlshelf.core.index_db import IndexDB
 from sqlshelf.core.models import Query
-from sqlshelf.core.search import parse_query, search
+from sqlshelf.core.search import _parse_date_filter, parse_query, search
 
 
 def make_sql_file(folder: Path, name: str, content: str = "SELECT 1") -> Path:
@@ -47,7 +49,7 @@ class TestParseQuery:
     def test_empty_string(self) -> None:
         filters, free = parse_query("")
         assert free == ""
-        assert filters == {"table": [], "col": [], "tag": []}
+        assert filters == {"table": [], "col": [], "tag": [], "date": []}
 
     def test_free_text_only(self) -> None:
         filters, free = parse_query("invoice amount")
@@ -140,3 +142,89 @@ class TestSearch:
         results_lower = db_with_data.search("table:invoices")
         results_upper = db_with_data.search("table:INVOICES")
         assert len(results_lower) == len(results_upper)
+
+
+class TestParseDateFilter:
+    def test_valid_date(self) -> None:
+        result = _parse_date_filter("15/06/2026")
+        assert result is not None
+        start, end = result
+        assert end > start
+        # start == midnight 15/06/2026 local, end == 23:59:59 same day
+        d_start = datetime.fromtimestamp(start)
+        d_end = datetime.fromtimestamp(end)
+        assert d_start.date() == datetime(2026, 6, 15).date()
+        assert d_end.date() == datetime(2026, 6, 15).date()
+        assert d_start.hour == 0 and d_start.minute == 0
+        assert d_end.hour == 23 and d_end.minute == 59
+
+    def test_invalid_format_returns_none(self) -> None:
+        assert _parse_date_filter("2026-06-15") is None
+        assert _parse_date_filter("not-a-date") is None
+        assert _parse_date_filter("32/01/2026") is None
+
+
+class TestDateSearch:
+    def _make_query_with_mtime(
+        self, folder: Path, name: str, title: str, mtime: float
+    ) -> Query:
+        p = make_sql_file(folder, name)
+        os.utime(p, (mtime, mtime))
+        return Query(path=p, title=title, description="", tags=[], body="SELECT 1")
+
+    def test_parse_query_date_token(self) -> None:
+        filters, free = parse_query("date:15/06/2026")
+        assert filters["date"] == ["15/06/2026"]
+        assert free == ""
+
+    def test_parse_query_date_with_free_text(self) -> None:
+        filters, free = parse_query("invoice date:15/06/2026")
+        assert filters["date"] == ["15/06/2026"]
+        assert "invoice" in free
+
+    def test_date_filter_matches_exact_day(self, tmp_path: Path) -> None:
+        target_ts = datetime(2026, 6, 15, 12, 0, 0).timestamp()
+        q = self._make_query_with_mtime(tmp_path, "a.sql", "Target query", target_ts)
+        db = IndexDB(tmp_path)
+        db.index_all([q])
+
+        results = db.search("date:15/06/2026")
+        assert len(results) == 1
+        assert results[0].title == "Target query"
+
+    def test_date_filter_excludes_other_days(self, tmp_path: Path) -> None:
+        ts_15 = datetime(2026, 6, 15, 12, 0, 0).timestamp()
+        ts_16 = datetime(2026, 6, 16, 12, 0, 0).timestamp()
+        q1 = self._make_query_with_mtime(tmp_path, "a.sql", "Day 15", ts_15)
+        q2 = self._make_query_with_mtime(tmp_path, "b.sql", "Day 16", ts_16)
+        db = IndexDB(tmp_path)
+        db.index_all([q1, q2])
+
+        results = db.search("date:15/06/2026")
+        assert len(results) == 1
+        assert results[0].title == "Day 15"
+
+    def test_date_filter_invalid_format_returns_all(self, tmp_path: Path) -> None:
+        q = self._make_query_with_mtime(
+            tmp_path, "a.sql", "Any query", datetime(2026, 6, 15, 12, 0, 0).timestamp()
+        )
+        db = IndexDB(tmp_path)
+        db.index_all([q])
+        # Invalid date → filter ignored → falls back to all queries
+        results = db.search("date:2026-06-15")
+        assert isinstance(results, list)
+
+    def test_date_combined_with_tag(self, tmp_path: Path) -> None:
+        ts = datetime(2026, 6, 15, 10, 0, 0).timestamp()
+        p1 = make_sql_file(tmp_path, "a.sql", "SELECT 1")
+        p2 = make_sql_file(tmp_path, "b.sql", "SELECT 2")
+        os.utime(p1, (ts, ts))
+        os.utime(p2, (ts, ts))
+        q1 = Query(path=p1, title="Tagged query", description="", tags=["report"], body="SELECT 1")
+        q2 = Query(path=p2, title="Other query", description="", tags=["other"], body="SELECT 2")
+        db = IndexDB(tmp_path)
+        db.index_all([q1, q2])
+
+        results = db.search("date:15/06/2026 tag:report")
+        assert len(results) == 1
+        assert results[0].title == "Tagged query"
