@@ -143,4 +143,5 @@ jobs:
             release-assets/* \
             --title "SQLShelf ${{ github.ref_name }}" \
             --notes-file CHANGELOG.md \
-            --draft=false
+            --draft=false \
+            --clobber
