@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.0.3] - 2026-06-15
+
+### Added
+- **Tag autocomplete** — typing in the tag field (query editor and New Query dialog) now suggests existing tags from the index
+- **Sort by modification date** — query list is sorted by file modification time (newest first) by default across all views (All queries, folder, search results)
+- **Modification date in metadata panel** — file's last modification date is shown as a dedicated section below the file path
+- **`date:` search filter** — search bar and command palette (Ctrl+P) now support `date:DD/MM/YYYY` to filter queries modified on a specific day; can be combined with other operators (e.g. `date:15/06/2026 tag:report`)
+
+---
+
 ## [1.0.2] - 2025-06-14
 
 ### Fixed
