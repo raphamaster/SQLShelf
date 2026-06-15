@@ -46,7 +46,9 @@ jobs:
         run: choco install innosetup --no-progress -y
 
       - name: Create installer
-        run: iscc installer\sqlshelf.iss
+        run: |
+          $version = "${{ github.ref_name }}".TrimStart("v")
+          iscc /DAppVersion=$version installer\sqlshelf.iss
 
       - name: Upload Windows installer
         uses: actions/upload-artifact@v4
