@@ -127,7 +127,7 @@ def search(conn: sqlite3.Connection, text: str) -> list[SearchResult]:
                    {_IS_FAV_SUBQ}
             FROM queries q
             {where_clause}
-            ORDER BY q.title
+            ORDER BY q.file_mtime DESC, q.title
         """
 
     try:
@@ -142,7 +142,7 @@ def _all_queries(conn: sqlite3.Connection) -> list[SearchResult]:
     rows = conn.execute(
         f"SELECT q.id, q.rel_path, q.title, COALESCE(q.description, ''), '', 0.0,"
         f" q.updated_at, {_TABLES_SUBQ}, {_IS_FAV_SUBQ}"
-        " FROM queries q ORDER BY q.title"
+        " FROM queries q ORDER BY q.file_mtime DESC, q.title"
     ).fetchall()
     return _rows_to_results(conn, rows)
 
