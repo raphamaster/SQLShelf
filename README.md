@@ -18,6 +18,12 @@
 
 ---
 
+<p align="center">
+  <img src="images/Screenshot_SQLSheld.png" alt="SQLShelf screenshot" width="860" />
+</p>
+
+---
+
 ## What is SQLShelf?
 
 If you work with SQL Server and accumulate dozens (or hundreds) of `.sql` files scattered across folders, SQLShelf is your library. It scans any folder, indexes all your queries and gives you instant full-text search — including searches by table name, column name or tag.
