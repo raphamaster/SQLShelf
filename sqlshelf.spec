@@ -10,6 +10,7 @@ block_cipher = None
 datas = [
     ("sqlshelf/core/schema.sql", "sqlshelf/core"),
     ("images", "images"),
+    ("locales", "locales"),
 ]
 datas += collect_data_files("qt_material")
 
