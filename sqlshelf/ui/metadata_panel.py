@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal
@@ -135,7 +136,7 @@ class MetadataPanel(QWidget):
         self._columns_section = _section_container(tr("metadata.section_columns"), self._columns_flow_widget)
         self._columns_section.setVisible(False)
 
-        # ── File path (clickable) ──────────────────────────────────────────
+        # ── File path (clickable) + modification date ──────────────────────
         self._path_btn = QPushButton()
         self._path_btn.setFlat(True)
         self._path_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -145,7 +146,20 @@ class MetadataPanel(QWidget):
             f"QPushButton:hover {{ color: {ACCENT}; }}"
         )
         self._path_btn.clicked.connect(self.reveal_requested)
-        self._path_section = _section_container(tr("metadata.section_file"), self._path_btn)
+
+        self._mtime_label = QLabel()
+        self._mtime_label.setStyleSheet(
+            f"color: {TEXT_TERTIARY}; font-size: 10px;"
+        )
+
+        _path_content = QWidget()
+        _path_vbox = QVBoxLayout(_path_content)
+        _path_vbox.setContentsMargins(0, 0, 0, 0)
+        _path_vbox.setSpacing(1)
+        _path_vbox.addWidget(self._path_btn)
+        _path_vbox.addWidget(self._mtime_label)
+
+        self._path_section = _section_container(tr("metadata.section_file"), _path_content)
         self._path_section.setVisible(False)
 
         # ── Read-only container ────────────────────────────────────────────
@@ -263,6 +277,13 @@ class MetadataPanel(QWidget):
         full = str(path)
         self._path_btn.setText(full)
         self._path_btn.setToolTip(full)
+        try:
+            mtime = path.stat().st_mtime
+            dt = datetime.fromtimestamp(mtime).strftime("%d/%m/%Y  %H:%M")
+            self._mtime_label.setText(dt)
+            self._mtime_label.setVisible(True)
+        except OSError:
+            self._mtime_label.setVisible(False)
         self._path_section.setVisible(True)
 
     def set_favorite(self, is_fav: bool) -> None:
@@ -362,6 +383,7 @@ class MetadataPanel(QWidget):
         self._title_edit.clear()
         self._desc_edit.clear()
         self._tags_input.set_tags([])
+        self._mtime_label.setText("")
         self.set_favorite(False)
         self.set_path(None)
 
