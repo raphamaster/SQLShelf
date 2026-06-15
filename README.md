@@ -68,8 +68,8 @@ Your files stay exactly as they are. SQLShelf only adds an optional metadata blo
 
 | Platform | Installer |
 |----------|-----------|
-| **Windows 10/11 x64** | [SQLShelf-1.0.2-windows-x64-setup.exe](https://github.com/raphamaster/SQLShelf/releases/latest) |
-| **Linux x86_64** | [SQLShelf-1.0.2-linux-x86_64.AppImage](https://github.com/raphamaster/SQLShelf/releases/latest) |
+| **Windows 10/11 x64** | [SQLShelf-1.0.3-windows-x64-setup.exe](https://github.com/raphamaster/SQLShelf/releases/latest) |
+| **Linux x86_64** | [SQLShelf-1.0.3-linux-x86_64.AppImage](https://github.com/raphamaster/SQLShelf/releases/latest) |
 
 > **Windows note:** Windows SmartScreen may show a warning on first launch because the installer is not yet code-signed. Click **"More info → Run anyway"** to proceed. The app is open source — you can review every line of code here.
 
