@@ -281,6 +281,10 @@ class MetadataPanel(QWidget):
                 f"QPushButton:hover {{ color: {STAR_HOVER}; }}"
             )
 
+    def set_available_tags(self, tags: list[str]) -> None:
+        """Forward the known-tag pool to the tag input for autocomplete."""
+        self._tags_input.set_available_tags(tags)
+
     def set_edit_mode(self, enabled: bool) -> None:
         self._edit_mode = enabled
         self._ro_widget.setVisible(not enabled)

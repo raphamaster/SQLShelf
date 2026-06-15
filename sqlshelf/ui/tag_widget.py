@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from PySide6.QtCore import QPoint, QRect, QSize, Qt, Signal
+from PySide6.QtCore import QPoint, QRect, QSize, QStringListModel, QTimer, Qt, Signal
 from PySide6.QtWidgets import (
+    QCompleter,
     QLabel,
     QLayout,
     QLayoutItem,
@@ -155,6 +156,7 @@ class TagInputWidget(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._tags: list[str] = []
+        self._available_tags: list[str] = []
 
         # Container for chips + input, all in a flow layout
         self._flow_widget = QWidget()
@@ -170,6 +172,15 @@ class TagInputWidget(QWidget):
         self._input.returnPressed.connect(self._add_from_input)
         # Also trigger on comma
         self._input.textChanged.connect(self._check_comma)
+
+        self._completer_model = QStringListModel()
+        self._completer = QCompleter(self._completer_model, self._input)
+        self._completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+        self._completer.setFilterMode(Qt.MatchFlag.MatchContains)
+        self._completer.setCompletionMode(QCompleter.CompletionMode.PopupCompletion)
+        self._completer.activated.connect(self._on_completer_activated)
+        self._input.setCompleter(self._completer)
+
         self._flow.addWidget(self._input)
 
         outer = QVBoxLayout(self)
@@ -185,9 +196,15 @@ class TagInputWidget(QWidget):
     def set_tags(self, tags: list[str]) -> None:
         self._tags = list(tags)
         self._rebuild()
+        self._update_completer()
 
     def get_tags(self) -> list[str]:
         return list(self._tags)
+
+    def set_available_tags(self, tags: list[str]) -> None:
+        """Provide the pool of known tags shown as autocomplete suggestions."""
+        self._available_tags = list(tags)
+        self._update_completer()
 
     # ------------------------------------------------------------------
     # Internal
@@ -228,6 +245,21 @@ class TagInputWidget(QWidget):
                     self._flow.addItem(item)
                 break
 
+    def _update_completer(self) -> None:
+        suggestions = [t for t in self._available_tags if t not in self._tags]
+        self._completer_model.setStringList(suggestions)
+
+    def _on_completer_activated(self, text: str) -> None:
+        tag = text.strip().lower()
+        if tag and tag not in self._tags:
+            self._tags.append(tag)
+        self._rebuild()
+        self._update_completer()
+        self.tags_changed.emit(self._tags)
+        # QCompleter writes the selected text into the QLineEdit *after* this
+        # signal returns, so defer the clear to the next event-loop iteration.
+        QTimer.singleShot(0, self._input.clear)
+
     def _add_from_input(self) -> None:
         raw = self._input.text().replace(",", " ")
         for part in raw.split():
@@ -236,6 +268,7 @@ class TagInputWidget(QWidget):
                 self._tags.append(tag)
         self._input.clear()
         self._rebuild()
+        self._update_completer()
         self.tags_changed.emit(self._tags)
 
     def _check_comma(self, text: str) -> None:
@@ -246,4 +279,5 @@ class TagInputWidget(QWidget):
         if tag in self._tags:
             self._tags.remove(tag)
             self._rebuild()
+            self._update_completer()
             self.tags_changed.emit(self._tags)

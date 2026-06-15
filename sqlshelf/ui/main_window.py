@@ -1088,6 +1088,8 @@ class MainWindow(QMainWindow):
             return
         self._edit_mode = True
         self._editor.setReadOnly(False)
+        if self._db is not None:
+            self._metadata_panel.set_available_tags(self._db.get_all_tags())
         self._metadata_panel.set_edit_mode(True)
         self._save_btn.setVisible(True)
         self._cancel_btn.setVisible(True)
@@ -1162,7 +1164,8 @@ class MainWindow(QMainWindow):
         all_projects = [p for p, _ in cfg.get_known_folders()]
         if not all_projects:
             all_projects = [self._folder]
-        dlg = NewQueryDialog(self._folder, all_projects, self)
+        available_tags = self._db.get_all_tags() if self._db is not None else []
+        dlg = NewQueryDialog(self._folder, all_projects, self, available_tags)
         if dlg.exec() == dlg.DialogCode.Accepted and dlg.created_path is not None:
             self._post_create(dlg.created_path)
 
