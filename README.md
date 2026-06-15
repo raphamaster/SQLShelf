@@ -13,7 +13,7 @@
   </a>
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux-0ADE99?style=flat-square" alt="Platform"/>
   <img src="https://img.shields.io/badge/python-3.12%2B-0ADE99?style=flat-square" alt="Python"/>
-  <img src="https://img.shields.io/badge/license-MIT-0ADE99?style=flat-square" alt="License"/>
+  <img src="https://img.shields.io/badge/license-GPL--v3-0ADE99?style=flat-square" alt="License"/>
 </p>
 
 ---
@@ -156,7 +156,7 @@ Tests cover: `frontmatter`, `encoding`, `sql_objects`, `search`, `index_db`.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+GNU General Public License v3.0 — see [LICENSE](LICENSE).
 
 ---
 
