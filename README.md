@@ -19,7 +19,7 @@
 ---
 
 <p align="center">
-  <img src="images/Screenshot_SQLSheld.png" alt="SQLShelf screenshot" width="860" />
+  <img src="images/Screenshot_SQLShelf.png" alt="SQLShelf screenshot" width="860" />
 </p>
 
 ---
