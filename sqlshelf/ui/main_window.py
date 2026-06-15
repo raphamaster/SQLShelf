@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, QTimer, Signal
-from PySide6.QtGui import QAction, QActionGroup, QFont, QIcon, QKeySequence
+from PySide6.QtGui import QAction, QActionGroup, QFont, QIcon, QKeySequence, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -1359,7 +1359,47 @@ class MainWindow(QMainWindow):
         QMessageBox.information(self, tr("help.title"), tr("help.text"))
 
     def _show_about(self) -> None:
-        QMessageBox.about(self, tr("about.title"), tr("about.text"))
+        dlg = QDialog(self)
+        dlg.setWindowTitle(tr("about.title"))
+        dlg.setWindowFlags(dlg.windowFlags() & ~Qt.WindowContextHelpButtonHint)
+        dlg.setFixedWidth(420)
+
+        layout = QVBoxLayout(dlg)
+        layout.setContentsMargins(24, 24, 24, 20)
+        layout.setSpacing(16)
+
+        # Logo + app name row
+        header = QHBoxLayout()
+        header.setSpacing(14)
+        logo_label = QLabel()
+        logo_path = Path(__file__).parent.parent.parent / "images" / "logo_sqlshelf.png"
+        if logo_path.exists():
+            pix = QPixmap(str(logo_path)).scaledToHeight(48, Qt.SmoothTransformation)
+            logo_label.setPixmap(pix)
+        header.addWidget(logo_label)
+        header.addStretch()
+        layout.addLayout(header)
+
+        # Body text with clickable links
+        body = QLabel(tr("about.text"))
+        body.setWordWrap(True)
+        body.setOpenExternalLinks(True)
+        body.setTextInteractionFlags(
+            Qt.TextSelectableByMouse | Qt.LinksAccessibleByMouse
+        )
+        body.setTextFormat(Qt.RichText)
+        layout.addWidget(body)
+
+        # OK button
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+        ok_btn = QPushButton("OK")
+        ok_btn.setFixedWidth(80)
+        ok_btn.clicked.connect(dlg.accept)
+        btn_row.addWidget(ok_btn)
+        layout.addLayout(btn_row)
+
+        dlg.exec()
 
     # ------------------------------------------------------------------
     # Theme
