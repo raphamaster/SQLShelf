@@ -79,7 +79,9 @@ class CommandPalette(QDialog):
         hint.setStyleSheet(f"color: {_tk.TEXT_TERTIARY}; font-size: 11px; padding: 2px 4px;")
 
         self._search = QLineEdit()
-        self._search.setPlaceholderText("Search queries… (table:X  col:X  tag:X  or name)")
+        self._search.setPlaceholderText(
+            "Search queries… (table:X  col:X  tag:X  date:DD/MM/YYYY  or name)"
+        )
         self._search.textChanged.connect(self._filter)
         self._search.installEventFilter(self)
 
@@ -109,17 +111,42 @@ class CommandPalette(QDialog):
             self._list.addItem(item)
 
     def _filter(self, text: str) -> None:
-        text = text.strip().lower()
-        if not text:
+        from ..core.search import _parse_date_filter, parse_query
+
+        raw = text.strip()
+        if not raw:
             self._populate(self._all_results)
-        else:
-            filtered = [
-                r for r in self._all_results
-                if text in r.title.lower()
-                or text in r.rel_path.lower()
-                or any(text in t.lower() for t in r.tags)
+            if self._list.count() > 0:
+                self._list.setCurrentRow(0)
+            return
+
+        filters, free_text = parse_query(raw)
+        results: list = self._all_results
+
+        for tname in filters["table"]:
+            tl = tname.lower()
+            results = [r for r in results if any(tl == t.lower() for t in r.tables)]
+
+        for tag in filters["tag"]:
+            tl = tag.lower()
+            results = [r for r in results if any(tl == t.lower() for t in r.tags)]
+
+        for date_str in filters["date"]:
+            ts = _parse_date_filter(date_str)
+            if ts is not None:
+                start_ts, end_ts = ts
+                results = [r for r in results if start_ts <= r.file_mtime <= end_ts]
+
+        if free_text:
+            needle = free_text.lower()
+            results = [
+                r for r in results
+                if needle in r.title.lower()
+                or needle in r.rel_path.lower()
+                or any(needle in t.lower() for t in r.tags)
             ]
-            self._populate(filtered)
+
+        self._populate(results)
         if self._list.count() > 0:
             self._list.setCurrentRow(0)
 

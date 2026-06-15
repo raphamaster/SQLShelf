@@ -38,8 +38,8 @@
   "sidebar.ctx_remove": "Remove from sidebar",
   "sidebar.ctx_deindex": "Deindex folder…",
 
-  "search.placeholder": "Search queries — or try  table:X · col:X · tag:X",
-  "search.help": "Search operators:\n  table:name   queries referencing a table\n  col:name     queries referencing a column\n  tag:name     queries tagged with name\n  free text    full-text search across title & body\n\nTip: combine operators, e.g.  table:orders  tag:report",
+  "search.placeholder": "Search queries — or try  table:X · col:X · tag:X · date:DD/MM/YYYY",
+  "search.help": "Search operators:\n  table:name        queries referencing a table\n  col:name          queries referencing a column\n  tag:name          queries tagged with name\n  date:DD/MM/YYYY   queries modified on that date\n  free text         full-text search across title & body\n\nTip: combine operators, e.g.  table:orders  tag:report  date:15/06/2026",
 
   "metadata.toggle_favorite": "Toggle favorite",
   "metadata.command_palette": "Command palette",

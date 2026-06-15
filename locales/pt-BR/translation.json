@@ -38,8 +38,8 @@
   "sidebar.ctx_remove": "Remover da barra lateral",
   "sidebar.ctx_deindex": "Desindexar pasta…",
 
-  "search.placeholder": "Buscar consultas — ou tente  table:X · col:X · tag:X",
-  "search.help": "Operadores de busca:\n  table:nome   consultas que referenciam uma tabela\n  col:nome     consultas que referenciam uma coluna\n  tag:nome     consultas com a tag especificada\n  texto livre  busca em texto completo no título e corpo\n\nDica: combine operadores, ex.:  table:pedidos  tag:relatorio",
+  "search.placeholder": "Buscar consultas — ou tente  table:X · col:X · tag:X · date:DD/MM/AAAA",
+  "search.help": "Operadores de busca:\n  table:nome          consultas que referenciam uma tabela\n  col:nome            consultas que referenciam uma coluna\n  tag:nome            consultas com a tag especificada\n  date:DD/MM/AAAA     consultas modificadas nesta data\n  texto livre         busca em texto completo no título e corpo\n\nDica: combine operadores, ex.:  table:pedidos  tag:relatorio  date:15/06/2026",
 
   "metadata.toggle_favorite": "Alternar favorito",
   "metadata.command_palette": "Paleta de comandos",
