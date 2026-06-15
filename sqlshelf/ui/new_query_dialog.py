@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 
 from ..core.frontmatter import write_sql_file
 from ..core.i18n import tr
+from .tag_widget import TagInputWidget
 from .theme import tokens as _tk
 
 
@@ -249,7 +250,7 @@ class NewQueryDialog(QDialog):
     """Dialog for creating a new .sql file with frontmatter.
 
     Usage::
-        dlg = NewQueryDialog(current_project, all_projects, parent)
+        dlg = NewQueryDialog(current_project, all_projects, parent, available_tags)
         if dlg.exec() == QDialog.DialogCode.Accepted:
             path = dlg.created_path
     """
@@ -259,6 +260,7 @@ class NewQueryDialog(QDialog):
         current_project: Path,
         all_projects: list[Path],
         parent: QWidget | None = None,
+        available_tags: list[str] | None = None,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle(tr("dialog.new_query.title"))
@@ -268,8 +270,9 @@ class NewQueryDialog(QDialog):
         self._title_edit = QLineEdit()
         self._title_edit.setPlaceholderText(tr("dialog.new_query.title_placeholder"))
 
-        self._tags_edit = QLineEdit()
-        self._tags_edit.setPlaceholderText(tr("dialog.new_query.tags_placeholder"))
+        self._tags_input = TagInputWidget()
+        if available_tags:
+            self._tags_input.set_available_tags(available_tags)
 
         self._desc_edit = QLineEdit()
         self._desc_edit.setPlaceholderText(tr("dialog.new_query.desc_placeholder"))
@@ -284,7 +287,7 @@ class NewQueryDialog(QDialog):
 
         form = QFormLayout()
         form.addRow(tr("dialog.new_query.label_title"), self._title_edit)
-        form.addRow(tr("dialog.new_query.label_tags"), self._tags_edit)
+        form.addRow(tr("dialog.new_query.label_tags"), self._tags_input)
         form.addRow(tr("dialog.new_query.label_desc"), self._desc_edit)
         form.addRow(tr("dialog.new_query.label_folder"), self._folder_selector)
 
@@ -320,8 +323,7 @@ class NewQueryDialog(QDialog):
             path = target_dir / f"{_safe_filename(title)}_{counter}.sql"
             counter += 1
 
-        raw_tags = self._tags_edit.text()
-        tags = [t.strip().lower() for t in raw_tags.split(",") if t.strip()]
+        tags = self._tags_input.get_tags()
 
         metadata = {
             "title": title,
