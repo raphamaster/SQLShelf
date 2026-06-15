@@ -7,9 +7,9 @@ from PyInstaller.utils.hooks import collect_data_files
 
 block_cipher = None
 
-# Include the schema.sql resource shipped inside the package
 datas = [
     ("sqlshelf/core/schema.sql", "sqlshelf/core"),
+    ("images", "images"),
 ]
 datas += collect_data_files("qt_material")
 
@@ -55,7 +55,8 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=None,
+    icon="images/FavIcon.ico",
+    version="installer/version_info.txt",
 )
 
 coll = COLLECT(

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=SQLShelf
+Comment=SQL Query Manager — organize, search and annotate .sql files
+Exec=SQLShelf
+Icon=sqlshelf
+Type=Application
+Categories=Development;Database;
+Keywords=sql;query;database;
+StartupNotify=true
+StartupWMClass=SQLShelf
