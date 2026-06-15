@@ -112,7 +112,8 @@ def search(conn: sqlite3.Connection, text: str) -> list[SearchResult]:
                    bm25(queries_fts),
                    q.updated_at,
                    {_TABLES_SUBQ},
-                   {_IS_FAV_SUBQ}
+                   {_IS_FAV_SUBQ},
+                   q.file_mtime
             FROM queries q
             JOIN queries_fts ON queries_fts.rowid = q.id
             {where_clause}
@@ -124,7 +125,8 @@ def search(conn: sqlite3.Connection, text: str) -> list[SearchResult]:
                    '', 0.0,
                    q.updated_at,
                    {_TABLES_SUBQ},
-                   {_IS_FAV_SUBQ}
+                   {_IS_FAV_SUBQ},
+                   q.file_mtime
             FROM queries q
             {where_clause}
             ORDER BY q.file_mtime DESC, q.title
@@ -141,7 +143,7 @@ def search(conn: sqlite3.Connection, text: str) -> list[SearchResult]:
 def _all_queries(conn: sqlite3.Connection) -> list[SearchResult]:
     rows = conn.execute(
         f"SELECT q.id, q.rel_path, q.title, COALESCE(q.description, ''), '', 0.0,"
-        f" q.updated_at, {_TABLES_SUBQ}, {_IS_FAV_SUBQ}"
+        f" q.updated_at, {_TABLES_SUBQ}, {_IS_FAV_SUBQ}, q.file_mtime"
         " FROM queries q ORDER BY q.file_mtime DESC, q.title"
     ).fetchall()
     return _rows_to_results(conn, rows)
@@ -170,7 +172,7 @@ def _rows_to_results(
 
     results = []
     for row in rows:
-        qid, rel_path, title, description, snippet, rank, updated_at, tables_str, is_fav = row
+        qid, rel_path, title, description, snippet, rank, updated_at, tables_str, is_fav, file_mtime = row
         tables = [t for t in (tables_str or "").split(",") if t]
         results.append(
             SearchResult(
@@ -184,6 +186,7 @@ def _rows_to_results(
                 tables=tables,
                 updated_at=updated_at,
                 is_favorite=bool(is_fav),
+                file_mtime=file_mtime or 0,
             )
         )
     return results

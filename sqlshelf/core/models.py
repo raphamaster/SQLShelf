@@ -37,3 +37,4 @@ class SearchResult:
     tables: list[str] = field(default_factory=list)
     updated_at: str | None = None
     is_favorite: bool = False
+    file_mtime: int = 0

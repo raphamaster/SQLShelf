@@ -335,7 +335,7 @@ class IndexDB:
         with self._lock:
             rows = self._conn.execute(
                 f"SELECT q.id, q.rel_path, q.title, COALESCE(q.description, ''), '', 0.0,"
-                f" q.updated_at, {_TABLES_SUBQ}, {_IS_FAV_SUBQ}"
+                f" q.updated_at, {_TABLES_SUBQ}, {_IS_FAV_SUBQ}, q.file_mtime"
                 " FROM queries q"
                 " JOIN favorites f ON f.rel_path = q.rel_path"
                 " ORDER BY q.title"
@@ -366,7 +366,7 @@ class IndexDB:
         with self._lock:
             rows = self._conn.execute(
                 f"SELECT q.id, q.rel_path, q.title, COALESCE(q.description, ''), '', 0.0,"
-                f" q.updated_at, {_TABLES_SUBQ}, {_IS_FAV_SUBQ}"
+                f" q.updated_at, {_TABLES_SUBQ}, {_IS_FAV_SUBQ}, q.file_mtime"
                 " FROM queries q"
                 " JOIN recently_viewed rv ON rv.rel_path = q.rel_path"
                 " ORDER BY rv.viewed_at DESC"

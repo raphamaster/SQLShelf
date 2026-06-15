@@ -128,7 +128,11 @@ class _SearchWorker(QRunnable):
                         results.extend(folder_results)
                     except Exception:
                         pass
-                results.sort(key=lambda r: r.rank)
+                # FTS results: rank by relevance; otherwise sort by most recently modified.
+                if any(r.rank != 0.0 for r in results):
+                    results.sort(key=lambda r: r.rank)
+                else:
+                    results.sort(key=lambda r: r.file_mtime, reverse=True)
         except Exception:
             results = []
         self.signals.results_ready.emit(results, self._gen)
