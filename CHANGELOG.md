@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.2] - 2025-06-14
+
+### Fixed
+- About dialog links now display in the app's accent green color (`#0ADE99`)
+
+---
+
 ## [1.0.1] - 2025-06-14
 
 ### Fixed

@@ -1,9 +1,9 @@
-; Inno Setup script for SQLShelf v1.0.1
+; Inno Setup script for SQLShelf v1.0.2
 ; Build: pyinstaller sqlshelf.spec  (generates dist\SQLShelf\)
 ; Then:  iscc installer\sqlshelf.iss
 
 #define AppName      "SQLShelf"
-#define AppVersion   "1.0.1"
+#define AppVersion   "1.0.2"
 #define AppPublisher "Raphael Franco"
 #define AppURL       "https://github.com/raphamaster/sqlshelf"
 #define AppExeName   "SQLShelf.exe"
