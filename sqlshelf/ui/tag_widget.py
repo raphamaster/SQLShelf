@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PySide6.QtCore import QPoint, QRect, QSize, QStringListModel, Qt, Signal
+from PySide6.QtCore import QPoint, QRect, QSize, QStringListModel, QTimer, Qt, Signal
 from PySide6.QtWidgets import (
     QCompleter,
     QLabel,
@@ -253,10 +253,12 @@ class TagInputWidget(QWidget):
         tag = text.strip().lower()
         if tag and tag not in self._tags:
             self._tags.append(tag)
-        self._input.clear()
         self._rebuild()
         self._update_completer()
         self.tags_changed.emit(self._tags)
+        # QCompleter writes the selected text into the QLineEdit *after* this
+        # signal returns, so defer the clear to the next event-loop iteration.
+        QTimer.singleShot(0, self._input.clear)
 
     def _add_from_input(self) -> None:
         raw = self._input.text().replace(",", " ")
