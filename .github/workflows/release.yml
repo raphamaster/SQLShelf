@@ -1,0 +1,146 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  # ──────────────────────────────────────────────
+  # Windows: PyInstaller → Inno Setup → .exe
+  # ──────────────────────────────────────────────
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller pillow
+
+      - name: Generate FavIcon.ico
+        run: |
+          python -c "
+          from PIL import Image
+          img = Image.open('images/FavIcon.png').convert('RGBA')
+          side = max(img.size)
+          sq = Image.new('RGBA', (side, side), (0,0,0,0))
+          sq.paste(img, ((side-img.size[0])//2, (side-img.size[1])//2))
+          sq.save('images/FavIcon.ico', sizes=[(16,16),(32,32),(48,48),(64,64),(128,128)])
+          "
+
+      - name: Build with PyInstaller
+        run: pyinstaller sqlshelf.spec
+
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Create installer
+        run: iscc installer\sqlshelf.iss
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: dist/installer/SQLShelf-*-windows-x64-setup.exe
+
+  # ──────────────────────────────────────────────
+  # Linux: PyInstaller → AppImage
+  # ──────────────────────────────────────────────
+  build-linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y libgl1 libglib2.0-0 libfontconfig1 \
+            libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 \
+            libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 libxcb-xkb1 \
+            libxkbcommon-x11-0 libdbus-1-3 wget
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build with PyInstaller
+        run: pyinstaller sqlshelf.spec
+
+      - name: Prepare AppDir
+        run: |
+          cp -r dist/SQLShelf dist/AppDir
+          cp installer/AppDir/AppRun dist/AppDir/AppRun
+          chmod +x dist/AppDir/AppRun
+          cp installer/AppDir/sqlshelf.desktop dist/AppDir/sqlshelf.desktop
+          cp images/FavIcon.png dist/AppDir/sqlshelf.png
+          # Rename main executable to match AppRun exec target
+          mv dist/AppDir/SQLShelf dist/AppDir/SQLShelf.bin || true
+
+      - name: Download appimagetool
+        run: |
+          wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage \
+            -O /tmp/appimagetool
+          chmod +x /tmp/appimagetool
+
+      - name: Build AppImage
+        run: |
+          VERSION=${{ github.ref_name }}
+          ARCH=x86_64 /tmp/appimagetool dist/AppDir \
+            dist/SQLShelf-${VERSION#v}-linux-x86_64.AppImage
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: 1
+
+      - name: Upload Linux AppImage
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-appimage
+          path: dist/SQLShelf-*-linux-x86_64.AppImage
+
+  # ──────────────────────────────────────────────
+  # GitHub Release — attach both artifacts
+  # ──────────────────────────────────────────────
+  release:
+    needs: [build-windows, build-linux]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Windows installer
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-installer
+          path: release-assets/
+
+      - name: Download Linux AppImage
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-appimage
+          path: release-assets/
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            release-assets/* \
+            --title "SQLShelf ${{ github.ref_name }}" \
+            --notes-file CHANGELOG.md \
+            --draft=false
