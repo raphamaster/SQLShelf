@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import re
 import sqlite3
+from datetime import datetime
 
 from .models import SearchResult
 
-# Matches prefixes like table:Customers  col:OrderId  tag:finance
-_PREFIX_RE = re.compile(r"(?:^|\s)(table|col|tag):(\S+)")
+# Matches prefixes like table:Customers  col:OrderId  tag:finance  date:15/06/2026
+_PREFIX_RE = re.compile(r"(?:^|\s)(table|col|tag|date):(\S+)")
 
 # Subqueries appended to every SELECT for the new display fields
 _TABLES_SUBQ = (
@@ -23,13 +24,13 @@ _IS_FAV_SUBQ = (
 
 
 def parse_query(text: str) -> tuple[dict[str, list[str]], str]:
-    """Split 'table:X col:Y free text' into (filters, free_text).
+    """Split 'table:X col:Y date:DD/MM/YYYY free text' into (filters, free_text).
 
     Returns:
-        filters: dict with keys 'table', 'col', 'tag', each a list of values.
+        filters: dict with keys 'table', 'col', 'tag', 'date', each a list of values.
         free_text: remaining text after stripping all prefix:value tokens.
     """
-    filters: dict[str, list[str]] = {"table": [], "col": [], "tag": []}
+    filters: dict[str, list[str]] = {"table": [], "col": [], "tag": [], "date": []}
     remaining = text
     for m in _PREFIX_RE.finditer(text):
         key = m.group(1)
@@ -38,6 +39,17 @@ def parse_query(text: str) -> tuple[dict[str, list[str]], str]:
             filters[key].append(val)
     remaining = _PREFIX_RE.sub("", text).strip()
     return filters, remaining
+
+
+def _parse_date_filter(date_str: str) -> tuple[int, int] | None:
+    """Parse DD/MM/YYYY → (start_unix, end_unix) covering the full day in local time."""
+    try:
+        d = datetime.strptime(date_str, "%d/%m/%Y")
+        start = int(d.replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
+        end = int(d.replace(hour=23, minute=59, second=59, microsecond=999999).timestamp())
+        return start, end
+    except ValueError:
+        return None
 
 
 def _build_fts_query(text: str) -> str:
@@ -95,6 +107,13 @@ def search(conn: sqlite3.Connection, text: str) -> list[SearchResult]:
         )
         params.append(tag)
 
+    for date_str in filters["date"]:
+        ts = _parse_date_filter(date_str)
+        if ts is not None:
+            start_ts, end_ts = ts
+            where_parts.append("q.file_mtime BETWEEN ? AND ?")
+            params.extend([start_ts, end_ts])
+
     if use_fts:
         fts_expr = _build_fts_query(free_text)
         if not fts_expr:
@@ -112,7 +131,8 @@ def search(conn: sqlite3.Connection, text: str) -> list[SearchResult]:
                    bm25(queries_fts),
                    q.updated_at,
                    {_TABLES_SUBQ},
-                   {_IS_FAV_SUBQ}
+                   {_IS_FAV_SUBQ},
+                   q.file_mtime
             FROM queries q
             JOIN queries_fts ON queries_fts.rowid = q.id
             {where_clause}
@@ -124,10 +144,11 @@ def search(conn: sqlite3.Connection, text: str) -> list[SearchResult]:
                    '', 0.0,
                    q.updated_at,
                    {_TABLES_SUBQ},
-                   {_IS_FAV_SUBQ}
+                   {_IS_FAV_SUBQ},
+                   q.file_mtime
             FROM queries q
             {where_clause}
-            ORDER BY q.title
+            ORDER BY q.file_mtime DESC, q.title
         """
 
     try:
@@ -141,8 +162,8 @@ def search(conn: sqlite3.Connection, text: str) -> list[SearchResult]:
 def _all_queries(conn: sqlite3.Connection) -> list[SearchResult]:
     rows = conn.execute(
         f"SELECT q.id, q.rel_path, q.title, COALESCE(q.description, ''), '', 0.0,"
-        f" q.updated_at, {_TABLES_SUBQ}, {_IS_FAV_SUBQ}"
-        " FROM queries q ORDER BY q.title"
+        f" q.updated_at, {_TABLES_SUBQ}, {_IS_FAV_SUBQ}, q.file_mtime"
+        " FROM queries q ORDER BY q.file_mtime DESC, q.title"
     ).fetchall()
     return _rows_to_results(conn, rows)
 
@@ -170,7 +191,7 @@ def _rows_to_results(
 
     results = []
     for row in rows:
-        qid, rel_path, title, description, snippet, rank, updated_at, tables_str, is_fav = row
+        qid, rel_path, title, description, snippet, rank, updated_at, tables_str, is_fav, file_mtime = row
         tables = [t for t in (tables_str or "").split(",") if t]
         results.append(
             SearchResult(
@@ -184,6 +205,7 @@ def _rows_to_results(
                 tables=tables,
                 updated_at=updated_at,
                 is_favorite=bool(is_fav),
+                file_mtime=file_mtime or 0,
             )
         )
     return results

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal
@@ -148,6 +149,14 @@ class MetadataPanel(QWidget):
         self._path_section = _section_container(tr("metadata.section_file"), self._path_btn)
         self._path_section.setVisible(False)
 
+        # ── Modification date ──────────────────────────────────────────────
+        self._mtime_label = QLabel()
+        self._mtime_label.setStyleSheet(
+            f"color: {TEXT_SECONDARY}; font-size: 11px;"
+        )
+        self._mtime_section = _section_container(tr("metadata.section_mtime"), self._mtime_label)
+        self._mtime_section.setVisible(False)
+
         # ── Read-only container ────────────────────────────────────────────
         ro_layout = QVBoxLayout()
         ro_layout.setContentsMargins(10, 10, 10, 8)
@@ -157,7 +166,12 @@ class MetadataPanel(QWidget):
         ro_layout.addWidget(self._tags_section)
         ro_layout.addWidget(self._tables_section)
         ro_layout.addWidget(self._columns_section)
-        ro_layout.addWidget(self._path_section)
+        _file_row = QHBoxLayout()
+        _file_row.setContentsMargins(0, 0, 0, 0)
+        _file_row.setSpacing(16)
+        _file_row.addWidget(self._path_section, stretch=1)
+        _file_row.addWidget(self._mtime_section)
+        ro_layout.addLayout(_file_row)
 
         self._ro_widget = QWidget()
         self._ro_widget.setLayout(ro_layout)
@@ -263,6 +277,13 @@ class MetadataPanel(QWidget):
         full = str(path)
         self._path_btn.setText(full)
         self._path_btn.setToolTip(full)
+        try:
+            mtime = path.stat().st_mtime
+            dt = datetime.fromtimestamp(mtime).strftime("%d/%m/%Y  %H:%M")
+            self._mtime_label.setText(dt)
+            self._mtime_section.setVisible(True)
+        except OSError:
+            self._mtime_section.setVisible(False)
         self._path_section.setVisible(True)
 
     def set_favorite(self, is_fav: bool) -> None:
@@ -309,6 +330,7 @@ class MetadataPanel(QWidget):
             (self._tables_section, "metadata.section_tables"),
             (self._columns_section, "metadata.section_columns"),
             (self._path_section, "metadata.section_file"),
+            (self._mtime_section, "metadata.section_mtime"),
         ]:
             lbl = section.layout().itemAt(0).widget() if section.layout() else None
             if isinstance(lbl, QLabel):
@@ -341,11 +363,13 @@ class MetadataPanel(QWidget):
         # Refresh section labels
         from PySide6.QtWidgets import QLabel
         style = _section_label_style()
+        self._mtime_label.setStyleSheet(f"color: {_tk.TEXT_SECONDARY}; font-size: 11px;")
         for section in [
             self._tags_section,
             self._tables_section,
             self._columns_section,
             self._path_section,
+            self._mtime_section,
         ]:
             lbl = section.layout().itemAt(0).widget() if section.layout() else None
             if isinstance(lbl, QLabel):
@@ -362,6 +386,8 @@ class MetadataPanel(QWidget):
         self._title_edit.clear()
         self._desc_edit.clear()
         self._tags_input.set_tags([])
+        self._mtime_label.setText("")
+        self._mtime_section.setVisible(False)
         self.set_favorite(False)
         self.set_path(None)
 
