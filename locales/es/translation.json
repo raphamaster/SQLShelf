@@ -152,5 +152,5 @@
   "help.text": "<b>Atajos de teclado</b><br><br><b>Ctrl+O</b> — Abrir Carpeta<br><b>Ctrl+N</b> — Nueva Consulta<br><b>Ctrl+D</b> — Duplicar Consulta<br><b>Ctrl+P</b> — Paleta de Comandos<br><b>Ctrl+F</b> — Enfocar Búsqueda<br><b>Ctrl+E</b> — Alternar Modo Edición<br><b>Ctrl+S</b> — Guardar<br><b>Ctrl+Shift+C</b> — Copiar SQL (sin frontmatter)<br><b>Esc</b> — Cancelar Edición",
 
   "about.title": "Acerca de SQLShelf",
-  "about.text": "<b>SQLShelf</b><br><br>Gestor de consultas SQL de código abierto.<br>Organiza, describe, categoriza y busca archivos SQL<br>por contenido, tabla, campo o etiqueta.<br><br>Autor: Raphael Franco"
+  "about.text": "<b>SQLShelf</b><br><br>Gestor de consultas SQL. Organiza, describe, categoriza y busca archivos SQL por contenido, tabla, campo o etiqueta.<br><br>Autor: Raphael Franco — <a href=\"http://raphaelfranco.com\">raphaelfranco.com</a><br>GitHub: <a href=\"https://github.com/raphamaster/SQLShelf/releases\">github.com/raphamaster/SQLShelf</a>"
 }
