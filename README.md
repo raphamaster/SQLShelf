@@ -165,7 +165,3 @@ Tests cover: `frontmatter`, `encoding`, `sql_objects`, `search`, `index_db`.
 GNU General Public License v3.0 — see [LICENSE](LICENSE).
 
 ---
-
-<p align="center">
-  Made by <a href="http://raphaelfranco.com">Raphael Franco</a>
-</p>
