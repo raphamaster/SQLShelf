@@ -136,7 +136,7 @@ class MetadataPanel(QWidget):
         self._columns_section = _section_container(tr("metadata.section_columns"), self._columns_flow_widget)
         self._columns_section.setVisible(False)
 
-        # ── File path (clickable) + modification date ──────────────────────
+        # ── File path (clickable) ──────────────────────────────────────────
         self._path_btn = QPushButton()
         self._path_btn.setFlat(True)
         self._path_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -146,21 +146,16 @@ class MetadataPanel(QWidget):
             f"QPushButton:hover {{ color: {ACCENT}; }}"
         )
         self._path_btn.clicked.connect(self.reveal_requested)
+        self._path_section = _section_container(tr("metadata.section_file"), self._path_btn)
+        self._path_section.setVisible(False)
 
+        # ── Modification date ──────────────────────────────────────────────
         self._mtime_label = QLabel()
         self._mtime_label.setStyleSheet(
-            f"color: {TEXT_TERTIARY}; font-size: 10px;"
+            f"color: {TEXT_SECONDARY}; font-size: 11px;"
         )
-
-        _path_content = QWidget()
-        _path_vbox = QVBoxLayout(_path_content)
-        _path_vbox.setContentsMargins(0, 0, 0, 0)
-        _path_vbox.setSpacing(1)
-        _path_vbox.addWidget(self._path_btn)
-        _path_vbox.addWidget(self._mtime_label)
-
-        self._path_section = _section_container(tr("metadata.section_file"), _path_content)
-        self._path_section.setVisible(False)
+        self._mtime_section = _section_container(tr("metadata.section_mtime"), self._mtime_label)
+        self._mtime_section.setVisible(False)
 
         # ── Read-only container ────────────────────────────────────────────
         ro_layout = QVBoxLayout()
@@ -172,6 +167,7 @@ class MetadataPanel(QWidget):
         ro_layout.addWidget(self._tables_section)
         ro_layout.addWidget(self._columns_section)
         ro_layout.addWidget(self._path_section)
+        ro_layout.addWidget(self._mtime_section)
 
         self._ro_widget = QWidget()
         self._ro_widget.setLayout(ro_layout)
@@ -281,9 +277,9 @@ class MetadataPanel(QWidget):
             mtime = path.stat().st_mtime
             dt = datetime.fromtimestamp(mtime).strftime("%d/%m/%Y  %H:%M")
             self._mtime_label.setText(dt)
-            self._mtime_label.setVisible(True)
+            self._mtime_section.setVisible(True)
         except OSError:
-            self._mtime_label.setVisible(False)
+            self._mtime_section.setVisible(False)
         self._path_section.setVisible(True)
 
     def set_favorite(self, is_fav: bool) -> None:
@@ -330,6 +326,7 @@ class MetadataPanel(QWidget):
             (self._tables_section, "metadata.section_tables"),
             (self._columns_section, "metadata.section_columns"),
             (self._path_section, "metadata.section_file"),
+            (self._mtime_section, "metadata.section_mtime"),
         ]:
             lbl = section.layout().itemAt(0).widget() if section.layout() else None
             if isinstance(lbl, QLabel):
@@ -362,11 +359,13 @@ class MetadataPanel(QWidget):
         # Refresh section labels
         from PySide6.QtWidgets import QLabel
         style = _section_label_style()
+        self._mtime_label.setStyleSheet(f"color: {_tk.TEXT_SECONDARY}; font-size: 11px;")
         for section in [
             self._tags_section,
             self._tables_section,
             self._columns_section,
             self._path_section,
+            self._mtime_section,
         ]:
             lbl = section.layout().itemAt(0).widget() if section.layout() else None
             if isinstance(lbl, QLabel):
@@ -384,6 +383,7 @@ class MetadataPanel(QWidget):
         self._desc_edit.clear()
         self._tags_input.set_tags([])
         self._mtime_label.setText("")
+        self._mtime_section.setVisible(False)
         self.set_favorite(False)
         self.set_path(None)
 

@@ -47,6 +47,7 @@
   "metadata.section_tables": "TABLES",
   "metadata.section_columns": "COLUMNS",
   "metadata.section_file": "FILE",
+  "metadata.section_mtime": "MODIFICATION DATE",
   "metadata.title_placeholder": "Title",
   "metadata.desc_placeholder": "Description",
   "metadata.label_title": "Title:",
