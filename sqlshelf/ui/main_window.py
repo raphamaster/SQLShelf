@@ -387,9 +387,9 @@ class MainWindow(QMainWindow):
         self._sidebar.recent_selected.connect(self._on_recent_selected)
         self._sidebar.set_folders(cfg.get_known_folders(), None)
 
-        # Middle panel — fixed width so it never resizes with window or content
+        # Middle panel — minimum width so it never shrinks, but can grow if user drags the splitter
         middle = QWidget()
-        middle.setFixedWidth(360)
+        middle.setMinimumWidth(360)
         mid_layout = QVBoxLayout(middle)
         mid_layout.setContentsMargins(8, 10, 8, 4)
         mid_layout.setSpacing(8)
