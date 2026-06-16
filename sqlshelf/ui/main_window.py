@@ -139,6 +139,167 @@ class _SearchWorker(QRunnable):
 
 
 # ---------------------------------------------------------------------------
+# Background update-check worker
+# ---------------------------------------------------------------------------
+
+
+class _UpdateWorkerSignals(QObject):
+    finished = Signal(object)  # UpdateInfo
+    error = Signal(str)
+
+
+class _UpdateWorker(QRunnable):
+    def __init__(self, current_version: str) -> None:
+        super().__init__()
+        self.signals = _UpdateWorkerSignals()
+        self._version = current_version
+
+    def run(self) -> None:
+        try:
+            from ..core.updater import check_for_updates
+
+            info = check_for_updates(self._version)
+            self.signals.finished.emit(info)
+        except Exception as exc:
+            self.signals.error.emit(str(exc))
+
+
+# ---------------------------------------------------------------------------
+# Update dialog
+# ---------------------------------------------------------------------------
+
+
+class _UpdateDialog(QDialog):
+    """Shows update-check progress, then result (found / up-to-date / error)."""
+
+    def __init__(self, current_version: str, parent=None) -> None:
+        super().__init__(parent)
+        self._current_version = current_version
+        self.setWindowTitle(tr("update.dialog_title"))
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
+        self.setFixedWidth(400)
+        self._setup_ui()
+        self._start_check()
+
+    # ------------------------------------------------------------------
+
+    def _setup_ui(self) -> None:
+        from .theme.tokens import ACCENT
+
+        self._layout = QVBoxLayout(self)
+        self._layout.setContentsMargins(24, 24, 24, 20)
+        self._layout.setSpacing(16)
+
+        self._title_label = QLabel(tr("update.checking"))
+        font = self._title_label.font()
+        font.setPointSize(font.pointSize() + 1)
+        font.setBold(True)
+        self._title_label.setFont(font)
+        self._title_label.setWordWrap(True)
+        self._layout.addWidget(self._title_label)
+
+        self._body_label = QLabel("")
+        self._body_label.setWordWrap(True)
+        self._body_label.setOpenExternalLinks(True)
+        self._body_label.setTextFormat(Qt.RichText)
+        self._body_label.setTextInteractionFlags(
+            Qt.TextSelectableByMouse | Qt.LinksAccessibleByMouse
+        )
+        self._body_label.hide()
+        self._layout.addWidget(self._body_label)
+
+        self._progress = QProgressBar()
+        self._progress.setRange(0, 0)  # indeterminate
+        self._progress.setTextVisible(False)
+        self._progress.setFixedHeight(6)
+        self._layout.addWidget(self._progress)
+
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+
+        self._download_btn = QPushButton(tr("update.download_btn"))
+        self._download_btn.hide()
+        self._download_btn.clicked.connect(self._on_download)
+        btn_row.addWidget(self._download_btn)
+
+        self._releases_btn = QPushButton(tr("update.open_releases_btn"))
+        self._releases_btn.hide()
+        self._releases_btn.clicked.connect(self._on_open_releases)
+        btn_row.addWidget(self._releases_btn)
+
+        self._close_btn = QPushButton(tr("update.close_btn"))
+        self._close_btn.setFixedWidth(80)
+        self._close_btn.clicked.connect(self.accept)
+        btn_row.addWidget(self._close_btn)
+
+        self._layout.addLayout(btn_row)
+
+        self._accent = ACCENT
+        self._release_url: str = ""
+        self._installer_url: str | None = None
+
+    def _start_check(self) -> None:
+        worker = _UpdateWorker(self._current_version)
+        worker.signals.finished.connect(self._on_result)
+        worker.signals.error.connect(self._on_error)
+        QThreadPool.globalInstance().start(worker)
+
+    # ------------------------------------------------------------------
+
+    def _on_result(self, info) -> None:
+        self._progress.hide()
+        self._release_url = info.release_url
+        self._installer_url = info.installer_asset_url()
+
+        if info.has_update:
+            self._title_label.setText(tr("update.available_title"))
+            body = tr(
+                "update.available_body",
+                latest=info.latest_version,
+                current=info.current_version,
+            )
+            self._body_label.setText(body)
+            self._body_label.show()
+            if self._installer_url:
+                self._download_btn.show()
+            self._releases_btn.show()
+        else:
+            self._title_label.setText(
+                tr("update.up_to_date", version=info.current_version)
+            )
+
+        self.adjustSize()
+
+    def _on_error(self, msg: str) -> None:
+        self._progress.hide()
+        self._title_label.setText(tr("update.error", msg=msg))
+        self.adjustSize()
+
+    def _on_download(self) -> None:
+        import subprocess
+
+        if self._installer_url:
+            import tempfile
+            import urllib.request
+
+            suffix = self._installer_url.split("/")[-1]
+            dest = Path(tempfile.gettempdir()) / suffix
+            try:
+                urllib.request.urlretrieve(self._installer_url, dest)
+                subprocess.Popen([str(dest)])
+                self.accept()
+            except Exception as exc:
+                self._title_label.setText(tr("update.error", msg=str(exc)))
+                self._progress.hide()
+
+    def _on_open_releases(self) -> None:
+        import webbrowser
+
+        webbrowser.open(self._release_url)
+        self.accept()
+
+
+# ---------------------------------------------------------------------------
 # Progress dialog shown while indexing a new folder
 # ---------------------------------------------------------------------------
 
@@ -244,6 +405,13 @@ class MainWindow(QMainWindow):
             self._update_content_view()
         self._refresh_status_bar()
 
+        # Silent startup update check — runs after 5 s to avoid slowing launch
+        self._startup_update_timer = QTimer(self)
+        self._startup_update_timer.setSingleShot(True)
+        self._startup_update_timer.setInterval(5000)
+        self._startup_update_timer.timeout.connect(self._silent_update_check)
+        self._startup_update_timer.start()
+
     # ------------------------------------------------------------------
     # UI construction
     # ------------------------------------------------------------------
@@ -335,6 +503,10 @@ class MainWindow(QMainWindow):
         self._help_act.setShortcut(QKeySequence("F1"))
         self._help_act.triggered.connect(self._show_help)
         self._help_menu.addAction(self._help_act)
+        self._help_menu.addSeparator()
+        self._check_updates_act = QAction(tr("menu.check_for_updates"), self)
+        self._check_updates_act.triggered.connect(self._check_for_updates)
+        self._help_menu.addAction(self._check_updates_act)
         self._help_menu.addSeparator()
         self._about_act = QAction(tr("menu.about"), self)
         self._about_act.triggered.connect(self._show_about)
@@ -592,6 +764,7 @@ class MainWindow(QMainWindow):
         self._open_ssms_act.setText(tr("menu.open_in_ssms"))
         self._copy_act.setText(tr("menu.copy_sql"))
         self._help_act.setText(tr("menu.help_action"))
+        self._check_updates_act.setText(tr("menu.check_for_updates"))
         self._about_act.setText(tr("menu.about"))
         for key, act in self._theme_acts.items():
             label_key = "menu.theme_dark" if key == "dark" else "menu.theme_light"
@@ -1365,6 +1538,24 @@ class MainWindow(QMainWindow):
 
     def _show_help(self) -> None:
         QMessageBox.information(self, tr("help.title"), tr("help.text"))
+
+    def _check_for_updates(self) -> None:
+        from sqlshelf import __version__
+
+        dlg = _UpdateDialog(__version__, self)
+        dlg.exec()
+
+    def _silent_update_check(self) -> None:
+        from sqlshelf import __version__
+
+        worker = _UpdateWorker(__version__)
+        worker.signals.finished.connect(self._on_silent_update_result)
+        QThreadPool.globalInstance().start(worker)
+
+    def _on_silent_update_result(self, info) -> None:
+        if info.has_update:
+            msg = tr("update.startup_notify", version=info.latest_version)
+            self._status_bar.showMessage(msg, 20000)
 
     def _show_about(self) -> None:
         dlg = QDialog(self)

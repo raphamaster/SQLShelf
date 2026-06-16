@@ -1,6 +1,6 @@
 [project]
 name = "sqlshelf"
-version = "1.0.3"
+version = "1.0.4"
 description = "Open-source desktop SQL query manager — organize, search and annotate .sql files"
 readme = "README.md"
 requires-python = ">=3.12"
