@@ -3,7 +3,17 @@
 ## [1.0.4] - 2026-06-16
 
 ### Added
+- **Sort button (⇅) in query list** — dropdown with four options: Name A→Z, Name Z→A, Modified newest, Modified oldest; active option shows a checkmark; sort persists across searches; translated in English, Portuguese (PT-BR) and Spanish
 - **Portable distribution** — Windows and Linux releases now include a portable `.zip` alongside the installer/AppImage; extract and run with no installation required
+
+### Fixed
+- **Query list panel minimum width** — a second `setMinimumWidth(200)` call was silently overriding the 360 px set earlier, causing the panel to shrink on smaller screens; both calls are now 360 px
+- **Query list panel resizing** — panel now uses `setMinimumWidth` instead of `setFixedWidth` so it never shrinks below 360 px but can still grow when the splitter is dragged or the window is maximized
+
+### Changed
+- **Tables/columns chip sections** — wrapped in a scroll area (max 52 px height) so queries with many tables or columns no longer push the SQL editor off screen
+- **Search bar** — removed the help (?) button; search operator tooltip moved to the search field itself, visible on hover
+- **Quick Search rename** — "Command Palette" renamed to "Quick Search" across all locales (EN, PT-BR, ES) to better reflect its purpose; hint and placeholder text now fully localized
 
 ---
 
