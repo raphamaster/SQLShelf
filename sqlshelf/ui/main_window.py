@@ -525,7 +525,7 @@ class MainWindow(QMainWindow):
         self._inner_splitter.setStretchFactor(1, 1)
         self._inner_splitter.setCollapsible(0, False)
         self._inner_splitter.setCollapsible(1, False)
-        middle.setMinimumWidth(200)
+        middle.setMinimumWidth(360)
 
         self._content_stack = QStackedWidget()
         self._content_stack.addWidget(self._inner_splitter)  # index 0 — normal view
