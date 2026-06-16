@@ -15,8 +15,10 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QHBoxLayout,
     QListView,
     QMenu,
+    QPushButton,
     QStyle,
     QStyledItemDelegate,
     QVBoxLayout,
@@ -39,6 +41,12 @@ from .theme.tokens import (
     TEXT_PRIMARY,
     TEXT_TERTIARY,
 )
+
+# ── Sort keys ───────────────────────────────────────────────────────────────
+_SORT_NAME_ASC   = "name_asc"
+_SORT_NAME_DESC  = "name_desc"
+_SORT_MTIME_DESC = "mtime_desc"
+_SORT_MTIME_ASC  = "mtime_asc"
 
 # ── Item data roles ─────────────────────────────────────────────────────────
 _ROLE_RESULT   = Qt.ItemDataRole.UserRole        # SearchResult
@@ -226,6 +234,7 @@ class QueryListWidget(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._results: list[SearchResult] = []
+        self._sort = _SORT_NAME_ASC
 
         self._model = QStandardItemModel(self)
 
@@ -248,8 +257,23 @@ class QueryListWidget(QWidget):
         self._list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self._list.customContextMenuRequested.connect(self._show_context_menu)
 
+        self._sort_btn = QPushButton("⇅")
+        self._sort_btn.setFixedSize(26, 22)
+        self._sort_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self._sort_btn.setToolTip(tr("sort.btn_tooltip"))
+        self._sort_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._sort_btn.clicked.connect(self._show_sort_menu)
+        self._apply_sort_btn_style()
+
+        header = QHBoxLayout()
+        header.setContentsMargins(4, 2, 4, 2)
+        header.addStretch()
+        header.addWidget(self._sort_btn)
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.addLayout(header)
         layout.addWidget(self._list)
 
     # ------------------------------------------------------------------
@@ -257,25 +281,29 @@ class QueryListWidget(QWidget):
     # ------------------------------------------------------------------
 
     def set_results(self, results: list[SearchResult]) -> None:
-        current_path = self._current_rel_path()
         self._results = results
+        self._sort_results()
+        self._populate_model()
+
+    def _populate_model(self) -> None:
+        current_path = self._current_rel_path()
 
         sel = self._list.selectionModel()
         sel.blockSignals(True)
         self._model.clear()
 
         restore_row = -1
-        for i, r in enumerate(results):
+        for i, r in enumerate(self._results):
             item = QStandardItem(r.title)
             tooltip = r.rel_path
             if r.tags:
                 tooltip += "\n" + "  ".join(f"#{t}" for t in r.tags)
             item.setToolTip(tooltip)
             item.setEditable(False)
-            item.setData(r,            _ROLE_RESULT)
-            item.setData(r.tags,       _ROLE_TAGS)
-            item.setData(r.tables,     _ROLE_TABLES)
-            item.setData(r.updated_at, _ROLE_UPDATED)
+            item.setData(r,             _ROLE_RESULT)
+            item.setData(r.tags,        _ROLE_TAGS)
+            item.setData(r.tables,      _ROLE_TABLES)
+            item.setData(r.updated_at,  _ROLE_UPDATED)
             item.setData(r.is_favorite, _ROLE_FAVORITE)
             self._model.appendRow(item)
             if r.rel_path == current_path:
@@ -285,7 +313,7 @@ class QueryListWidget(QWidget):
 
         if restore_row >= 0:
             self._list.setCurrentIndex(self._model.index(restore_row, 0))
-        elif results:
+        elif self._results:
             self._list.setCurrentIndex(self._model.index(0, 0))
 
     def select_by_rel_path(self, rel_path: str) -> None:
@@ -307,6 +335,47 @@ class QueryListWidget(QWidget):
     def count(self) -> int:
         return len(self._results)
 
+    def _sort_results(self) -> None:
+        if self._sort == _SORT_NAME_ASC:
+            self._results.sort(key=lambda r: r.title.lower())
+        elif self._sort == _SORT_NAME_DESC:
+            self._results.sort(key=lambda r: r.title.lower(), reverse=True)
+        elif self._sort == _SORT_MTIME_DESC:
+            self._results.sort(key=lambda r: r.file_mtime, reverse=True)
+        elif self._sort == _SORT_MTIME_ASC:
+            self._results.sort(key=lambda r: r.file_mtime)
+
+    def _show_sort_menu(self) -> None:
+        menu = QMenu(self._sort_btn)
+        actions = {
+            _SORT_NAME_ASC:   menu.addAction(tr("sort.name_asc")),
+            _SORT_NAME_DESC:  menu.addAction(tr("sort.name_desc")),
+        }
+        menu.addSeparator()
+        actions[_SORT_MTIME_DESC] = menu.addAction(tr("sort.mtime_desc"))
+        actions[_SORT_MTIME_ASC]  = menu.addAction(tr("sort.mtime_asc"))
+
+        for key, act in actions.items():
+            act.setCheckable(True)
+            act.setChecked(key == self._sort)
+
+        pos = self._sort_btn.mapToGlobal(self._sort_btn.rect().bottomLeft())
+        chosen = menu.exec(pos)
+
+        for key, act in actions.items():
+            if chosen is act and key != self._sort:
+                self._sort = key
+                self._sort_results()
+                self._populate_model()
+                break
+
+    def _apply_sort_btn_style(self) -> None:
+        self._sort_btn.setStyleSheet(
+            f"QPushButton {{ background: transparent; border: 1px solid {_tk.BORDER_EMPH}; "
+            f"border-radius: 3px; color: {_tk.TEXT_TERTIARY}; font-size: 12px; padding: 0; }} "
+            f"QPushButton:hover {{ color: {_tk.TEXT_PRIMARY}; border-color: {_tk.ACCENT_BORDER}; }}"
+        )
+
     def refresh_theme(self) -> None:
         delegate = self._list.itemDelegate()
         if hasattr(delegate, "refresh_theme"):
@@ -316,6 +385,7 @@ class QueryListWidget(QWidget):
             f"  outline: none; }}"
             f"QListView::item {{ border: none; }}"
         )
+        self._apply_sort_btn_style()
         self._list.viewport().update()
 
     # ------------------------------------------------------------------

@@ -99,6 +99,12 @@
 
   "dialog.open_folder": "Selecionar Pasta de Consultas",
 
+  "sort.btn_tooltip": "Ordenação",
+  "sort.name_asc": "Nome (A → Z)",
+  "sort.name_desc": "Nome (Z → A)",
+  "sort.mtime_desc": "Modificado (mais recente)",
+  "sort.mtime_asc": "Modificado (mais antigo)",
+
   "context_menu.toggle_favorite": "☆  Alternar Favorito",
   "context_menu.duplicate": "⎘  Duplicar Consulta…",
   "context_menu.copy_sql": "📋  Copiar SQL",

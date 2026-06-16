@@ -99,6 +99,12 @@
 
   "dialog.open_folder": "Seleccionar Carpeta de Consultas",
 
+  "sort.btn_tooltip": "Orden",
+  "sort.name_asc": "Nombre (A → Z)",
+  "sort.name_desc": "Nombre (Z → A)",
+  "sort.mtime_desc": "Modificado (más reciente)",
+  "sort.mtime_asc": "Modificado (más antiguo)",
+
   "context_menu.toggle_favorite": "☆  Alternar Favorito",
   "context_menu.duplicate": "⎘  Duplicar Consulta…",
   "context_menu.copy_sql": "📋  Copiar SQL",

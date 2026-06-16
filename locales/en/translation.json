@@ -99,6 +99,12 @@
 
   "dialog.open_folder": "Select Queries Folder",
 
+  "sort.btn_tooltip": "Sort order",
+  "sort.name_asc": "Name (A → Z)",
+  "sort.name_desc": "Name (Z → A)",
+  "sort.mtime_desc": "Modified (newest first)",
+  "sort.mtime_asc": "Modified (oldest first)",
+
   "context_menu.toggle_favorite": "☆  Toggle Favorite",
   "context_menu.duplicate": "⎘  Duplicate Query…",
   "context_menu.copy_sql": "📋  Copy SQL",
