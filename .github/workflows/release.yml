@@ -50,11 +50,23 @@ jobs:
           $version = "${{ github.ref_name }}".TrimStart("v")
           iscc /DAppVersion=$version installer\sqlshelf.iss
 
+      - name: Create Windows portable zip
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}".TrimStart("v")
+          Compress-Archive -Path dist\SQLShelf\* -DestinationPath "dist\installer\SQLShelf-$version-windows-x64-portable.zip"
+
       - name: Upload Windows installer
         uses: actions/upload-artifact@v4
         with:
           name: windows-installer
           path: dist/installer/SQLShelf-*-windows-x64-setup.exe
+
+      - name: Upload Windows portable zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-portable
+          path: dist/installer/SQLShelf-*-windows-x64-portable.zip
 
   # ──────────────────────────────────────────────
   # Linux: PyInstaller → AppImage
@@ -85,6 +97,18 @@ jobs:
 
       - name: Build with PyInstaller
         run: pyinstaller sqlshelf.spec
+
+      - name: Create Linux portable zip
+        run: |
+          version="${{ github.ref_name }}"
+          version="${version#v}"
+          cd dist && zip -r "SQLShelf-${version}-linux-x86_64-portable.zip" SQLShelf/
+
+      - name: Upload Linux portable zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-portable
+          path: dist/SQLShelf-*-linux-x86_64-portable.zip
 
       - name: Prepare AppDir
         run: |
@@ -131,10 +155,22 @@ jobs:
           name: windows-installer
           path: release-assets/
 
+      - name: Download Windows portable zip
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-portable
+          path: release-assets/
+
       - name: Download Linux AppImage
         uses: actions/download-artifact@v4
         with:
           name: linux-appimage
+          path: release-assets/
+
+      - name: Download Linux portable zip
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-portable
           path: release-assets/
 
       - name: Create GitHub Release

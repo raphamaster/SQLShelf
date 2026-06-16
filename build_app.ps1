@@ -28,6 +28,14 @@ if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
 
+# Create portable zip
+Write-Host "Creating portable zip…" -ForegroundColor Cyan
+$portableOut = "dist\SQLShelf-portable-windows-x64.zip"
+if (Test-Path $portableOut) { Remove-Item $portableOut }
+Compress-Archive -Path "dist\SQLShelf\*" -DestinationPath $portableOut
+
 Write-Host ""
-Write-Host "Build complete — output: dist\SQLShelf\" -ForegroundColor Green
-Write-Host "Run: dist\SQLShelf\SQLShelf.exe"
+Write-Host "Build complete." -ForegroundColor Green
+Write-Host "  Folder  : dist\SQLShelf\"
+Write-Host "  Portable: $portableOut"
+Write-Host "  Run     : dist\SQLShelf\SQLShelf.exe"
