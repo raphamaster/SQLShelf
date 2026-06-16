@@ -387,8 +387,9 @@ class MainWindow(QMainWindow):
         self._sidebar.recent_selected.connect(self._on_recent_selected)
         self._sidebar.set_folders(cfg.get_known_folders(), None)
 
-        # Middle panel
+        # Middle panel — minimum width so it never shrinks, but can grow if user drags the splitter
         middle = QWidget()
+        middle.setMinimumWidth(360)
         mid_layout = QVBoxLayout(middle)
         mid_layout.setContentsMargins(8, 10, 8, 4)
         mid_layout.setSpacing(8)
@@ -518,13 +519,13 @@ class MainWindow(QMainWindow):
         self._inner_splitter = QSplitter(Qt.Orientation.Horizontal)
         self._inner_splitter.addWidget(middle)
         self._inner_splitter.addWidget(right)
-        self._inner_splitter.setSizes([320, 900])
+        self._inner_splitter.setSizes([360, 900])
         # Middle column keeps its user-set width; right panel absorbs all excess.
         self._inner_splitter.setStretchFactor(0, 0)
         self._inner_splitter.setStretchFactor(1, 1)
         self._inner_splitter.setCollapsible(0, False)
         self._inner_splitter.setCollapsible(1, False)
-        middle.setMinimumWidth(200)
+        middle.setMinimumWidth(360)
 
         self._content_stack = QStackedWidget()
         self._content_stack.addWidget(self._inner_splitter)  # index 0 — normal view

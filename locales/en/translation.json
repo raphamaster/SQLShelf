@@ -42,7 +42,9 @@
   "search.help": "Search operators:\n  table:name        queries referencing a table\n  col:name          queries referencing a column\n  tag:name          queries tagged with name\n  date:DD/MM/YYYY   queries modified on that date\n  free text         full-text search across title & body\n\nTip: combine operators, e.g.  table:orders  tag:report  date:15/06/2026",
 
   "metadata.toggle_favorite": "Toggle favorite",
-  "metadata.command_palette": "Command palette",
+  "metadata.command_palette": "Quick search",
+  "command_palette.hint": "Type to filter — Enter to open — Esc to close",
+  "command_palette.placeholder": "Search queries… (table:X  col:X  tag:X  date:DD/MM/YYYY  or name)",
   "metadata.section_tags": "TAGS",
   "metadata.section_tables": "TABLES",
   "metadata.section_columns": "COLUMNS",
@@ -97,6 +99,12 @@
 
   "dialog.open_folder": "Select Queries Folder",
 
+  "sort.btn_tooltip": "Sort order",
+  "sort.name_asc": "Name (A → Z)",
+  "sort.name_desc": "Name (Z → A)",
+  "sort.mtime_desc": "Modified (newest first)",
+  "sort.mtime_asc": "Modified (oldest first)",
+
   "context_menu.toggle_favorite": "☆  Toggle Favorite",
   "context_menu.duplicate": "⎘  Duplicate Query…",
   "context_menu.copy_sql": "📋  Copy SQL",
@@ -150,7 +158,7 @@
   "msg.deindex.text": "<b>Remove and deindex:</b><br><br><tt>{path}</tt><br><br>This will delete the search index for this folder and remove it from the sidebar.<br>Your original <tt>.sql</tt> files will <b>not</b> be deleted.<br><br>Are you sure?",
 
   "help.title": "SQLShelf — Help",
-  "help.text": "<b>Keyboard shortcuts</b><br><br><b>Ctrl+O</b> — Open Folder<br><b>Ctrl+N</b> — New Query<br><b>Ctrl+D</b> — Duplicate Query<br><b>Ctrl+P</b> — Command Palette<br><b>Ctrl+F</b> — Focus Search<br><b>Ctrl+E</b> — Toggle Edit Mode<br><b>Ctrl+S</b> — Save<br><b>Ctrl+Shift+C</b> — Copy SQL (no frontmatter)<br><b>Ctrl+Shift+F</b> — Copy Frontmatter Template<br><b>Esc</b> — Cancel Edit",
+  "help.text": "<b>Keyboard shortcuts</b><br><br><b>Ctrl+O</b> — Open Folder<br><b>Ctrl+N</b> — New Query<br><b>Ctrl+D</b> — Duplicate Query<br><b>Ctrl+P</b> — Quick Search<br><b>Ctrl+F</b> — Focus Search<br><b>Ctrl+E</b> — Toggle Edit Mode<br><b>Ctrl+S</b> — Save<br><b>Ctrl+Shift+C</b> — Copy SQL (no frontmatter)<br><b>Ctrl+Shift+F</b> — Copy Frontmatter Template<br><b>Esc</b> — Cancel Edit",
 
   "about.title": "About SQLShelf",
   "about.text": "<b>SQLShelf</b><br><br>SQL query manager. Organizes, describes, categorizes and searches SQL files by content, table, field or tag.<br><br>Author: Raphael Franco — <a href=\"http://raphaelfranco.com\">raphaelfranco.com</a><br>GitHub: <a href=\"https://github.com/raphamaster/SQLShelf/releases\">github.com/raphamaster/SQLShelf</a>"

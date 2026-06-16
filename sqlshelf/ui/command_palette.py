@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..core.i18n import tr
 from ..core.models import SearchResult
 from .theme import tokens as _tk
 
@@ -75,13 +76,11 @@ class CommandPalette(QDialog):
 
         self._all_results = results
 
-        hint = QLabel("Type to filter — Enter to open — Esc to close")
+        hint = QLabel(tr("command_palette.hint"))
         hint.setStyleSheet(f"color: {_tk.TEXT_TERTIARY}; font-size: 11px; padding: 2px 4px;")
 
         self._search = QLineEdit()
-        self._search.setPlaceholderText(
-            "Search queries… (table:X  col:X  tag:X  date:DD/MM/YYYY  or name)"
-        )
+        self._search.setPlaceholderText(tr("command_palette.placeholder"))
         self._search.textChanged.connect(self._filter)
         self._search.installEventFilter(self)
 

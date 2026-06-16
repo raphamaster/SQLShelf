@@ -42,7 +42,9 @@
   "search.help": "Operadores de búsqueda:\n  table:nombre   consultas que referencian una tabla\n  col:nombre     consultas que referencian una columna\n  tag:nombre     consultas con la etiqueta especificada\n  texto libre    búsqueda de texto completo en título y cuerpo\n\nConsejo: combine operadores, ej.:  table:pedidos  tag:reporte",
 
   "metadata.toggle_favorite": "Alternar favorito",
-  "metadata.command_palette": "Paleta de comandos",
+  "metadata.command_palette": "Búsqueda rápida",
+  "command_palette.hint": "Escriba para filtrar — Enter para abrir — Esc para cerrar",
+  "command_palette.placeholder": "Buscar consultas… (table:X  col:X  tag:X  date:DD/MM/AAAA  o nombre)",
   "metadata.section_tags": "ETIQUETAS",
   "metadata.section_tables": "TABLAS",
   "metadata.section_columns": "COLUMNAS",
@@ -97,6 +99,12 @@
 
   "dialog.open_folder": "Seleccionar Carpeta de Consultas",
 
+  "sort.btn_tooltip": "Orden",
+  "sort.name_asc": "Nombre (A → Z)",
+  "sort.name_desc": "Nombre (Z → A)",
+  "sort.mtime_desc": "Modificado (más reciente)",
+  "sort.mtime_asc": "Modificado (más antiguo)",
+
   "context_menu.toggle_favorite": "☆  Alternar Favorito",
   "context_menu.duplicate": "⎘  Duplicar Consulta…",
   "context_menu.copy_sql": "📋  Copiar SQL",
@@ -150,7 +158,7 @@
   "msg.deindex.text": "<b>Eliminar y desindexar:</b><br><br><tt>{path}</tt><br><br>Esto eliminará el índice de búsqueda de esta carpeta y la quitará de la barra lateral.<br>Sus archivos <tt>.sql</tt> originales <b>no</b> serán eliminados.<br><br>¿Está seguro?",
 
   "help.title": "SQLShelf — Ayuda",
-  "help.text": "<b>Atajos de teclado</b><br><br><b>Ctrl+O</b> — Abrir Carpeta<br><b>Ctrl+N</b> — Nueva Consulta<br><b>Ctrl+D</b> — Duplicar Consulta<br><b>Ctrl+P</b> — Paleta de Comandos<br><b>Ctrl+F</b> — Enfocar Búsqueda<br><b>Ctrl+E</b> — Alternar Modo Edición<br><b>Ctrl+S</b> — Guardar<br><b>Ctrl+Shift+C</b> — Copiar SQL (sin frontmatter)<br><b>Esc</b> — Cancelar Edición",
+  "help.text": "<b>Atajos de teclado</b><br><br><b>Ctrl+O</b> — Abrir Carpeta<br><b>Ctrl+N</b> — Nueva Consulta<br><b>Ctrl+D</b> — Duplicar Consulta<br><b>Ctrl+P</b> — Búsqueda Rápida<br><b>Ctrl+F</b> — Enfocar Búsqueda<br><b>Ctrl+E</b> — Alternar Modo Edición<br><b>Ctrl+S</b> — Guardar<br><b>Ctrl+Shift+C</b> — Copiar SQL (sin frontmatter)<br><b>Esc</b> — Cancelar Edición",
 
   "about.title": "Acerca de SQLShelf",
   "about.text": "<b>SQLShelf</b><br><br>Gestor de consultas SQL. Organiza, describe, categoriza y busca archivos SQL por contenido, tabla, campo o etiqueta.<br><br>Autor: Raphael Franco — <a href=\"http://raphaelfranco.com\">raphaelfranco.com</a><br>GitHub: <a href=\"https://github.com/raphamaster/SQLShelf/releases\">github.com/raphamaster/SQLShelf</a>"
