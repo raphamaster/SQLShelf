@@ -6,11 +6,13 @@ from pathlib import Path
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QFormLayout,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QPlainTextEdit,
     QPushButton,
+    QScrollArea,
     QSizePolicy,
     QVBoxLayout,
     QWidget,
@@ -53,6 +55,23 @@ def _chip_style() -> str:
 
 def _section_label_style() -> str:
     return f"color: {_tk.TEXT_TERTIARY}; font-size: 9px; font-weight: bold; letter-spacing: 0.5px;"
+
+
+# Height that shows ~2 rows of chips (chip ≈ 20px, v_gap = 4px, +8px breathing room)
+_CHIP_SCROLL_MAX_H = 52
+
+
+def _make_chip_scroll(content: QWidget) -> QScrollArea:
+    sa = QScrollArea()
+    sa.setWidgetResizable(True)
+    sa.setWidget(content)
+    sa.setMaximumHeight(_CHIP_SCROLL_MAX_H)
+    sa.setFrameShape(QFrame.Shape.NoFrame)
+    sa.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+    sa.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+    sa.setStyleSheet("QScrollArea { background: transparent; border: none; }")
+    sa.viewport().setAutoFillBackground(False)
+    return sa
 
 
 class MetadataPanel(QWidget):
@@ -122,18 +141,20 @@ class MetadataPanel(QWidget):
         self._tags_section = _section_container(tr("metadata.section_tags"), self._tags_display)
         self._tags_section.setVisible(False)
 
-        # ── Tables section (clickable neutral chips) ───────────────────────
+        # ── Tables section (clickable neutral chips, scrollable after 2 rows) ──
         self._tables_flow_widget = QWidget()
         self._tables_flow = FlowLayout(self._tables_flow_widget, h_gap=4, v_gap=4)
         self._tables_flow_widget.setLayout(self._tables_flow)
-        self._tables_section = _section_container(tr("metadata.section_tables"), self._tables_flow_widget)
+        self._tables_scroll = _make_chip_scroll(self._tables_flow_widget)
+        self._tables_section = _section_container(tr("metadata.section_tables"), self._tables_scroll)
         self._tables_section.setVisible(False)
 
-        # ── Columns section (clickable neutral chips) ──────────────────────
+        # ── Columns section (clickable neutral chips, scrollable after 2 rows) ─
         self._columns_flow_widget = QWidget()
         self._columns_flow = FlowLayout(self._columns_flow_widget, h_gap=4, v_gap=4)
         self._columns_flow_widget.setLayout(self._columns_flow)
-        self._columns_section = _section_container(tr("metadata.section_columns"), self._columns_flow_widget)
+        self._columns_scroll = _make_chip_scroll(self._columns_flow_widget)
+        self._columns_section = _section_container(tr("metadata.section_columns"), self._columns_scroll)
         self._columns_section.setVisible(False)
 
         # ── File path (clickable) ──────────────────────────────────────────
