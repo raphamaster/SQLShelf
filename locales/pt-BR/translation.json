@@ -43,6 +43,8 @@
 
   "metadata.toggle_favorite": "Alternar favorito",
   "metadata.command_palette": "Busca rápida",
+  "command_palette.hint": "Digite para filtrar — Enter para abrir — Esc para fechar",
+  "command_palette.placeholder": "Buscar consultas… (table:X  col:X  tag:X  date:DD/MM/AAAA  ou nome)",
   "metadata.section_tags": "TAGS",
   "metadata.section_tables": "TABELAS",
   "metadata.section_columns": "COLUNAS",

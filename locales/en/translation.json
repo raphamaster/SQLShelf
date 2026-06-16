@@ -43,6 +43,8 @@
 
   "metadata.toggle_favorite": "Toggle favorite",
   "metadata.command_palette": "Quick search",
+  "command_palette.hint": "Type to filter — Enter to open — Esc to close",
+  "command_palette.placeholder": "Search queries… (table:X  col:X  tag:X  date:DD/MM/YYYY  or name)",
   "metadata.section_tags": "TAGS",
   "metadata.section_tables": "TABLES",
   "metadata.section_columns": "COLUMNS",
