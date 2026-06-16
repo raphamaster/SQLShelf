@@ -3,6 +3,7 @@
 ## [1.0.4] - 2026-06-16
 
 ### Added
+- **Check for Updates** — new menu item under Help; queries the GitHub Releases API in a background thread and shows a dialog with the result; if a newer version is found, offers a direct "Download Update" button (downloads and launches the Windows installer) or "Open Release Page" (browser); a silent check also runs 5 s after startup and displays a status-bar notification if an update is available
 - **Sort button (⇅) in query list** — dropdown with four options: Name A→Z, Name Z→A, Modified newest, Modified oldest; active option shows a checkmark; sort persists across searches; translated in English, Portuguese (PT-BR) and Spanish
 - **Portable distribution** — Windows and Linux releases now include a portable `.zip` alongside the installer/AppImage; extract and run with no installation required
 
