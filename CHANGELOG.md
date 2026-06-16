@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.4] - 2026-06-16
+
+### Added
+- **Portable distribution** — Windows and Linux releases now include a portable `.zip` alongside the installer/AppImage; extract and run with no installation required
+
+---
+
 ## [1.0.3] - 2026-06-15
 
 ### Added
