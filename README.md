@@ -9,7 +9,7 @@
 
 <p align="center">
   <a href="https://github.com/raphamaster/SQLShelf/releases/latest">
-    <img src="https://img.shields.io/github/v/release/raphamaster/SQLShelf?style=flat-square&color=0ADE99" alt="Latest release"/>
+    <img src="https://img.shields.io/badge/release-v1.0.4-0ADE99?style=flat-square" alt="Latest release"/>
   </a>
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux-0ADE99?style=flat-square" alt="Platform"/>
   <img src="https://img.shields.io/badge/python-3.12%2B-0ADE99?style=flat-square" alt="Python"/>
@@ -19,7 +19,11 @@
 ---
 
 <p align="center">
-  <img src="images/Screenshot_SQLShelf.png" alt="SQLShelf screenshot" width="860" />
+  <img src="images/Screenshot_SQLShelf.png" alt="SQLShelf — dark theme" width="860" />
+</p>
+
+<p align="center">
+  <img src="images/Screenshot_SQLShelf_white.png" alt="SQLShelf — light theme" width="860" />
 </p>
 
 ---
