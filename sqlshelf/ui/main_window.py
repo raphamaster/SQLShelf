@@ -387,8 +387,9 @@ class MainWindow(QMainWindow):
         self._sidebar.recent_selected.connect(self._on_recent_selected)
         self._sidebar.set_folders(cfg.get_known_folders(), None)
 
-        # Middle panel
+        # Middle panel — fixed width so it never resizes with window or content
         middle = QWidget()
+        middle.setFixedWidth(360)
         mid_layout = QVBoxLayout(middle)
         mid_layout.setContentsMargins(8, 10, 8, 4)
         mid_layout.setSpacing(8)
@@ -518,7 +519,7 @@ class MainWindow(QMainWindow):
         self._inner_splitter = QSplitter(Qt.Orientation.Horizontal)
         self._inner_splitter.addWidget(middle)
         self._inner_splitter.addWidget(right)
-        self._inner_splitter.setSizes([320, 900])
+        self._inner_splitter.setSizes([360, 900])
         # Middle column keeps its user-set width; right panel absorbs all excess.
         self._inner_splitter.setStretchFactor(0, 0)
         self._inner_splitter.setStretchFactor(1, 1)
