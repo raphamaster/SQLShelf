@@ -34,6 +34,7 @@ from ..core.i18n import available_languages, get_language, ntr, set_language, tr
 from ..core.index_db import IndexDB
 from ..core.models import SearchResult
 from ..core.scanner import scan_folder
+from ..core.sql_objects import extract_objects
 from ..core.snippets import list_templates
 from ..core.watcher import FolderWatcher
 from .code_editor import CodeEditor
@@ -583,6 +584,7 @@ class MainWindow(QMainWindow):
         right_layout.setSpacing(0)
 
         self._metadata_panel = MetadataPanel()
+        self._metadata_panel.navigate_requested.connect(self._on_navigate_requested)
         self._metadata_panel.filter_requested.connect(self._on_filter_requested)
         self._metadata_panel.favorite_toggled.connect(self._toggle_favorite)
         self._metadata_panel.reveal_requested.connect(self.reveal_in_explorer)
@@ -608,12 +610,24 @@ class MainWindow(QMainWindow):
         self._cancel_btn = QPushButton(tr("editor.btn_cancel"))
         self._cancel_btn.clicked.connect(self._cancel_edit)
 
+        self._select_all_btn = QPushButton(tr("editor.btn_select_all"))
+        self._select_all_btn.setToolTip(tr("editor.tooltip_select_all"))
+        self._select_all_btn.clicked.connect(self._editor_select_all)
+
+        self._copy_query_btn = QPushButton(tr("editor.btn_copy"))
+        self._copy_query_btn.setToolTip(tr("editor.tooltip_copy"))
+        self._copy_query_btn.clicked.connect(self._editor_copy_query)
+
         tb_layout.addWidget(self._edit_toggle_btn)
         tb_layout.addWidget(self._save_btn)
         tb_layout.addWidget(self._cancel_btn)
         tb_layout.addStretch()
+        tb_layout.addWidget(self._select_all_btn)
+        tb_layout.addWidget(self._copy_query_btn)
         self._save_btn.setVisible(False)
         self._cancel_btn.setVisible(False)
+        self._select_all_btn.setVisible(False)
+        self._copy_query_btn.setVisible(False)
 
         self._editor = CodeEditor()
         self._editor.setReadOnly(True)
@@ -727,7 +741,6 @@ class MainWindow(QMainWindow):
         QShortcut(QKeySequence("Ctrl+E"), self).activated.connect(
             lambda: self._edit_toggle_btn.click()
         )
-        QShortcut(QKeySequence("Ctrl+N"), self).activated.connect(self.new_query)
         QShortcut(QKeySequence("Ctrl+P"), self).activated.connect(self.open_command_palette)
         esc = QShortcut(QKeySequence(_Qt.Key.Key_Escape), self)
         esc.setContext(_Qt.ShortcutContext.WindowShortcut)
@@ -780,6 +793,10 @@ class MainWindow(QMainWindow):
         self._save_btn.setText(tr("editor.btn_save"))
         self._save_btn.setToolTip(tr("editor.tooltip_save"))
         self._cancel_btn.setText(tr("editor.btn_cancel"))
+        self._select_all_btn.setText(tr("editor.btn_select_all"))
+        self._select_all_btn.setToolTip(tr("editor.tooltip_select_all"))
+        self._copy_query_btn.setText(tr("editor.btn_copy"))
+        self._copy_query_btn.setToolTip(tr("editor.tooltip_copy"))
         # Onboarding
         self._ob_title.setText(tr("onboarding.no_folder"))
         self._ob_sub.setText(tr("onboarding.subtitle"))
@@ -1032,14 +1049,20 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
 
+        live_objects = extract_objects(body)
         self._metadata_panel.set_query(
             title=result.title,
             description=result.description,
             tags=result.tags,
             tables=objects.get("table", []),
             columns=objects.get("column", []),
+            aliases=sorted(live_objects.get("alias", set())),
         )
         self._metadata_panel.set_path(path)
+
+        if not self._edit_mode:
+            self._select_all_btn.setVisible(True)
+            self._copy_query_btn.setVisible(True)
 
         if self._db is not None:
             try:
@@ -1102,8 +1125,12 @@ class MainWindow(QMainWindow):
                 pass
         self._query_list.set_results(results)
 
+    def _on_navigate_requested(self, token: str) -> None:
+        """Jump to the first occurrence of *token* in the current SQL editor."""
+        self._editor.navigate_to_token(token)
+
     def _on_filter_requested(self, kind: str, value: str) -> None:
-        """Reverse search: clicking a table/column chip fills the search bar."""
+        """Reverse search: right-click chip → fill search bar with table/col filter."""
         self._search_bar.blockSignals(True)
         self._search_bar._edit.setText(f"{kind}:{value}")
         self._search_bar.blockSignals(False)
@@ -1271,6 +1298,8 @@ class MainWindow(QMainWindow):
         self._metadata_panel.set_edit_mode(True)
         self._save_btn.setVisible(True)
         self._cancel_btn.setVisible(True)
+        self._select_all_btn.setVisible(False)
+        self._copy_query_btn.setVisible(False)
         self._editor_wrapper.setStyleSheet(
             f"#EditorWrapper {{ border: 1px solid {_tk.ACCENT_BORDER}; border-radius: 4px; }}"
         )
@@ -1283,6 +1312,9 @@ class MainWindow(QMainWindow):
         self._metadata_panel.set_edit_mode(False)
         self._save_btn.setVisible(False)
         self._cancel_btn.setVisible(False)
+        has_query = self._current_result is not None
+        self._select_all_btn.setVisible(has_query)
+        self._copy_query_btn.setVisible(has_query)
         self._editor_wrapper.setStyleSheet("")
         self._edit_toggle_btn.setChecked(False)
         self._edit_toggle_btn.setText(tr("editor.btn_edit"))
@@ -1293,6 +1325,15 @@ class MainWindow(QMainWindow):
 
     def _cancel_edit(self) -> None:
         self._cancel_edit_mode()
+
+    def _editor_select_all(self) -> None:
+        self._editor.selectAll()
+        self._editor.setFocus()
+
+    def _editor_copy_query(self) -> None:
+        from PySide6.QtGui import QGuiApplication
+
+        QGuiApplication.clipboard().setText(self._editor.toPlainText())
 
     def save_current(self) -> None:
         if not self._edit_mode or self._current_result is None or self._folder is None:
