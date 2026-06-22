@@ -1,13 +1,17 @@
 from __future__ import annotations
 
-from PySide6.QtCore import QPoint, QRect, QSize, Qt
-from PySide6.QtGui import QColor, QPainter, QTextFormat
+import re
+
+from PySide6.QtCore import QPoint, QRect, QRegularExpression, QSize, Qt
+from PySide6.QtGui import QColor, QPainter, QTextCursor, QTextDocument, QTextFormat
 from PySide6.QtWidgets import QTextEdit
 from PySide6.QtWidgets import QPlainTextEdit, QWidget
 
 from .theme import tokens as _tk
 from .theme.tokens import (
     EDITOR_LINE_HL,
+    EDITOR_OCCURRENCE_BG,
+    EDITOR_OCCURRENCE_FG,
     GUTTER_BG,
     GUTTER_NUM_CURRENT,
     GUTTER_NUM_INACTIVE,
@@ -37,6 +41,11 @@ class CodeEditor(QPlainTextEdit):
     _NUM_INACTIVE    = QColor(GUTTER_NUM_INACTIVE)
     _NUM_CURRENT     = QColor(GUTTER_NUM_CURRENT)
     _LINE_HIGHLIGHT  = QColor(EDITOR_LINE_HL)
+    _OCCURRENCE_BG   = QColor(EDITOR_OCCURRENCE_BG)
+    _OCCURRENCE_FG   = QColor(EDITOR_OCCURRENCE_FG)
+
+    # Minimum token length to trigger occurrence highlighting.
+    _MIN_OCCURRENCE_LEN = 2
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -44,10 +53,11 @@ class CodeEditor(QPlainTextEdit):
 
         self.blockCountChanged.connect(self._update_gutter_width)
         self.updateRequest.connect(self._update_gutter)
-        self.cursorPositionChanged.connect(self._highlight_current_line)
+        self.cursorPositionChanged.connect(self._update_extra_selections)
+        self.selectionChanged.connect(self._update_extra_selections)
 
         self._update_gutter_width(0)
-        self._highlight_current_line()
+        self._update_extra_selections()
 
     # ------------------------------------------------------------------
     # Gutter width / update
@@ -118,13 +128,79 @@ class CodeEditor(QPlainTextEdit):
         CodeEditor._NUM_INACTIVE   = QColor(_tk.GUTTER_NUM_INACTIVE)
         CodeEditor._NUM_CURRENT    = QColor(_tk.GUTTER_NUM_CURRENT)
         CodeEditor._LINE_HIGHLIGHT = QColor(_tk.EDITOR_LINE_HL)
-        self._highlight_current_line()
+        CodeEditor._OCCURRENCE_BG  = QColor(_tk.EDITOR_OCCURRENCE_BG)
+        CodeEditor._OCCURRENCE_FG  = QColor(_tk.EDITOR_OCCURRENCE_FG)
+        self._update_extra_selections()
         self._gutter.update()
 
-    def _highlight_current_line(self) -> None:
-        sel = QTextEdit.ExtraSelection()
-        sel.format.setBackground(self._LINE_HIGHLIGHT)
-        sel.format.setProperty(QTextFormat.Property.FullWidthSelection, True)
-        sel.cursor = self.textCursor()
-        sel.cursor.clearSelection()
-        self.setExtraSelections([sel])
+    def _token_at_cursor(self) -> str:
+        """Return the word under the cursor, or the selected text if it is a
+        single-token selection (no whitespace).  Returns "" when nothing
+        qualifies for occurrence highlighting."""
+        cursor = self.textCursor()
+        if cursor.hasSelection():
+            text = cursor.selectedText().strip()
+            if len(text) >= self._MIN_OCCURRENCE_LEN and " " not in text and "\n" not in text:
+                return text
+            return ""
+        # No explicit selection — use word under cursor.
+        tmp = QTextCursor(cursor)
+        tmp.select(QTextCursor.SelectionType.WordUnderCursor)
+        word = tmp.selectedText()
+        if len(word) >= self._MIN_OCCURRENCE_LEN:
+            return word
+        return ""
+
+    def _update_extra_selections(self) -> None:
+        """Rebuild ExtraSelections: current-line highlight + all-occurrences highlight."""
+        selections: list[QTextEdit.ExtraSelection] = []
+
+        # 1. Current line (full-width background)
+        line_sel = QTextEdit.ExtraSelection()
+        line_sel.format.setBackground(self._LINE_HIGHLIGHT)
+        line_sel.format.setProperty(QTextFormat.Property.FullWidthSelection, True)
+        line_sel.cursor = self.textCursor()
+        line_sel.cursor.clearSelection()
+        selections.append(line_sel)
+
+        # 2. All occurrences of the token at/selected by the cursor
+        token = self._token_at_cursor()
+        if token:
+            pattern = QRegularExpression(
+                rf"\b{re.escape(token)}\b",
+                QRegularExpression.PatternOption.CaseInsensitiveOption,
+            )
+            doc = self.document()
+            found = doc.find(pattern, 0)
+            while not found.isNull():
+                occ = QTextEdit.ExtraSelection()
+                occ.format.setBackground(self._OCCURRENCE_BG)
+                occ.format.setForeground(self._OCCURRENCE_FG)
+                occ.cursor = found
+                selections.append(occ)
+                found = doc.find(pattern, found)
+
+        self.setExtraSelections(selections)
+
+    # ------------------------------------------------------------------
+    # Token navigation
+    # ------------------------------------------------------------------
+
+    def navigate_to_token(self, token: str) -> bool:
+        """Move the cursor to the first whole-word occurrence of *token*.
+
+        Search is case-insensitive. The cursor lands with the word selected so
+        that all other occurrences are highlighted automatically.
+        Returns True if found.
+        """
+        pattern = QRegularExpression(
+            rf"\b{re.escape(token)}\b",
+            QRegularExpression.PatternOption.CaseInsensitiveOption,
+        )
+        cursor = self.document().find(pattern, 0)
+        if cursor.isNull():
+            return False
+        self.setTextCursor(cursor)
+        self.ensureCursorVisible()
+        self.setFocus()
+        return True

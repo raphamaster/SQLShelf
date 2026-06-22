@@ -9,13 +9,15 @@ from sqlglot import exp
 def extract_objects(sql_body: str, dialect: str = "tsql") -> dict[str, set[str]]:
     """Extract named database objects from a SQL body using sqlglot.
 
-    Returns a dict with keys 'table', 'column', 'procedure', 'function'.
+    Returns a dict with keys 'table', 'column', 'alias', 'procedure', 'function'.
     CTEs are excluded from the table set.
+    Table aliases map alias → real table name (stored as "alias→Table" strings).
     On any parse error, returns empty sets — never raises.
     """
     empty: dict[str, set[str]] = {
         "table": set(),
         "column": set(),
+        "alias": set(),
         "procedure": set(),
         "function": set(),
     }
@@ -39,7 +41,17 @@ def extract_objects(sql_body: str, dialect: str = "tsql") -> dict[str, set[str]]
     ctes: set[str] = {c.alias for c in tree.find_all(exp.CTE) if c.alias}
     tables -= ctes
 
-    return {"table": tables, "column": columns, "procedure": set(), "function": set()}
+    aliases: set[str] = {
+        t.alias for t in tree.find_all(exp.Table) if t.alias and t.alias not in ctes
+    }
+
+    return {
+        "table": tables,
+        "column": columns,
+        "alias": aliases,
+        "procedure": set(),
+        "function": set(),
+    }
 
 
 def objects_to_text(objects: dict[str, set[str]]) -> str:

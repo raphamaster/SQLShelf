@@ -4,12 +4,14 @@ from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QClipboard, QGuiApplication
 from PySide6.QtWidgets import (
     QFormLayout,
     QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMenu,
     QPlainTextEdit,
     QPushButton,
     QScrollArea,
@@ -81,10 +83,12 @@ class MetadataPanel(QWidget):
     Edit mode: title / description / tags are editable.
 
     Signals:
-        filter_requested(kind, value) — user clicked a table/column chip.
+        navigate_requested(token)     — user left-clicked a table/column/alias chip.
+        filter_requested(kind, value) — user chose "Search in all queries" on a chip.
         favorite_toggled              — star button pressed.
     """
 
+    navigate_requested = Signal(str)
     filter_requested = Signal(str, str)
     favorite_toggled = Signal()
     reveal_requested = Signal()
@@ -95,6 +99,7 @@ class MetadataPanel(QWidget):
         self._edit_mode = False
         self._tables: list[str] = []
         self._columns: list[str] = []
+        self._aliases: list[str] = []
 
         self.setObjectName("MetadataPanel")
         self.setAutoFillBackground(True)
@@ -157,7 +162,15 @@ class MetadataPanel(QWidget):
         self._columns_section = _section_container(tr("metadata.section_columns"), self._columns_scroll)
         self._columns_section.setVisible(False)
 
-        # ── File path (clickable) ──────────────────────────────────────────
+        # ── Aliases section (clickable neutral chips, scrollable after 2 rows) ─
+        self._aliases_flow_widget = QWidget()
+        self._aliases_flow = FlowLayout(self._aliases_flow_widget, h_gap=4, v_gap=4)
+        self._aliases_flow_widget.setLayout(self._aliases_flow)
+        self._aliases_scroll = _make_chip_scroll(self._aliases_flow_widget)
+        self._aliases_section = _section_container(tr("metadata.section_aliases"), self._aliases_scroll)
+        self._aliases_section.setVisible(False)
+
+        # ── File path (clickable, right-click to copy) ────────────────────
         self._path_btn = QPushButton()
         self._path_btn.setFlat(True)
         self._path_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -167,6 +180,8 @@ class MetadataPanel(QWidget):
             f"QPushButton:hover {{ color: {ACCENT}; }}"
         )
         self._path_btn.clicked.connect(self.reveal_requested)
+        self._path_btn.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self._path_btn.customContextMenuRequested.connect(self._show_path_menu)
         self._path_section = _section_container(tr("metadata.section_file"), self._path_btn)
         self._path_section.setVisible(False)
 
@@ -187,6 +202,7 @@ class MetadataPanel(QWidget):
         ro_layout.addWidget(self._tags_section)
         ro_layout.addWidget(self._tables_section)
         ro_layout.addWidget(self._columns_section)
+        ro_layout.addWidget(self._aliases_section)
         _file_row = QHBoxLayout()
         _file_row.setContentsMargins(0, 0, 0, 0)
         _file_row.setSpacing(16)
@@ -240,33 +256,57 @@ class MetadataPanel(QWidget):
                 item.widget().hide()
                 item.widget().deleteLater()
 
+    def _make_object_chip(self, label: str, kind: str) -> QPushButton:
+        """Create a chip that navigates to *label* on left-click and shows a
+        context menu with search/copy options on right-click."""
+        btn = QPushButton(label)
+        btn.setStyleSheet(_chip_style())
+        btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn.setToolTip(tr("metadata.chip_tooltip_navigate"))
+        btn.clicked.connect(lambda checked=False, t=label: self.navigate_requested.emit(t))
+        btn.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        btn.customContextMenuRequested.connect(
+            lambda pos, t=label, k=kind: self._show_chip_menu(btn, t, k)
+        )
+        return btn
+
+    def _show_chip_menu(self, btn: QPushButton, token: str, kind: str) -> None:
+        menu = QMenu(self)
+        nav_act = menu.addAction(tr("metadata.chip_go_to_occurrence"))
+        menu.addSeparator()
+        search_act = menu.addAction(tr("metadata.chip_search_all"))
+        copy_act = menu.addAction(tr("metadata.chip_copy_name"))
+        chosen = menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
+        if chosen == nav_act:
+            self.navigate_requested.emit(token)
+        elif chosen == search_act:
+            self.filter_requested.emit(kind, token)
+        elif chosen == copy_act:
+            from PySide6.QtGui import QGuiApplication
+            QGuiApplication.clipboard().setText(token)
+
     def _rebuild_object_chips(self) -> None:
         self._clear_flow(self._tables_flow)
         self._clear_flow(self._columns_flow)
+        self._clear_flow(self._aliases_flow)
 
         self._tables_section.setVisible(bool(self._tables))
         self._columns_section.setVisible(bool(self._columns))
+        self._aliases_section.setVisible(bool(self._aliases))
 
         for table in sorted(self._tables):
-            btn = QPushButton(table)
-            btn.setStyleSheet(_chip_style())
-            btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-            btn.clicked.connect(
-                lambda checked=False, t=table: self.filter_requested.emit("table", t)
-            )
-            self._tables_flow.addWidget(btn)
+            self._tables_flow.addWidget(self._make_object_chip(table, "table"))
 
         for col in sorted(self._columns):
-            btn = QPushButton(col)
-            btn.setStyleSheet(_chip_style())
-            btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-            btn.clicked.connect(
-                lambda checked=False, c=col: self.filter_requested.emit("col", c)
-            )
-            self._columns_flow.addWidget(btn)
+            self._columns_flow.addWidget(self._make_object_chip(col, "col"))
+
+        for alias in sorted(self._aliases):
+            self._aliases_flow.addWidget(self._make_object_chip(alias, "alias"))
 
         self._tables_flow_widget.updateGeometry()
         self._columns_flow_widget.updateGeometry()
+        self._aliases_flow_widget.updateGeometry()
 
     # ── Public API ─────────────────────────────────────────────────────────
 
@@ -277,6 +317,7 @@ class MetadataPanel(QWidget):
         tags: list[str],
         tables: list[str],
         columns: list[str],
+        aliases: list[str] | None = None,
     ) -> None:
         self._title_label.setText(title)
         self._desc_label.setText(description)
@@ -284,6 +325,7 @@ class MetadataPanel(QWidget):
         self._tags_section.setVisible(bool(tags))
         self._tables = list(tables)
         self._columns = list(columns)
+        self._aliases = list(aliases) if aliases else []
         self._rebuild_object_chips()
 
         self._title_edit.setText(title)
@@ -306,6 +348,22 @@ class MetadataPanel(QWidget):
         except OSError:
             self._mtime_section.setVisible(False)
         self._path_section.setVisible(True)
+
+    def _show_path_menu(self) -> None:
+        if self._file_path is None:
+            return
+        menu = QMenu(self)
+        copy_act = menu.addAction(tr("metadata.copy_path"))
+        copy_dir_act = menu.addAction(tr("metadata.copy_folder_path"))
+        menu.addSeparator()
+        reveal_act = menu.addAction(tr("metadata.reveal_in_explorer"))
+        chosen = menu.exec(self._path_btn.mapToGlobal(self._path_btn.rect().bottomLeft()))
+        if chosen == copy_act:
+            QGuiApplication.clipboard().setText(str(self._file_path))
+        elif chosen == copy_dir_act:
+            QGuiApplication.clipboard().setText(str(self._file_path.parent))
+        elif chosen == reveal_act:
+            self.reveal_requested.emit()
 
     def set_favorite(self, is_fav: bool) -> None:
         if is_fav:
@@ -350,6 +408,7 @@ class MetadataPanel(QWidget):
             (self._tags_section, "metadata.section_tags"),
             (self._tables_section, "metadata.section_tables"),
             (self._columns_section, "metadata.section_columns"),
+            (self._aliases_section, "metadata.section_aliases"),
             (self._path_section, "metadata.section_file"),
             (self._mtime_section, "metadata.section_mtime"),
         ]:
@@ -389,6 +448,7 @@ class MetadataPanel(QWidget):
             self._tags_section,
             self._tables_section,
             self._columns_section,
+            self._aliases_section,
             self._path_section,
             self._mtime_section,
         ]:
@@ -403,6 +463,7 @@ class MetadataPanel(QWidget):
         self._tags_section.setVisible(False)
         self._tables = []
         self._columns = []
+        self._aliases = []
         self._rebuild_object_chips()
         self._title_edit.clear()
         self._desc_edit.clear()
