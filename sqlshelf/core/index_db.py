@@ -127,8 +127,12 @@ class IndexDB:
         with self._lock:
             self._conn.close()
 
-    def index_all(self, queries: list[Query]) -> None:
-        """Full reindex: delete everything and insert all given queries."""
+    def index_all(self, queries: list[Query], progress_cb=None) -> None:
+        """Full reindex: delete everything and insert all given queries.
+
+        *progress_cb*, if provided, is called as ``progress_cb(current, total)``
+        after each file is inserted.
+        """
         with self._lock:
             self._conn.execute("BEGIN")
             try:
@@ -136,8 +140,11 @@ class IndexDB:
                 self._conn.execute("DELETE FROM query_tags")
                 self._conn.execute("DELETE FROM queries")
                 self._conn.execute("DELETE FROM tags")
-                for query in queries:
+                total = len(queries)
+                for i, query in enumerate(queries, 1):
                     self._insert_query(query)
+                    if progress_cb is not None:
+                        progress_cb(i, total)
                 self._conn.execute(
                     "INSERT OR REPLACE INTO meta (key, value) VALUES ('last_full_scan', ?)",
                     (datetime.now(timezone.utc).isoformat(),),
