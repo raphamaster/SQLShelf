@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.0.5] - 2026-06-22
+
+### Added
+- **Alias chips** — table aliases extracted from the SQL body (e.g. `FROM Orders AS o` → chip `o`) are displayed as a dedicated ALIASES section in the metadata panel; clicking navigates to the first occurrence in the editor
+- **Select All / Copy buttons** — two buttons added to the editor toolbar in view mode: Select All selects the full SQL body; Copy copies it to the clipboard without selecting
+
+### Fixed
+- **Ctrl+N shortcut** — removed a duplicate `QShortcut("Ctrl+N")` that caused the _Ambiguous shortcut overload: Ctrl+N_ warning in the terminal; the shortcut on the menu action is sufficient
+
+### Changed
+- **Occurrence highlighting** — placing the cursor on a word (or selecting text) highlights all other occurrences in the SQL editor with a distinct background + foreground color, preserving readability over syntax-highlighted tokens
+- **Metadata chip navigation** — left-clicking a table, column or alias chip now jumps to the first occurrence of that token in the current SQL editor (whole-word, case-insensitive); right-click shows a context menu with _Go to occurrence_, _Search in all queries_ and _Copy name_
+- **File path chip** — right-click now shows a context menu: _Copy absolute path_, _Copy folder path_, _Reveal in Explorer_
+
+---
+
 ## [1.0.4] - 2026-06-16
 
 ### Added
