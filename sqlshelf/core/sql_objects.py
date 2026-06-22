@@ -25,20 +25,26 @@ def extract_objects(sql_body: str, dialect: str = "tsql") -> dict[str, set[str]]
     try:
         # sqlglot prints fallback warnings to stderr even with IGNORE level; suppress them.
         with contextlib.redirect_stderr(io.StringIO()):
-            tree = sqlglot.parse_one(
+            statements = sqlglot.parse(
                 sql_body, dialect=dialect, error_level=sqlglot.ErrorLevel.IGNORE
             )
     except Exception:
         return empty
 
-    if tree is None:
-        return empty
+    tables: set[str] = set()
+    columns: set[str] = set()
+    ctes: set[str] = set()
 
-    tables: set[str] = {t.name for t in tree.find_all(exp.Table) if t.name}
-    columns: set[str] = {c.name for c in tree.find_all(exp.Column) if c.name}
-    ctes: set[str] = {c.alias for c in tree.find_all(exp.CTE) if c.alias}
+    # Iterate all statements so that ';WITH ...' patterns are fully covered —
+    # parse_one would stop at the leading ';' and miss everything after it.
+    for tree in statements:
+        if tree is None:
+            continue
+        tables.update(t.name for t in tree.find_all(exp.Table) if t.name)
+        columns.update(c.name for c in tree.find_all(exp.Column) if c.name)
+        ctes.update(c.alias for c in tree.find_all(exp.CTE) if c.alias)
+
     tables -= ctes
-
     return {"table": tables, "column": columns, "procedure": set(), "function": set()}
 
 

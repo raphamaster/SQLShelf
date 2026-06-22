@@ -76,6 +76,37 @@ class TestExtractObjects:
         result = extract_objects(sql)
         assert expected_table in result["table"]
 
+    def test_semicolon_prefix_with_cte(self) -> None:
+        """T-SQL ';WITH' pattern must not drop columns and tables from the CTE block."""
+        sql = """;WITH recent AS (
+            SELECT id, created FROM dbo.Orders WHERE created > '2026-01-01'
+        )
+        SELECT id, created FROM recent
+        """
+        result = extract_objects(sql)
+        assert "Orders" in result["table"]
+        assert "recent" not in result["table"]   # CTE alias excluded
+        assert "id" in result["column"]
+        assert "created" in result["column"]
+
+    def test_semicolon_prefix_with_cte_columns_not_empty(self) -> None:
+        """Columns must be extracted even when SQL starts with bare ';'."""
+        sql = """;
+        WITH cte AS (SELECT col1, col2 FROM dbo.Source)
+        SELECT col1, col2 FROM cte
+        """
+        result = extract_objects(sql)
+        assert "col1" in result["column"]
+        assert "col2" in result["column"]
+        assert "Source" in result["table"]
+
+    def test_multiple_statements_all_parsed(self) -> None:
+        """All statements separated by ';' must contribute to the object set."""
+        sql = "SELECT id FROM dbo.Customers; SELECT name FROM dbo.Products"
+        result = extract_objects(sql)
+        assert "Customers" in result["table"]
+        assert "Products" in result["table"]
+
 
 class TestObjectsToText:
     def test_empty_objects(self) -> None:
