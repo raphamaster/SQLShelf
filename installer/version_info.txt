@@ -1,8 +1,8 @@
 # UTF-8
 VSVersionInfo(
   ffi=FixedFileInfo(
-    filevers=(1, 0, 5, 0),
-    prodvers=(1, 0, 5, 0),
+    filevers=(1, 0, 6, 0),
+    prodvers=(1, 0, 6, 0),
     mask=0x3f,
     flags=0x0,
     OS=0x4,
@@ -18,12 +18,12 @@ VSVersionInfo(
           [
             StringStruct(u'CompanyName',      u'Raphael Franco'),
             StringStruct(u'FileDescription',  u'SQLShelf — SQL Query Manager'),
-            StringStruct(u'FileVersion',      u'1.0.5.0'),
+            StringStruct(u'FileVersion',      u'1.0.6.0'),
             StringStruct(u'InternalName',     u'SQLShelf'),
             StringStruct(u'LegalCopyright',   u'Copyright (c) 2025 Raphael Franco'),
             StringStruct(u'OriginalFilename', u'SQLShelf.exe'),
             StringStruct(u'ProductName',      u'SQLShelf'),
-            StringStruct(u'ProductVersion',   u'1.0.5'),
+            StringStruct(u'ProductVersion',   u'1.0.6'),
           ]
         )
       ]

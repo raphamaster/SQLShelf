@@ -9,7 +9,7 @@
 
 <p align="center">
   <a href="https://github.com/raphamaster/SQLShelf/releases/latest">
-    <img src="https://img.shields.io/badge/release-v1.0.5-0ADE99?style=flat-square" alt="Latest release"/>
+    <img src="https://img.shields.io/badge/release-v1.0.6-0ADE99?style=flat-square" alt="Latest release"/>
   </a>
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux-0ADE99?style=flat-square" alt="Platform"/>
   <img src="https://img.shields.io/badge/python-3.12%2B-0ADE99?style=flat-square" alt="Python"/>
@@ -72,8 +72,8 @@ Your files stay exactly as they are. SQLShelf only adds an optional metadata blo
 
 | Platform | Installer | Portable (no install) |
 |----------|-----------|----------------------|
-| **Windows 10/11 x64** | [SQLShelf-1.0.5-windows-x64-setup.exe](https://github.com/raphamaster/SQLShelf/releases/latest) | [SQLShelf-1.0.5-windows-x64-portable.zip](https://github.com/raphamaster/SQLShelf/releases/latest) |
-| **Linux x86_64** | [SQLShelf-1.0.5-linux-x86_64.AppImage](https://github.com/raphamaster/SQLShelf/releases/latest) | [SQLShelf-1.0.5-linux-x86_64-portable.zip](https://github.com/raphamaster/SQLShelf/releases/latest) |
+| **Windows 10/11 x64** | [SQLShelf-1.0.6-windows-x64-setup.exe](https://github.com/raphamaster/SQLShelf/releases/latest) | [SQLShelf-1.0.6-windows-x64-portable.zip](https://github.com/raphamaster/SQLShelf/releases/latest) |
+| **Linux x86_64** | [SQLShelf-1.0.6-linux-x86_64.AppImage](https://github.com/raphamaster/SQLShelf/releases/latest) | [SQLShelf-1.0.6-linux-x86_64-portable.zip](https://github.com/raphamaster/SQLShelf/releases/latest) |
 
 > **Portable:** extract the zip anywhere and run `SQLShelf.exe` (Windows) or `./SQLShelf` (Linux) — no installation required.
 

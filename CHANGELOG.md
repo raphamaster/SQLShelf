@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.6] - 2026-06-22
+
+### Added
+- **Force reindex progress modal** — clicking _Forçar Indexação_ now runs the scan in a background thread and shows a progress dialog with a progress bar, instead of blocking the UI silently
+
+---
+
 ## [1.0.5] - 2026-06-22
 
 ### Added
