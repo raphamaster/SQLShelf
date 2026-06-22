@@ -154,6 +154,7 @@
 
   "progress.title": "Indexing…",
   "progress.importing": "<b>Importing folder:</b> {name}",
+  "progress.reindexing": "<b>Re-indexing folder:</b> {name}",
   "progress.scanning": "Scanning files…",
   "progress.indexing_files": "Indexing: {current} / {total} files",
 

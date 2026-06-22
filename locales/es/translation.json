@@ -154,6 +154,7 @@
 
   "progress.title": "Indexando…",
   "progress.importing": "<b>Importando carpeta:</b> {name}",
+  "progress.reindexing": "<b>Re-indexando carpeta:</b> {name}",
   "progress.scanning": "Escaneando archivos…",
   "progress.indexing_files": "Indexando: {current} / {total} archivos",
 

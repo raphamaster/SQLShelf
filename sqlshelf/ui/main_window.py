@@ -88,6 +88,29 @@ class _IndexWorker(QRunnable):
             self.signals.error.emit(str(exc))
 
 
+class _ForceReindexWorker(QRunnable):
+    def __init__(self, db: IndexDB, folder: Path) -> None:
+        super().__init__()
+        self.signals = _IndexWorkerSignals()
+        self._db = db
+        self._folder = folder
+
+    def run(self) -> None:
+        try:
+            queries = scan_folder(self._folder)
+            total = len(queries)
+            if total:
+                self.signals.progress.emit(0, total)
+
+            def _cb(current: int, t: int) -> None:
+                self.signals.progress.emit(current, t)
+
+            self._db.index_all(queries, progress_cb=_cb)
+            self.signals.finished.emit(self._db.count())
+        except Exception as exc:
+            self.signals.error.emit(str(exc))
+
+
 # ---------------------------------------------------------------------------
 # Background search worker
 # ---------------------------------------------------------------------------
@@ -305,7 +328,7 @@ class _UpdateDialog(QDialog):
 # ---------------------------------------------------------------------------
 
 class _IndexProgressDialog(QDialog):
-    def __init__(self, folder_name: str, parent=None) -> None:
+    def __init__(self, folder_name: str, parent=None, title_key: str = "progress.importing") -> None:
         super().__init__(
             parent,
             Qt.WindowType.WindowTitleHint | Qt.WindowType.CustomizeWindowHint,
@@ -319,7 +342,7 @@ class _IndexProgressDialog(QDialog):
         layout.setContentsMargins(24, 20, 24, 20)
         layout.setSpacing(10)
 
-        self._title_label = QLabel(tr("progress.importing", name=folder_name))
+        self._title_label = QLabel(tr(title_key, name=folder_name))
         layout.addWidget(self._title_label)
 
         self._detail_label = QLabel(tr("progress.scanning"))
@@ -895,13 +918,19 @@ class MainWindow(QMainWindow):
         if self._db is None or self._folder is None:
             return
         self._status_bar.showMessage(tr("status.full_reindex"))
-        try:
-            queries = scan_folder(self._folder)
-            self._db.index_all(queries)
-            self._status_bar.showMessage(tr("status.indexed", count=self._db.count()))
-            self._refresh_ui()
-        except Exception as exc:
-            self._status_bar.showMessage(tr("status.reindex_error", msg=str(exc)))
+
+        self._progress_dialog = _IndexProgressDialog(
+            self._folder.name, self, title_key="progress.reindexing"
+        )
+
+        worker = _ForceReindexWorker(self._db, self._folder)
+        worker.signals.progress.connect(self._progress_dialog.on_progress)
+        worker.signals.progress.connect(self._on_index_progress)
+        worker.signals.finished.connect(self._on_index_finished)
+        worker.signals.error.connect(self._on_index_error)
+        QThreadPool.globalInstance().start(worker)
+
+        self._progress_dialog.show()
 
     def _stop_watcher(self) -> None:
         if self._watcher is not None:
