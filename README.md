@@ -9,7 +9,7 @@
 
 <p align="center">
   <a href="https://github.com/raphamaster/SQLShelf/releases/latest">
-    <img src="https://img.shields.io/badge/release-v1.0.6-0ADE99?style=flat-square" alt="Latest release"/>
+    <img src="https://img.shields.io/badge/release-v1.0.7-0ADE99?style=flat-square" alt="Latest release"/>
   </a>
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux-0ADE99?style=flat-square" alt="Platform"/>
   <img src="https://img.shields.io/badge/python-3.12%2B-0ADE99?style=flat-square" alt="Python"/>
@@ -65,6 +65,10 @@ Your files stay exactly as they are. SQLShelf only adds an optional metadata blo
 - Dark and light themes (live switching)
 - English and Portuguese (PT-BR) interface
 - File watcher: index updates automatically when files change on disk
+- System tray: close minimizes to tray; double-click to restore
+- Windows autostart option (_Edit → Preferences_)
+- Status bar shows live result count
+- Statistics dialog (_Help → Statistics_): totals for queries, tags, tables and columns
 
 ---
 
@@ -72,8 +76,8 @@ Your files stay exactly as they are. SQLShelf only adds an optional metadata blo
 
 | Platform | Installer | Portable (no install) |
 |----------|-----------|----------------------|
-| **Windows 10/11 x64** | [SQLShelf-1.0.6-windows-x64-setup.exe](https://github.com/raphamaster/SQLShelf/releases/latest) | [SQLShelf-1.0.6-windows-x64-portable.zip](https://github.com/raphamaster/SQLShelf/releases/latest) |
-| **Linux x86_64** | [SQLShelf-1.0.6-linux-x86_64.AppImage](https://github.com/raphamaster/SQLShelf/releases/latest) | [SQLShelf-1.0.6-linux-x86_64-portable.zip](https://github.com/raphamaster/SQLShelf/releases/latest) |
+| **Windows 10/11 x64** | [SQLShelf-1.0.7-windows-x64-setup.exe](https://github.com/raphamaster/SQLShelf/releases/latest) | [SQLShelf-1.0.7-windows-x64-portable.zip](https://github.com/raphamaster/SQLShelf/releases/latest) |
+| **Linux x86_64** | [SQLShelf-1.0.7-linux-x86_64.AppImage](https://github.com/raphamaster/SQLShelf/releases/latest) | [SQLShelf-1.0.7-linux-x86_64-portable.zip](https://github.com/raphamaster/SQLShelf/releases/latest) |
 
 > **Portable:** extract the zip anywhere and run `SQLShelf.exe` (Windows) or `./SQLShelf` (Linux) — no installation required.
 
@@ -147,11 +151,14 @@ The file stays 100% valid SQL. Open it in SSMS, run it, edit it — SQLShelf wil
 |----------|--------|
 | `Ctrl+O` | Open folder |
 | `Ctrl+N` | New query |
-| `Ctrl+P` | Command palette |
+| `Ctrl+P` | Command palette / Quick Search |
 | `Ctrl+S` | Save query |
 | `Ctrl+F` | Focus search bar |
+| `Ctrl+Shift+F` | Clear search |
 | `Ctrl+E` | Toggle edit mode |
 | `Ctrl+A` | Select all (view mode) |
+| `F1` | Help |
+| `Alt+F4` | Quit (exits, does not minimize to tray) |
 
 ---
 

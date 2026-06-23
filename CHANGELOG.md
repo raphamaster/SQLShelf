@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.0.7] - 2026-06-23
+
+### Added
+- **System tray** — closing the main window now minimizes SQLShelf to the Windows system tray; double-click the tray icon or _Restore_ to bring it back
+- **Windows autostart** — new toggle in Preferences (_Edit → Preferences_) to launch SQLShelf automatically on Windows login via the registry
+- **Quit action** — _File → Quit_ exits the application immediately without minimizing to the tray
+- **Status bar result count** — the status bar shows how many queries match the current search in real time
+- **Statistics dialog** — _Help → Statistics_ shows a summary of the open project: total queries, tags, tables, columns and index size
+- **Version in About dialog** — _Help → About_ now displays the current application version
+
+### Changed
+- **Preferences moved to Edit menu** — _Preferences_ action relocated to _Edit → Preferences_ for better discoverability
+- **Open in SSMS removed** — _View → Open in SSMS_ action removed; use the clickable file path chip in the metadata panel to open a file externally
+
+### Fixed
+- **Tray exit** — `QApplication.quit()` is now called on the tray _Quit_ action, ensuring the event loop exits cleanly when the main window is hidden
+
+### Docs
+- Added comprehensive database schema reference (`docs/database-schema.md`) covering every table, column, trigger, index and search operator
+
+---
+
 ## [1.0.6] - 2026-06-22
 
 ### Added
