@@ -1651,10 +1651,13 @@ class MainWindow(QMainWindow):
 
         # Body text with clickable links — inline style is the only reliable
         # way to set link color when qt-material overrides the QPalette.
+        from sqlshelf import __version__
         from .theme.tokens import ACCENT
+        version_line = f'<span style="color:{ACCENT};font-size:12px;">v{__version__}</span><br><br>'
         about_html = tr("about.text").replace(
-            "<a href=", f'<a style="color:{ACCENT};" href='
-        )
+            "<b>SQLShelf</b><br><br>",
+            f"<b>SQLShelf</b><br>{version_line}",
+        ).replace("<a href=", f'<a style="color:{ACCENT};" href=')
         body = QLabel(about_html)
         body.setWordWrap(True)
         body.setOpenExternalLinks(True)
