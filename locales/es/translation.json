@@ -16,6 +16,7 @@
   "menu.language": "Idioma",
   "menu.help": "A&yuda",
   "menu.help_action": "Ayuda",
+  "menu.statistics": "Estadísticas",
   "menu.check_for_updates": "Buscar Actualizaciones…",
   "menu.about": "Acerca de SQLShelf",
   "menu.reveal_in_explorer": "Mostrar Archivo en Explorador",
@@ -148,6 +149,11 @@
   "status.index_error": "Error de índice: {msg}",
   "status.no_folder": "Sin carpeta cargada — Archivo → Abrir Carpeta…",
   "status.folders_loaded": "{total} {query} en el índice — {n} {folder} cargadas",
+  "status.folder_count": "Carpeta '{name}' — {count} {query}",
+  "status.tag_count": "Etiqueta: {tag} — {count} {query}",
+  "status.favorites_count": "Favoritos — {count} {query}",
+  "status.recent_count": "Recientes — {count} {query}",
+  "status.search_count": "{count} {query} para '{filter}'",
   "status.copied": "Copiado: {path}",
   "status.saved": "Guardado: {path}",
   "status.created": "Creado: {name}",
@@ -195,5 +201,15 @@
   "help.text": "<b>Atajos de teclado</b><br><br><b>Ctrl+O</b> — Abrir Carpeta<br><b>Ctrl+N</b> — Nueva Consulta<br><b>Ctrl+D</b> — Duplicar Consulta<br><b>Ctrl+P</b> — Búsqueda Rápida<br><b>Ctrl+F</b> — Enfocar Búsqueda<br><b>Ctrl+E</b> — Alternar Modo Edición<br><b>Ctrl+S</b> — Guardar<br><b>Ctrl+Shift+C</b> — Copiar SQL (sin frontmatter)<br><b>Ctrl+Shift+F</b> — Copiar Plantilla de Frontmatter<br><b>Esc</b> — Cancelar Edición<br><b>F1</b> — Ayuda<br><b>Alt+F4</b> — Salir",
 
   "about.title": "Acerca de SQLShelf",
-  "about.text": "<b>SQLShelf</b><br><br>Gestor de consultas SQL. Organiza, describe, categoriza y busca archivos SQL por contenido, tabla, campo o etiqueta.<br><br>Autor: Raphael Franco — <a href=\"http://raphaelfranco.com\">raphaelfranco.com</a><br>GitHub: <a href=\"https://github.com/raphamaster/SQLShelf/releases\">github.com/raphamaster/SQLShelf</a>"
+  "about.text": "<b>SQLShelf</b><br><br>Gestor de consultas SQL. Organiza, describe, categoriza y busca archivos SQL por contenido, tabla, campo o etiqueta.<br><br>Autor: Raphael Franco — <a href=\"http://raphaelfranco.com\">raphaelfranco.com</a><br>GitHub: <a href=\"https://github.com/raphamaster/SQLShelf/releases\">github.com/raphamaster/SQLShelf</a>",
+
+  "stats.title": "Estadísticas de SQLShelf",
+  "stats.no_data": "Aún no hay carpetas cargadas.",
+  "stats.folders": "Carpetas cargadas",
+  "stats.queries": "Total de consultas",
+  "stats.tags": "Etiquetas únicas",
+  "stats.favorites": "Favoritos",
+  "stats.tables": "Tablas distintas referenciadas",
+  "stats.columns": "Columnas distintas referenciadas",
+  "stats.close_btn": "Cerrar"
 }

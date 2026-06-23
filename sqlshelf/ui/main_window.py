@@ -370,6 +370,86 @@ class _IndexProgressDialog(QDialog):
 
 
 # ---------------------------------------------------------------------------
+# Statistics dialog
+# ---------------------------------------------------------------------------
+
+
+class _StatsDialog(QDialog):
+    """Aggregated statistics across all loaded project folders."""
+
+    def __init__(self, known_dbs: dict, parent=None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle(tr("stats.title"))
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
+        self.setFixedWidth(400)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 24, 24, 20)
+        layout.setSpacing(20)
+
+        if not known_dbs:
+            lbl = QLabel(tr("stats.no_data"))
+            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            layout.addWidget(lbl)
+        else:
+            combined: dict[str, object] = {
+                "queries": 0,
+                "tag_names": set(),
+                "favorites": 0,
+                "table_names": set(),
+                "column_names": set(),
+            }
+            for db in known_dbs.values():
+                try:
+                    s = db.get_stats()
+                    combined["queries"] += s["queries"]
+                    combined["favorites"] += s["favorites"]
+                    combined["tag_names"] |= s["tag_names"]
+                    combined["table_names"] |= s["table_names"]
+                    combined["column_names"] |= s["column_names"]
+                except Exception:
+                    pass
+
+            grid = QVBoxLayout()
+            grid.setSpacing(10)
+
+            rows = [
+                (tr("stats.folders"), str(len(known_dbs))),
+                (tr("stats.queries"), str(combined["queries"])),
+                (tr("stats.tags"), str(len(combined["tag_names"]))),
+                (tr("stats.favorites"), str(combined["favorites"])),
+                (tr("stats.tables"), str(len(combined["table_names"]))),
+                (tr("stats.columns"), str(len(combined["column_names"]))),
+            ]
+
+            for label_text, value_text in rows:
+                row_widget = QWidget()
+                row_layout = QHBoxLayout(row_widget)
+                row_layout.setContentsMargins(0, 0, 0, 0)
+                lbl = QLabel(label_text)
+                val = QLabel(value_text)
+                val.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                font = val.font()
+                font.setBold(True)
+                val.setFont(font)
+                row_layout.addWidget(lbl)
+                row_layout.addStretch()
+                row_layout.addWidget(val)
+                grid.addWidget(row_widget)
+
+            layout.addLayout(grid)
+
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+        close_btn = QPushButton(tr("stats.close_btn"))
+        close_btn.setFixedWidth(80)
+        close_btn.setDefault(True)
+        close_btn.clicked.connect(self.accept)
+        btn_row.addWidget(close_btn)
+        layout.addLayout(btn_row)
+
+
+# ---------------------------------------------------------------------------
 # Watcher → Qt bridge
 # ---------------------------------------------------------------------------
 
@@ -405,6 +485,10 @@ class MainWindow(QMainWindow):
         # Multi-folder support
         self._known_dbs: dict[Path, IndexDB] = {}
         self._browse_folder: Path | None = None  # None = show all known folders
+
+        # Sidebar navigation state — used to compose status bar messages
+        self._sidebar_mode: str = "all"   # "all" | "tag" | "favorites" | "recent"
+        self._active_tag: str = ""
 
         # Async search state
         self._search_gen: int = 0      # incremented per dispatch; workers check this
@@ -546,6 +630,9 @@ class MainWindow(QMainWindow):
         self._help_act.setShortcut(QKeySequence("F1"))
         self._help_act.triggered.connect(self._show_help)
         self._help_menu.addAction(self._help_act)
+        self._stats_act = QAction(tr("menu.statistics"), self)
+        self._stats_act.triggered.connect(self._show_statistics)
+        self._help_menu.addAction(self._stats_act)
         self._help_menu.addSeparator()
         self._check_updates_act = QAction(tr("menu.check_for_updates"), self)
         self._check_updates_act.triggered.connect(self._check_for_updates)
@@ -817,6 +904,7 @@ class MainWindow(QMainWindow):
 
         self._copy_act.setText(tr("menu.copy_sql"))
         self._help_act.setText(tr("menu.help_action"))
+        self._stats_act.setText(tr("menu.statistics"))
         self._check_updates_act.setText(tr("menu.check_for_updates"))
         self._about_act.setText(tr("menu.about"))
         self._preferences_act.setText(tr("menu.preferences"))
@@ -901,12 +989,13 @@ class MainWindow(QMainWindow):
             return
         self._folder = folder
         self._browse_folder = folder
+        self._sidebar_mode = "all"
+        self._active_tag = ""
         self._db = self._get_or_open_db(folder)
         self._search_bar.blockSignals(True)
         self._search_bar.clear()
         self._search_bar.blockSignals(False)
         self._sidebar.set_folders(cfg.get_known_folders(), folder)
-        self._status_bar.showMessage(tr("status.folder", name=folder.name))
         self._refresh_ui()
 
     def _get_or_open_db(self, folder: Path) -> IndexDB:
@@ -1046,6 +1135,28 @@ class MainWindow(QMainWindow):
         if self._pending_select is not None:
             self._query_list.select_by_rel_path(self._pending_select)
             self._pending_select = None
+        self._update_results_status(results)
+
+    def _update_results_status(self, results: list) -> None:
+        """Update status bar with the count of currently displayed results."""
+        count = len(results)
+        q_word = ntr("word.query", "word.queries", count)
+        search_text = self._search_bar.text().strip()
+
+        if self._sidebar_mode == "tag" and self._active_tag:
+            self._status_bar.showMessage(
+                tr("status.tag_count", tag=self._active_tag, count=count, query=q_word)
+            )
+        elif self._browse_folder is not None:
+            self._status_bar.showMessage(
+                tr("status.folder_count", name=self._browse_folder.name, count=count, query=q_word)
+            )
+        elif search_text:
+            self._status_bar.showMessage(
+                tr("status.search_count", count=count, query=q_word, filter=search_text)
+            )
+        else:
+            self._refresh_status_bar()
 
     # ------------------------------------------------------------------
     # Query selection
@@ -1132,6 +1243,11 @@ class MainWindow(QMainWindow):
             # "All queries" clicked — switch to global multi-folder mode
             self._browse_folder = None
             self._sidebar.set_folders(cfg.get_known_folders(), None)
+            self._sidebar_mode = "all"
+            self._active_tag = ""
+        else:
+            self._sidebar_mode = "tag"
+            self._active_tag = tag
         self._search_bar.blockSignals(True)
         self._search_bar._edit.setText(f"tag:{tag}" if tag else "")
         self._search_bar.blockSignals(False)
@@ -1140,6 +1256,7 @@ class MainWindow(QMainWindow):
     def _on_favorites_selected(self) -> None:
         self._search_gen += 1   # discard any in-flight search worker
         self._search_timer.stop()
+        self._sidebar_mode = "favorites"
         self._search_bar.blockSignals(True)
         self._search_bar.clear()
         self._search_bar.blockSignals(False)
@@ -1152,10 +1269,14 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
         self._query_list.set_results(results)
+        count = len(results)
+        q_word = ntr("word.query", "word.queries", count)
+        self._status_bar.showMessage(tr("status.favorites_count", count=count, query=q_word))
 
     def _on_recent_selected(self) -> None:
         self._search_gen += 1   # discard any in-flight search worker
         self._search_timer.stop()
+        self._sidebar_mode = "recent"
         self._search_bar.blockSignals(True)
         self._search_bar.clear()
         self._search_bar.blockSignals(False)
@@ -1173,6 +1294,9 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
         self._query_list.set_results(results)
+        count = len(results)
+        q_word = ntr("word.query", "word.queries", count)
+        self._status_bar.showMessage(tr("status.recent_count", count=count, query=q_word))
 
     def _on_navigate_requested(self, token: str) -> None:
         """Jump to the first occurrence of *token* in the current SQL editor."""
@@ -1628,6 +1752,10 @@ class MainWindow(QMainWindow):
 
     def _show_help(self) -> None:
         QMessageBox.information(self, tr("help.title"), tr("help.text"))
+
+    def _show_statistics(self) -> None:
+        dlg = _StatsDialog(self._known_dbs, self)
+        dlg.exec()
 
     def _check_for_updates(self) -> None:
         from sqlshelf import __version__
