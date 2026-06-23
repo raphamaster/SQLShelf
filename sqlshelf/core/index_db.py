@@ -274,6 +274,32 @@ class IndexDB:
                 for r in self._conn.execute("SELECT name FROM tags ORDER BY name").fetchall()
             ]
 
+    def get_stats(self) -> dict[str, object]:
+        """Return aggregated statistics for this project index."""
+        with self._lock:
+            queries = self._conn.execute("SELECT COUNT(*) FROM queries").fetchone()[0]
+            tag_names = {r[0] for r in self._conn.execute("SELECT name FROM tags").fetchall()}
+            favorites = self._conn.execute("SELECT COUNT(*) FROM favorites").fetchone()[0]
+            table_names = {
+                r[0]
+                for r in self._conn.execute(
+                    "SELECT DISTINCT object_name FROM query_objects WHERE object_type='table'"
+                ).fetchall()
+            }
+            column_names = {
+                r[0]
+                for r in self._conn.execute(
+                    "SELECT DISTINCT object_name FROM query_objects WHERE object_type='column'"
+                ).fetchall()
+            }
+        return {
+            "queries": queries,
+            "tag_names": tag_names,
+            "favorites": favorites,
+            "table_names": table_names,
+            "column_names": column_names,
+        }
+
     def get_objects(self, query_id: int) -> dict[str, list[str]]:
         """Return {object_type: [names]} for a query."""
         with self._lock:

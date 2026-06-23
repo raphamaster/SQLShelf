@@ -16,6 +16,7 @@
   "menu.language": "Language",
   "menu.help": "&Help",
   "menu.help_action": "Help",
+  "menu.statistics": "Statistics",
   "menu.check_for_updates": "Check for Updates…",
   "menu.about": "About SQLShelf",
   "menu.reveal_in_explorer": "Reveal File in Explorer",
@@ -148,6 +149,11 @@
   "status.index_error": "Index error: {msg}",
   "status.no_folder": "No folder loaded — File → Open Folder…",
   "status.folders_loaded": "{total} {query} indexed — {n} {folder} loaded",
+  "status.folder_count": "Folder '{name}' — {count} {query}",
+  "status.tag_count": "Tag: {tag} — {count} {query}",
+  "status.favorites_count": "Favorites — {count} {query}",
+  "status.recent_count": "Recent — {count} {query}",
+  "status.search_count": "{count} {query} for '{filter}'",
   "status.copied": "Copied: {path}",
   "status.saved": "Saved: {path}",
   "status.created": "Created: {name}",
@@ -195,5 +201,15 @@
   "help.text": "<b>Keyboard shortcuts</b><br><br><b>Ctrl+O</b> — Open Folder<br><b>Ctrl+N</b> — New Query<br><b>Ctrl+D</b> — Duplicate Query<br><b>Ctrl+P</b> — Quick Search<br><b>Ctrl+F</b> — Focus Search<br><b>Ctrl+E</b> — Toggle Edit Mode<br><b>Ctrl+S</b> — Save<br><b>Ctrl+Shift+C</b> — Copy SQL (no frontmatter)<br><b>Ctrl+Shift+F</b> — Copy Frontmatter Template<br><b>Esc</b> — Cancel Edit<br><b>F1</b> — Help<br><b>Alt+F4</b> — Quit",
 
   "about.title": "About SQLShelf",
-  "about.text": "<b>SQLShelf</b><br><br>SQL query manager. Organizes, describes, categorizes and searches SQL files by content, table, field or tag.<br><br>Author: Raphael Franco — <a href=\"http://raphaelfranco.com\">raphaelfranco.com</a><br>GitHub: <a href=\"https://github.com/raphamaster/SQLShelf/releases\">github.com/raphamaster/SQLShelf</a>"
+  "about.text": "<b>SQLShelf</b><br><br>SQL query manager. Organizes, describes, categorizes and searches SQL files by content, table, field or tag.<br><br>Author: Raphael Franco — <a href=\"http://raphaelfranco.com\">raphaelfranco.com</a><br>GitHub: <a href=\"https://github.com/raphamaster/SQLShelf/releases\">github.com/raphamaster/SQLShelf</a>",
+
+  "stats.title": "SQLShelf Statistics",
+  "stats.no_data": "No folders loaded yet.",
+  "stats.folders": "Folders loaded",
+  "stats.queries": "Total queries",
+  "stats.tags": "Unique tags",
+  "stats.favorites": "Favorites",
+  "stats.tables": "Distinct tables referenced",
+  "stats.columns": "Distinct columns referenced",
+  "stats.close_btn": "Close"
 }
