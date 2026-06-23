@@ -1803,6 +1803,7 @@ class MainWindow(QMainWindow):
     def _quit_app(self) -> None:
         self._quitting = True
         self.close()
+        QApplication.quit()
 
     # ------------------------------------------------------------------
     # Preferences dialog
