@@ -31,6 +31,12 @@ htmlcov/
 # Configuração local do usuário (se algum dia ficar dentro do repo)
 config.local.json
 
+# --- Claude Code ---
+.claude/
+
+# --- Logs de build ---
+build_log.txt
+
 # --- IDE / Editor ---
 .vscode/
 .idea/
