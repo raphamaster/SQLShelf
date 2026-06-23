@@ -24,6 +24,7 @@
   "menu.copy_frontmatter_template": "Copiar Modelo de Frontmatter",
   "menu.copy_sql": "Copiar SQL (sem frontmatter)",
   "menu.recent_none": "(nenhum)",
+  "menu.quit": "Sair",
   "menu.preferences": "Preferências…",
 
   "prefs.title": "Preferências",

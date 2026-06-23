@@ -487,6 +487,15 @@ class MainWindow(QMainWindow):
         self._reindex_act.triggered.connect(self.force_reindex)
         self._file_menu.addAction(self._reindex_act)
 
+        self._file_menu.addSeparator()
+
+        self._quit_act = QAction(
+            _icon(QStyle.StandardPixmap.SP_DialogCloseButton), tr("menu.quit"), self
+        )
+        self._quit_act.setShortcut(QKeySequence("Alt+F4"))
+        self._quit_act.triggered.connect(self._quit_app)
+        self._file_menu.addAction(self._quit_act)
+
         self._edit_menu = QMenu(tr("menu.edit"), self)
         mb.addMenu(self._edit_menu)
 
@@ -804,6 +813,7 @@ class MainWindow(QMainWindow):
         self._duplicate_act.setText(tr("menu.duplicate_query"))
         self._recent_menu.setTitle(tr("menu.recent_projects"))
         self._reindex_act.setText(tr("menu.force_reindex"))
+        self._quit_act.setText(tr("menu.quit"))
         self._edit_menu.setTitle(tr("menu.edit"))
         self._copy_frontmatter_template_act.setText(tr("menu.copy_frontmatter_template"))
         self._reveal_act.setText(tr("menu.reveal_in_explorer"))
