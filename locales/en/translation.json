@@ -192,7 +192,7 @@
   "update.startup_notify": "New version {version} available — Help → Check for Updates",
 
   "help.title": "SQLShelf — Help",
-  "help.text": "<b>Keyboard shortcuts</b><br><br><b>Ctrl+O</b> — Open Folder<br><b>Ctrl+N</b> — New Query<br><b>Ctrl+D</b> — Duplicate Query<br><b>Ctrl+P</b> — Quick Search<br><b>Ctrl+F</b> — Focus Search<br><b>Ctrl+E</b> — Toggle Edit Mode<br><b>Ctrl+S</b> — Save<br><b>Ctrl+Shift+C</b> — Copy SQL (no frontmatter)<br><b>Ctrl+Shift+F</b> — Copy Frontmatter Template<br><b>Esc</b> — Cancel Edit",
+  "help.text": "<b>Keyboard shortcuts</b><br><br><b>Ctrl+O</b> — Open Folder<br><b>Ctrl+N</b> — New Query<br><b>Ctrl+D</b> — Duplicate Query<br><b>Ctrl+P</b> — Quick Search<br><b>Ctrl+F</b> — Focus Search<br><b>Ctrl+E</b> — Toggle Edit Mode<br><b>Ctrl+S</b> — Save<br><b>Ctrl+Shift+C</b> — Copy SQL (no frontmatter)<br><b>Ctrl+Shift+F</b> — Copy Frontmatter Template<br><b>Esc</b> — Cancel Edit<br><b>F1</b> — Help<br><b>Alt+F4</b> — Quit",
 
   "about.title": "About SQLShelf",
   "about.text": "<b>SQLShelf</b><br><br>SQL query manager. Organizes, describes, categorizes and searches SQL files by content, table, field or tag.<br><br>Author: Raphael Franco — <a href=\"http://raphaelfranco.com\">raphaelfranco.com</a><br>GitHub: <a href=\"https://github.com/raphamaster/SQLShelf/releases\">github.com/raphamaster/SQLShelf</a>"
