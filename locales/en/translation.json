@@ -24,6 +24,14 @@
   "menu.copy_frontmatter_template": "Copy Frontmatter Template",
   "menu.copy_sql": "Copy SQL (no frontmatter)",
   "menu.recent_none": "(none)",
+  "menu.preferences": "Preferences…",
+
+  "prefs.title": "Preferences",
+  "prefs.minimize_to_tray": "Minimize to tray on close",
+  "prefs.start_with_windows": "Start with Windows",
+
+  "tray.show": "Show SQLShelf",
+  "tray.quit": "Quit SQLShelf",
 
   "sidebar.open_folder": "📂  Open Folder",
   "sidebar.browse": "BROWSE",
