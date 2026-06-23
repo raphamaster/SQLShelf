@@ -9,6 +9,7 @@ from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, QTimer, Signal
 from PySide6.QtGui import QAction, QActionGroup, QFont, QIcon, QKeySequence, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
+    QCheckBox,
     QDialog,
     QFileDialog,
     QInputDialog,
@@ -23,6 +24,7 @@ from PySide6.QtWidgets import (
     QStackedWidget,
     QStatusBar,
     QStyle,
+    QSystemTrayIcon,
     QHBoxLayout,
     QVBoxLayout,
     QWidget,
@@ -398,6 +400,7 @@ class MainWindow(QMainWindow):
         self._current_metadata: dict = {}
         self._edit_mode = False
         self._progress_dialog: _IndexProgressDialog | None = None
+        self._quitting = False
 
         # Multi-folder support
         self._known_dbs: dict[Path, IndexDB] = {}
@@ -410,6 +413,7 @@ class MainWindow(QMainWindow):
         self._build_menu()
         self._build_ui()
         self._build_shortcuts()
+        self._setup_tray()
 
         self._search_timer = QTimer(self)
         self._search_timer.setSingleShot(True)
@@ -483,6 +487,15 @@ class MainWindow(QMainWindow):
         self._reindex_act.triggered.connect(self.force_reindex)
         self._file_menu.addAction(self._reindex_act)
 
+        self._file_menu.addSeparator()
+
+        self._quit_act = QAction(
+            _icon(QStyle.StandardPixmap.SP_DialogCloseButton), tr("menu.quit"), self
+        )
+        self._quit_act.setShortcut(QKeySequence("Alt+F4"))
+        self._quit_act.triggered.connect(self._quit_app)
+        self._file_menu.addAction(self._quit_act)
+
         self._edit_menu = QMenu(tr("menu.edit"), self)
         mb.addMenu(self._edit_menu)
 
@@ -490,6 +503,12 @@ class MainWindow(QMainWindow):
         self._copy_frontmatter_template_act.setShortcut(QKeySequence("Ctrl+Shift+F"))
         self._copy_frontmatter_template_act.triggered.connect(self.copy_frontmatter_template)
         self._edit_menu.addAction(self._copy_frontmatter_template_act)
+
+        self._edit_menu.addSeparator()
+
+        self._preferences_act = QAction(tr("menu.preferences"), self)
+        self._preferences_act.triggered.connect(self._show_preferences)
+        self._edit_menu.addAction(self._preferences_act)
 
         self._view_menu = QMenu(tr("menu.view"), self)
         mb.addMenu(self._view_menu)
@@ -544,9 +563,6 @@ class MainWindow(QMainWindow):
         self._reveal_act.triggered.connect(self.reveal_in_explorer)
         self._view_menu.addAction(self._reveal_act)
 
-        self._open_ssms_act = QAction(tr("menu.open_in_ssms"), self)
-        self._open_ssms_act.triggered.connect(self.open_in_ssms)
-        self._view_menu.addAction(self._open_ssms_act)
 
         self._copy_act = QAction(
             _icon(QStyle.StandardPixmap.SP_DialogSaveButton),
@@ -794,14 +810,18 @@ class MainWindow(QMainWindow):
         self._duplicate_act.setText(tr("menu.duplicate_query"))
         self._recent_menu.setTitle(tr("menu.recent_projects"))
         self._reindex_act.setText(tr("menu.force_reindex"))
+        self._quit_act.setText(tr("menu.quit"))
         self._edit_menu.setTitle(tr("menu.edit"))
         self._copy_frontmatter_template_act.setText(tr("menu.copy_frontmatter_template"))
         self._reveal_act.setText(tr("menu.reveal_in_explorer"))
-        self._open_ssms_act.setText(tr("menu.open_in_ssms"))
+
         self._copy_act.setText(tr("menu.copy_sql"))
         self._help_act.setText(tr("menu.help_action"))
         self._check_updates_act.setText(tr("menu.check_for_updates"))
         self._about_act.setText(tr("menu.about"))
+        self._preferences_act.setText(tr("menu.preferences"))
+        self._show_tray_act.setText(tr("tray.show"))
+        self._quit_tray_act.setText(tr("tray.quit"))
         for key, act in self._theme_acts.items():
             label_key = "menu.theme_dark" if key == "dark" else "menu.theme_light"
             act.setText(tr(label_key))
@@ -1725,10 +1745,117 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def closeEvent(self, event) -> None:
+        if cfg.get_minimize_to_tray() and not self._quitting:
+            event.ignore()
+            self.hide()
+            return
         self._stop_watcher()
         for db in self._known_dbs.values():
             try:
                 db.close()
             except Exception:
                 pass
+        self._tray.hide()
         super().closeEvent(event)
+
+    # ------------------------------------------------------------------
+    # System tray
+    # ------------------------------------------------------------------
+
+    def _setup_tray(self) -> None:
+        icon_path = Path(__file__).parent.parent.parent / "images" / "FavIcon.png"
+        icon = (
+            QIcon(str(icon_path))
+            if icon_path.exists()
+            else QApplication.style().standardIcon(QStyle.StandardPixmap.SP_ComputerIcon)
+        )
+
+        self._tray = QSystemTrayIcon(icon, self)
+        self._tray.setToolTip("SQLShelf")
+
+        tray_menu = QMenu()
+        self._show_tray_act = QAction(tr("tray.show"), self)
+        self._show_tray_act.triggered.connect(self._tray_restore)
+        tray_menu.addAction(self._show_tray_act)
+        tray_menu.addSeparator()
+        self._quit_tray_act = QAction(tr("tray.quit"), self)
+        self._quit_tray_act.triggered.connect(self._quit_app)
+        tray_menu.addAction(self._quit_tray_act)
+
+        self._tray.setContextMenu(tray_menu)
+        self._tray.activated.connect(self._on_tray_activated)
+
+        if cfg.get_minimize_to_tray():
+            self._tray.show()
+
+    def _on_tray_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
+        if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
+            self._tray_restore()
+
+    def _tray_restore(self) -> None:
+        self.showNormal()
+        self.activateWindow()
+        self.raise_()
+
+    def _quit_app(self) -> None:
+        self._quitting = True
+        self.close()
+        QApplication.quit()
+
+    # ------------------------------------------------------------------
+    # Preferences dialog
+    # ------------------------------------------------------------------
+
+    def _show_preferences(self) -> None:
+        dlg = QDialog(self)
+        dlg.setWindowTitle(tr("prefs.title"))
+        dlg.setWindowFlags(dlg.windowFlags() & ~Qt.WindowContextHelpButtonHint)
+        dlg.setFixedWidth(360)
+
+        layout = QVBoxLayout(dlg)
+        layout.setContentsMargins(20, 20, 20, 16)
+        layout.setSpacing(12)
+
+        tray_cb = QCheckBox(tr("prefs.minimize_to_tray"))
+        tray_cb.setChecked(cfg.get_minimize_to_tray())
+        layout.addWidget(tray_cb)
+
+        autostart_cb = QCheckBox(tr("prefs.start_with_windows"))
+        if sys.platform == "win32":
+            from ..core.autostart import is_autostart_enabled
+            autostart_cb.setChecked(is_autostart_enabled())
+        else:
+            autostart_cb.setEnabled(False)
+        layout.addWidget(autostart_cb)
+
+        layout.addStretch()
+
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+        cancel_btn = QPushButton(tr("editor.btn_cancel"))
+        cancel_btn.setFixedWidth(80)
+        cancel_btn.clicked.connect(dlg.reject)
+        ok_btn = QPushButton("OK")
+        ok_btn.setFixedWidth(80)
+        ok_btn.setDefault(True)
+        ok_btn.clicked.connect(dlg.accept)
+        btn_row.addWidget(cancel_btn)
+        btn_row.addWidget(ok_btn)
+        layout.addLayout(btn_row)
+
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        new_minimize = tray_cb.isChecked()
+        cfg.set_minimize_to_tray(new_minimize)
+        if new_minimize:
+            self._tray.show()
+        else:
+            self._tray.hide()
+
+        if sys.platform == "win32":
+            from ..core.autostart import enable_autostart, disable_autostart
+            if autostart_cb.isChecked():
+                enable_autostart()
+            else:
+                disable_autostart()

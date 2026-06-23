@@ -134,3 +134,19 @@ def set_language(lang: str) -> None:
     data = _load()
     data["language"] = lang
     _save(data)
+
+
+# ---------------------------------------------------------------------------
+# System tray / startup preference
+# ---------------------------------------------------------------------------
+
+def get_minimize_to_tray() -> bool:
+    """Return whether closing the window should minimize to tray (default True)."""
+    return bool(_load().get("minimize_to_tray", True))
+
+
+def set_minimize_to_tray(enabled: bool) -> None:
+    """Persist the minimize-to-tray preference."""
+    data = _load()
+    data["minimize_to_tray"] = enabled
+    _save(data)

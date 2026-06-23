@@ -24,6 +24,15 @@
   "menu.copy_frontmatter_template": "Copiar Plantilla de Frontmatter",
   "menu.copy_sql": "Copiar SQL (sin frontmatter)",
   "menu.recent_none": "(ninguno)",
+  "menu.quit": "Salir",
+  "menu.preferences": "Preferencias…",
+
+  "prefs.title": "Preferencias",
+  "prefs.minimize_to_tray": "Minimizar a la bandeja al cerrar",
+  "prefs.start_with_windows": "Iniciar con Windows",
+
+  "tray.show": "Mostrar SQLShelf",
+  "tray.quit": "Salir de SQLShelf",
 
   "sidebar.open_folder": "📂  Abrir Carpeta",
   "sidebar.browse": "EXPLORAR",
@@ -183,7 +192,7 @@
   "update.startup_notify": "Nueva versión {version} disponible — Ayuda → Buscar Actualizaciones",
 
   "help.title": "SQLShelf — Ayuda",
-  "help.text": "<b>Atajos de teclado</b><br><br><b>Ctrl+O</b> — Abrir Carpeta<br><b>Ctrl+N</b> — Nueva Consulta<br><b>Ctrl+D</b> — Duplicar Consulta<br><b>Ctrl+P</b> — Búsqueda Rápida<br><b>Ctrl+F</b> — Enfocar Búsqueda<br><b>Ctrl+E</b> — Alternar Modo Edición<br><b>Ctrl+S</b> — Guardar<br><b>Ctrl+Shift+C</b> — Copiar SQL (sin frontmatter)<br><b>Esc</b> — Cancelar Edición",
+  "help.text": "<b>Atajos de teclado</b><br><br><b>Ctrl+O</b> — Abrir Carpeta<br><b>Ctrl+N</b> — Nueva Consulta<br><b>Ctrl+D</b> — Duplicar Consulta<br><b>Ctrl+P</b> — Búsqueda Rápida<br><b>Ctrl+F</b> — Enfocar Búsqueda<br><b>Ctrl+E</b> — Alternar Modo Edición<br><b>Ctrl+S</b> — Guardar<br><b>Ctrl+Shift+C</b> — Copiar SQL (sin frontmatter)<br><b>Ctrl+Shift+F</b> — Copiar Plantilla de Frontmatter<br><b>Esc</b> — Cancelar Edición<br><b>F1</b> — Ayuda<br><b>Alt+F4</b> — Salir",
 
   "about.title": "Acerca de SQLShelf",
   "about.text": "<b>SQLShelf</b><br><br>Gestor de consultas SQL. Organiza, describe, categoriza y busca archivos SQL por contenido, tabla, campo o etiqueta.<br><br>Autor: Raphael Franco — <a href=\"http://raphaelfranco.com\">raphaelfranco.com</a><br>GitHub: <a href=\"https://github.com/raphamaster/SQLShelf/releases\">github.com/raphamaster/SQLShelf</a>"
