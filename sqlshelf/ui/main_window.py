@@ -495,6 +495,12 @@ class MainWindow(QMainWindow):
         self._copy_frontmatter_template_act.triggered.connect(self.copy_frontmatter_template)
         self._edit_menu.addAction(self._copy_frontmatter_template_act)
 
+        self._edit_menu.addSeparator()
+
+        self._preferences_act = QAction(tr("menu.preferences"), self)
+        self._preferences_act.triggered.connect(self._show_preferences)
+        self._edit_menu.addAction(self._preferences_act)
+
         self._view_menu = QMenu(tr("menu.view"), self)
         mb.addMenu(self._view_menu)
 
@@ -524,12 +530,6 @@ class MainWindow(QMainWindow):
         self._language_menu = QMenu(tr("menu.language"), self)
         self._settings_menu.addMenu(self._language_menu)
         self._rebuild_language_menu()
-
-        self._settings_menu.addSeparator()
-
-        self._preferences_act = QAction(tr("menu.preferences"), self)
-        self._preferences_act.triggered.connect(self._show_preferences)
-        self._settings_menu.addAction(self._preferences_act)
 
         self._help_menu = QMenu(tr("menu.help"), self)
         mb.addMenu(self._help_menu)
