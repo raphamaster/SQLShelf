@@ -563,9 +563,6 @@ class MainWindow(QMainWindow):
         self._reveal_act.triggered.connect(self.reveal_in_explorer)
         self._view_menu.addAction(self._reveal_act)
 
-        self._open_ssms_act = QAction(tr("menu.open_in_ssms"), self)
-        self._open_ssms_act.triggered.connect(self.open_in_ssms)
-        self._view_menu.addAction(self._open_ssms_act)
 
         self._copy_act = QAction(
             _icon(QStyle.StandardPixmap.SP_DialogSaveButton),
@@ -817,7 +814,7 @@ class MainWindow(QMainWindow):
         self._edit_menu.setTitle(tr("menu.edit"))
         self._copy_frontmatter_template_act.setText(tr("menu.copy_frontmatter_template"))
         self._reveal_act.setText(tr("menu.reveal_in_explorer"))
-        self._open_ssms_act.setText(tr("menu.open_in_ssms"))
+
         self._copy_act.setText(tr("menu.copy_sql"))
         self._help_act.setText(tr("menu.help_action"))
         self._check_updates_act.setText(tr("menu.check_for_updates"))
