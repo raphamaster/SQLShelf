@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.0.8] - 2026-08-03
+
+### Added
+- **Access log & Reports dialog** — SQLShelf now records when a query is opened, copied, or opened in SSMS; _Help → Reports_ shows the most-accessed queries and tags across all loaded folders
+- **Modification date column** — the query list now shows each file's last-modified date/time (dd/mm/aaaa HH:MM) alongside the table name
+
+### Fixed
+- **Large `.sql` file performance** — opening, editing and navigating large SQL files (1000+ lines) no longer freezes the UI: object extraction (sqlglot) now runs off the UI thread with debouncing and caching, occurrence highlighting is capped and debounced, and the syntax highlighter's keyword patterns were merged into a single regex for faster re-scans
+
+---
+
 ## [1.0.7] - 2026-06-23
 
 ### Added
