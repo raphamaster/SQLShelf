@@ -333,14 +333,6 @@ class TestSchemaV2:
         db.close()
         assert row is not None
 
-    def test_schema_version_is_2(self, project_dir: Path) -> None:
-        db = IndexDB(project_dir)
-        row = db._conn.execute(
-            "SELECT value FROM meta WHERE key='schema_version'"
-        ).fetchone()
-        db.close()
-        assert row is not None and row[0] == "2"
-
     def test_migration_v1_to_v2(self, project_dir: Path) -> None:
         """Simulate a v1 DB and verify migration adds the new tables."""
         import re
@@ -386,6 +378,66 @@ class TestSchemaV2:
         assert row[0] == "2"
         assert fav_table is not None
         assert rv_table is not None
+
+
+class TestSchemaV3:
+    def test_access_log_table_exists(self, project_dir: Path) -> None:
+        db = IndexDB(project_dir)
+        row = db._conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='access_log'"
+        ).fetchone()
+        db.close()
+        assert row is not None
+
+    def test_schema_version_is_3(self, project_dir: Path) -> None:
+        db = IndexDB(project_dir)
+        row = db._conn.execute(
+            "SELECT value FROM meta WHERE key='schema_version'"
+        ).fetchone()
+        db.close()
+        assert row is not None and row[0] == "3"
+
+    def test_migration_v2_to_v3(self, project_dir: Path) -> None:
+        """Simulate a v2 DB and verify migration adds access_log."""
+        import re
+        import sqlite3
+        from importlib.resources import files
+
+        db_path = project_dir / ".sqlshelf" / "index.db"
+        (project_dir / ".sqlshelf").mkdir(parents=True, exist_ok=True)
+        schema_sql = (
+            files("sqlshelf.core").joinpath("schema.sql").read_text(encoding="utf-8")
+        )
+        # Strip the v3 access_log table/indexes to produce a v2-equivalent schema
+        v2_schema = re.sub(
+            r"CREATE TABLE access_log\s*\([^)]*\);",
+            "",
+            schema_sql,
+            flags=re.DOTALL,
+        )
+        v2_schema = re.sub(r"CREATE INDEX ix_access_log_\w+ [^;]*;", "", v2_schema).strip()
+
+        conn = sqlite3.connect(str(db_path))
+        conn.executescript(v2_schema)
+        conn.execute("BEGIN")
+        conn.execute("INSERT INTO meta (key, value) VALUES ('schema_version', '2')")
+        conn.execute(
+            "INSERT INTO meta (key, value) VALUES ('project_root', ?)",
+            (str(project_dir),),
+        )
+        conn.execute("COMMIT")
+        conn.close()
+
+        db = IndexDB(project_dir)
+        row = db._conn.execute(
+            "SELECT value FROM meta WHERE key='schema_version'"
+        ).fetchone()
+        al_table = db._conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='access_log'"
+        ).fetchone()
+        db.close()
+        assert row[0] == "3"
+        assert al_table is not None
 
 
 # ---------------------------------------------------------------------------
@@ -504,3 +556,85 @@ class TestRecentlyViewed:
         results = db.get_recently_viewed()
         db.close()
         assert all(r.rel_path != rels[0] for r in results)
+
+
+# ---------------------------------------------------------------------------
+# Access log / reports
+# ---------------------------------------------------------------------------
+
+
+class TestAccessLog:
+    def _indexed_db(
+        self, project_dir: Path, n: int = 1, tags: list[list[str]] | None = None
+    ) -> tuple[IndexDB, list[str]]:
+        rels = []
+        queries = []
+        for i in range(n):
+            p = make_sql_file(project_dir, f"q{i}.sql", f"SELECT {i}")
+            q_tags = tags[i] if tags else []
+            queries.append(Query(path=p, title=f"Q{i}", body=f"SELECT {i}", tags=q_tags))
+            rels.append(f"q{i}.sql")
+        db = IndexDB(project_dir)
+        db.index_all(queries)
+        return db, rels
+
+    def test_record_access_increments_total(self, project_dir: Path) -> None:
+        db, rels = self._indexed_db(project_dir)
+        db.record_access(rels[0], "open")
+        db.record_access(rels[0], "copy")
+        total = db.get_access_total()
+        db.close()
+        assert total == 2
+
+    def test_get_top_queries_ranks_by_count(self, project_dir: Path) -> None:
+        db, rels = self._indexed_db(project_dir, n=2)
+        db.record_access(rels[0], "open")
+        db.record_access(rels[1], "open")
+        db.record_access(rels[1], "copy")
+        results = db.get_top_queries()
+        db.close()
+        assert results[0].rel_path == rels[1]
+        assert results[0].count == 2
+        assert results[1].rel_path == rels[0]
+        assert results[1].count == 1
+
+    def test_get_top_queries_limit_respected(self, project_dir: Path) -> None:
+        db, rels = self._indexed_db(project_dir, n=3)
+        for rel in rels:
+            db.record_access(rel, "open")
+        results = db.get_top_queries(limit=2)
+        db.close()
+        assert len(results) == 2
+
+    def test_get_top_queries_excludes_deleted_query(self, project_dir: Path) -> None:
+        db, rels = self._indexed_db(project_dir, n=2)
+        for rel in rels:
+            db.record_access(rel, "open")
+        db.remove_file(project_dir / rels[0])
+        results = db.get_top_queries()
+        db.close()
+        assert all(r.rel_path != rels[0] for r in results)
+
+    def test_get_top_queries_empty_when_no_access(self, project_dir: Path) -> None:
+        db, _ = self._indexed_db(project_dir)
+        results = db.get_top_queries()
+        db.close()
+        assert results == []
+
+    def test_get_top_tags_ranks_by_access_count(self, project_dir: Path) -> None:
+        db, rels = self._indexed_db(project_dir, n=2, tags=[["finance"], ["reports"]])
+        db.record_access(rels[0], "open")
+        db.record_access(rels[0], "copy")
+        db.record_access(rels[1], "open")
+        results = db.get_top_tags()
+        db.close()
+        assert results[0].label == "finance"
+        assert results[0].count == 2
+        assert results[1].label == "reports"
+        assert results[1].count == 1
+
+    def test_get_top_tags_empty_when_no_access(self, project_dir: Path) -> None:
+        db, _ = self._indexed_db(project_dir, tags=[["finance"]])
+        results = db.get_top_tags()
+        db.close()
+        assert results == []

@@ -17,6 +17,7 @@
   "menu.help": "&Help",
   "menu.help_action": "Help",
   "menu.statistics": "Statistics",
+  "menu.reports": "Reports",
   "menu.check_for_updates": "Check for Updates…",
   "menu.about": "About SQLShelf",
   "menu.reveal_in_explorer": "Reveal File in Explorer",
@@ -211,5 +212,12 @@
   "stats.favorites": "Favorites",
   "stats.tables": "Distinct tables referenced",
   "stats.columns": "Distinct columns referenced",
-  "stats.close_btn": "Close"
+  "stats.close_btn": "Close",
+
+  "reports.title": "SQLShelf Reports",
+  "reports.no_data": "No folders loaded yet.",
+  "reports.total_accesses": "Total accesses logged",
+  "reports.top_queries": "Most accessed queries",
+  "reports.top_tags": "Most accessed tags",
+  "reports.no_activity": "No activity recorded yet."
 }

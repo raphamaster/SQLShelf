@@ -480,6 +480,108 @@ class _StatsDialog(QDialog):
 
 
 # ---------------------------------------------------------------------------
+# Reports dialog
+# ---------------------------------------------------------------------------
+
+
+class _ReportsDialog(QDialog):
+    """Access-log based usage reports (most accessed queries and tags)."""
+
+    def __init__(self, known_dbs: dict, parent=None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle(tr("reports.title"))
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
+        self.setFixedWidth(440)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 24, 24, 20)
+        layout.setSpacing(20)
+
+        if not known_dbs:
+            lbl = QLabel(tr("reports.no_data"))
+            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            layout.addWidget(lbl)
+        else:
+            multi_folder = len(known_dbs) > 1
+            top_queries: list[tuple[str, int]] = []
+            tag_counts: dict[str, int] = {}
+            total_accesses = 0
+
+            for folder, db in known_dbs.items():
+                try:
+                    total_accesses += db.get_access_total()
+                    for stat in db.get_top_queries(limit=10):
+                        label = f"{stat.label}  ({folder.name})" if multi_folder else stat.label
+                        top_queries.append((label, stat.count))
+                    for stat in db.get_top_tags(limit=10):
+                        tag_counts[stat.label] = tag_counts.get(stat.label, 0) + stat.count
+                except Exception:
+                    pass
+
+            top_queries.sort(key=lambda row: row[1], reverse=True)
+            top_queries = top_queries[:10]
+            top_tags = sorted(tag_counts.items(), key=lambda row: row[1], reverse=True)[:10]
+
+            total_row = QHBoxLayout()
+            total_row.setContentsMargins(0, 0, 0, 0)
+            total_lbl = QLabel(tr("reports.total_accesses"))
+            total_val = QLabel(str(total_accesses))
+            total_val.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            font = total_val.font()
+            font.setBold(True)
+            total_val.setFont(font)
+            total_row.addWidget(total_lbl)
+            total_row.addStretch()
+            total_row.addWidget(total_val)
+            layout.addLayout(total_row)
+
+            layout.addWidget(self._section(tr("reports.top_queries"), top_queries))
+            layout.addWidget(self._section(tr("reports.top_tags"), top_tags))
+
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+        close_btn = QPushButton(tr("stats.close_btn"))
+        close_btn.setFixedWidth(80)
+        close_btn.setDefault(True)
+        close_btn.clicked.connect(self.accept)
+        btn_row.addWidget(close_btn)
+        layout.addLayout(btn_row)
+
+    @staticmethod
+    def _section(title: str, rows: list[tuple[str, int]]) -> QWidget:
+        box = QWidget()
+        v = QVBoxLayout(box)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.setSpacing(6)
+
+        header = QLabel(title)
+        font = header.font()
+        font.setBold(True)
+        header.setFont(font)
+        v.addWidget(header)
+
+        if not rows:
+            empty = QLabel(tr("reports.no_activity"))
+            empty.setStyleSheet("color: gray;")
+            v.addWidget(empty)
+        else:
+            for label_text, count in rows:
+                row_widget = QWidget()
+                row_layout = QHBoxLayout(row_widget)
+                row_layout.setContentsMargins(0, 0, 0, 0)
+                lbl = QLabel(label_text)
+                lbl.setWordWrap(True)
+                val = QLabel(str(count))
+                val.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                row_layout.addWidget(lbl)
+                row_layout.addStretch()
+                row_layout.addWidget(val)
+                v.addWidget(row_widget)
+
+        return box
+
+
+# ---------------------------------------------------------------------------
 # Watcher → Qt bridge
 # ---------------------------------------------------------------------------
 
@@ -676,6 +778,9 @@ class MainWindow(QMainWindow):
         self._stats_act = QAction(tr("menu.statistics"), self)
         self._stats_act.triggered.connect(self._show_statistics)
         self._help_menu.addAction(self._stats_act)
+        self._reports_act = QAction(tr("menu.reports"), self)
+        self._reports_act.triggered.connect(self._show_reports)
+        self._help_menu.addAction(self._reports_act)
         self._help_menu.addSeparator()
         self._check_updates_act = QAction(tr("menu.check_for_updates"), self)
         self._check_updates_act.triggered.connect(self._check_for_updates)
@@ -948,6 +1053,7 @@ class MainWindow(QMainWindow):
         self._copy_act.setText(tr("menu.copy_sql"))
         self._help_act.setText(tr("menu.help_action"))
         self._stats_act.setText(tr("menu.statistics"))
+        self._reports_act.setText(tr("menu.reports"))
         self._check_updates_act.setText(tr("menu.check_for_updates"))
         self._about_act.setText(tr("menu.about"))
         self._preferences_act.setText(tr("menu.preferences"))
@@ -1233,6 +1339,16 @@ class MainWindow(QMainWindow):
                 self._db.add_recently_viewed(result.rel_path)
             except Exception:
                 pass
+        self._record_access("open")
+
+    def _record_access(self, action: str) -> None:
+        """Log an access event (open/copy/open_in_ssms) for the current query."""
+        if self._db is None or self._current_result is None:
+            return
+        try:
+            self._db.record_access(self._current_result.rel_path, action)
+        except Exception:
+            pass
 
     def _load_query_from_disk(self, path: Path, result: SearchResult) -> None:
         try:
@@ -1583,6 +1699,7 @@ class MainWindow(QMainWindow):
         from PySide6.QtGui import QGuiApplication
 
         QGuiApplication.clipboard().setText(self._editor.toPlainText())
+        self._record_access("copy")
 
     def save_current(self) -> None:
         if not self._edit_mode or self._current_result is None or self._folder is None:
@@ -1792,6 +1909,7 @@ class MainWindow(QMainWindow):
         if sys.platform == "win32":
             try:
                 os.startfile(str(path))  # type: ignore[attr-defined]
+                self._record_access("open_in_ssms")
             except Exception as exc:
                 QMessageBox.warning(self, tr("msg.open_ssms.title"), str(exc))
         else:
@@ -1804,6 +1922,7 @@ class MainWindow(QMainWindow):
         if body:
             QApplication.clipboard().setText(body)
             self._status_bar.showMessage(tr("status.sql_copied"))
+            self._record_access("copy")
 
     def copy_frontmatter_template(self) -> None:
         from datetime import date
@@ -1831,6 +1950,10 @@ class MainWindow(QMainWindow):
 
     def _show_statistics(self) -> None:
         dlg = _StatsDialog(self._known_dbs, self)
+        dlg.exec()
+
+    def _show_reports(self) -> None:
+        dlg = _ReportsDialog(self._known_dbs, self)
         dlg.exec()
 
     def _check_for_updates(self) -> None:

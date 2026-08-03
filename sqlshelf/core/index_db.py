@@ -8,7 +8,7 @@ from importlib.resources import files
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .models import Query, SearchResult
+from .models import AccessStat, Query, SearchResult
 
 if TYPE_CHECKING:
     pass
@@ -22,7 +22,7 @@ class IndexDB:
     the file-watcher thread can share one instance safely.
     """
 
-    SCHEMA_VERSION = "2"
+    SCHEMA_VERSION = "3"
 
     def __init__(self, project_root: Path) -> None:
         self._project_root = project_root
@@ -58,6 +58,8 @@ class IndexDB:
                     self._create_fresh_schema()
                 elif v == "1":
                     self._migrate_v1_to_v2()
+                elif v == "2":
+                    self._migrate_v2_to_v3()
 
     def _is_schema_compatible(self) -> bool:
         """Return True if the queries table has all required columns."""
@@ -116,6 +118,24 @@ class IndexDB:
         self._conn.execute("BEGIN")
         self._conn.execute(
             "INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '2')"
+        )
+        self._conn.execute("COMMIT")
+
+    def _migrate_v2_to_v3(self) -> None:
+        """Add access_log table (v2 → v3)."""
+        self._conn.executescript("""
+            CREATE TABLE IF NOT EXISTS access_log (
+                id          INTEGER PRIMARY KEY,
+                rel_path    TEXT    NOT NULL,
+                action      TEXT    NOT NULL CHECK (action IN ('open','copy','open_in_ssms')),
+                accessed_at TEXT    NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS ix_access_log_rel_path ON access_log (rel_path);
+            CREATE INDEX IF NOT EXISTS ix_access_log_accessed_at ON access_log (accessed_at);
+        """)
+        self._conn.execute("BEGIN")
+        self._conn.execute(
+            "INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '3')"
         )
         self._conn.execute("COMMIT")
 
@@ -407,6 +427,53 @@ class IndexDB:
                 (limit,),
             ).fetchall()
             return _rows_to_results_locked(self._conn, rows)
+
+    # ------------------------------------------------------------------
+    # Public API — access log / reports
+    # ------------------------------------------------------------------
+
+    def record_access(self, rel_path: str, action: str) -> None:
+        """Log an access event for reporting (action: open/copy/open_in_ssms)."""
+        now = datetime.now(timezone.utc).isoformat()
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO access_log (rel_path, action, accessed_at) VALUES (?, ?, ?)",
+                (rel_path, action, now),
+            )
+
+    def get_access_total(self) -> int:
+        with self._lock:
+            return self._conn.execute("SELECT COUNT(*) FROM access_log").fetchone()[0]
+
+    def get_top_queries(self, limit: int = 10) -> list[AccessStat]:
+        """Return the most-accessed queries (all action types), ranked desc."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT q.rel_path, q.title, COUNT(*) AS cnt"
+                " FROM access_log a"
+                " JOIN queries q ON q.rel_path = a.rel_path"
+                " GROUP BY a.rel_path"
+                " ORDER BY cnt DESC, q.title"
+                " LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [AccessStat(label=title, count=cnt, rel_path=rel_path) for rel_path, title, cnt in rows]
+
+    def get_top_tags(self, limit: int = 10) -> list[AccessStat]:
+        """Return the most-accessed tags, ranked by total accesses of their queries."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT t.name, COUNT(*) AS cnt"
+                " FROM access_log a"
+                " JOIN queries q ON q.rel_path = a.rel_path"
+                " JOIN query_tags qt ON qt.query_id = q.id"
+                " JOIN tags t ON t.id = qt.tag_id"
+                " GROUP BY t.name"
+                " ORDER BY cnt DESC, t.name"
+                " LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [AccessStat(label=name, count=cnt) for name, cnt in rows]
 
     # ------------------------------------------------------------------
     # Internal helpers (called while _lock is held)
