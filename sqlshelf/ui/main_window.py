@@ -165,6 +165,32 @@ class _SearchWorker(QRunnable):
 
 
 # ---------------------------------------------------------------------------
+# Background SQL object-extraction worker (sqlglot parsing can be slow on
+# large scripts, so it must never run on the UI thread).
+# ---------------------------------------------------------------------------
+
+
+class _ExtractObjectsWorkerSignals(QObject):
+    finished = Signal(list, int)  # (sorted aliases, generation)
+
+
+class _ExtractObjectsWorker(QRunnable):
+    def __init__(self, body: str, gen: int) -> None:
+        super().__init__()
+        self.signals = _ExtractObjectsWorkerSignals()
+        self._body = body
+        self._gen = gen
+
+    def run(self) -> None:
+        try:
+            live_objects = extract_objects(self._body)
+            aliases = sorted(live_objects.get("alias", set()))
+        except Exception:
+            aliases = []
+        self.signals.finished.emit(aliases, self._gen)
+
+
+# ---------------------------------------------------------------------------
 # Background update-check worker
 # ---------------------------------------------------------------------------
 
@@ -493,6 +519,9 @@ class MainWindow(QMainWindow):
         # Async search state
         self._search_gen: int = 0      # incremented per dispatch; workers check this
         self._pending_select: str | None = None  # rel_path to auto-select after search
+
+        # Async object-extraction state (sqlglot parsing of the open query)
+        self._extract_gen: int = 0
 
         self._build_menu()
         self._build_ui()
@@ -1209,16 +1238,22 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
 
-        live_objects = extract_objects(body)
         self._metadata_panel.set_query(
             title=result.title,
             description=result.description,
             tags=result.tags,
             tables=objects.get("table", []),
             columns=objects.get("column", []),
-            aliases=sorted(live_objects.get("alias", set())),
+            aliases=[],
         )
         self._metadata_panel.set_path(path)
+
+        # sqlglot parsing can be slow on large scripts — run it off the UI thread
+        # and fill in the alias chips once it's done.
+        self._extract_gen += 1
+        worker = _ExtractObjectsWorker(body, self._extract_gen)
+        worker.signals.finished.connect(self._on_objects_extracted)
+        QThreadPool.globalInstance().start(worker)
 
         if not self._edit_mode:
             self._select_all_btn.setVisible(True)
@@ -1230,6 +1265,11 @@ class MainWindow(QMainWindow):
                 self._metadata_panel.set_favorite(is_fav)
             except Exception:
                 self._metadata_panel.set_favorite(False)
+
+    def _on_objects_extracted(self, aliases: list[str], gen: int) -> None:
+        if gen != self._extract_gen:
+            return  # stale result — user has since opened another query
+        self._metadata_panel.set_aliases(aliases)
 
     # ------------------------------------------------------------------
     # Search / tag / sidebar filtering

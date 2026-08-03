@@ -332,6 +332,11 @@ class MetadataPanel(QWidget):
         self._desc_edit.setPlainText(description)
         self._tags_input.set_tags(tags)
 
+    def set_aliases(self, aliases: list[str]) -> None:
+        """Update just the alias chips, e.g. once background extraction finishes."""
+        self._aliases = list(aliases)
+        self._rebuild_object_chips()
+
     def set_path(self, path: Path | None) -> None:
         self._file_path = path
         if path is None:
