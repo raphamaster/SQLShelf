@@ -47,9 +47,16 @@ class CodeEditor(QPlainTextEdit):
     # Minimum token length to trigger occurrence highlighting.
     _MIN_OCCURRENCE_LEN = 2
 
+    # Hard cap on how many occurrences to highlight. Without this, landing the
+    # cursor on a common token (e.g. a keyword like SELECT right after loading
+    # a large file) scans and formats every occurrence in the whole document —
+    # thousands of ExtraSelections on a large script, freezing the UI thread.
+    _MAX_OCCURRENCES = 500
+
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._gutter = _LineNumberArea(self)
+        self._loading = False
 
         self.blockCountChanged.connect(self._update_gutter_width)
         self.updateRequest.connect(self._update_gutter)
@@ -58,6 +65,18 @@ class CodeEditor(QPlainTextEdit):
 
         self._update_gutter_width(0)
         self._update_extra_selections()
+
+    def setPlainText(self, text: str) -> None:
+        # The cursor resets to position 0 as a side effect of loading new
+        # content, which would otherwise trigger occurrence highlighting for
+        # whatever token happens to be first in the file (e.g. SELECT) — a
+        # full-document scan+format the user never asked for. Suppress it for
+        # this reset only; the current-line highlight still applies below.
+        self._loading = True
+        try:
+            super().setPlainText(text)
+        finally:
+            self._loading = False
 
     # ------------------------------------------------------------------
     # Gutter width / update
@@ -164,7 +183,7 @@ class CodeEditor(QPlainTextEdit):
         selections.append(line_sel)
 
         # 2. All occurrences of the token at/selected by the cursor
-        token = self._token_at_cursor()
+        token = "" if self._loading else self._token_at_cursor()
         if token:
             pattern = QRegularExpression(
                 rf"\b{re.escape(token)}\b",
@@ -172,12 +191,14 @@ class CodeEditor(QPlainTextEdit):
             )
             doc = self.document()
             found = doc.find(pattern, 0)
-            while not found.isNull():
+            occurrences = 0
+            while not found.isNull() and occurrences < self._MAX_OCCURRENCES:
                 occ = QTextEdit.ExtraSelection()
                 occ.format.setBackground(self._OCCURRENCE_BG)
                 occ.format.setForeground(self._OCCURRENCE_FG)
                 occ.cursor = found
                 selections.append(occ)
+                occurrences += 1
                 found = doc.find(pattern, found)
 
         self.setExtraSelections(selections)
