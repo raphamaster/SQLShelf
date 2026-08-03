@@ -73,3 +73,13 @@ CREATE TABLE recently_viewed (
     rel_path  TEXT NOT NULL PRIMARY KEY,
     viewed_at TEXT NOT NULL
 );
+
+CREATE TABLE access_log (
+    id          INTEGER PRIMARY KEY,
+    rel_path    TEXT    NOT NULL,
+    action      TEXT    NOT NULL CHECK (action IN ('open','copy','open_in_ssms')),
+    accessed_at TEXT    NOT NULL
+);
+
+CREATE INDEX ix_access_log_rel_path ON access_log (rel_path);
+CREATE INDEX ix_access_log_accessed_at ON access_log (accessed_at);

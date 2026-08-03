@@ -21,6 +21,15 @@ class Query:
 
 
 @dataclass
+class AccessStat:
+    """One ranked row in an access-frequency report (top queries or top tags)."""
+
+    label: str
+    count: int
+    rel_path: str = ""
+
+
+@dataclass
 class SearchResult:
     """One row returned by a search query."""
 
