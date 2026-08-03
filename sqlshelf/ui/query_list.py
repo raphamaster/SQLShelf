@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from datetime import date, datetime
+from datetime import datetime
 
 from PySide6.QtCore import QModelIndex, QRectF, QSize, Qt, Signal
 from PySide6.QtGui import (
@@ -54,6 +54,7 @@ _ROLE_TAGS     = Qt.ItemDataRole.UserRole + 1    # list[str]
 _ROLE_TABLES   = Qt.ItemDataRole.UserRole + 2    # list[str]
 _ROLE_UPDATED  = Qt.ItemDataRole.UserRole + 3    # str | None (ISO date)
 _ROLE_FAVORITE = Qt.ItemDataRole.UserRole + 4    # bool
+_ROLE_MTIME    = Qt.ItemDataRole.UserRole + 5    # int (epoch seconds)
 
 # ── Layout constants ────────────────────────────────────────────────────────
 _ITEM_H    = 60
@@ -80,23 +81,11 @@ def _qc(css: str) -> QColor:
     return QColor(css)
 
 
-def _relative_date(iso: str | None) -> str:
-    if not iso:
+def _literal_datetime_epoch(ts: int) -> str:
+    if not ts:
         return ""
     try:
-        d = datetime.fromisoformat(iso).date()
-        delta = (date.today() - d).days
-        if delta == 0:
-            return tr("date.today")
-        if delta == 1:
-            return tr("date.yesterday")
-        if delta < 7:
-            return tr("date.days_ago", n=delta)
-        if delta < 30:
-            return tr("date.weeks_ago", n=delta // 7)
-        if delta < 365:
-            return tr("date.months_ago", n=delta // 30)
-        return tr("date.years_ago", n=delta // 365)
+        return datetime.fromtimestamp(ts).strftime("%d/%m/%Y %H:%M")
     except Exception:
         return ""
 
@@ -149,7 +138,7 @@ class QueryItemDelegate(QStyledItemDelegate):
         title: str  = index.data(Qt.ItemDataRole.DisplayRole) or ""
         tags: list  = index.data(_ROLE_TAGS) or []
         tables: list = index.data(_ROLE_TABLES) or []
-        updated: str = index.data(_ROLE_UPDATED) or ""
+        mtime: int  = index.data(_ROLE_MTIME) or 0
         fav: bool   = bool(index.data(_ROLE_FAVORITE))
 
         # ── Background ──────────────────────────────────────────────────────
@@ -209,15 +198,33 @@ class QueryItemDelegate(QStyledItemDelegate):
             painter.drawText(cr, Qt.AlignmentFlag.AlignCenter, tag)
             chip_x += tw + _CHIP_GAP
 
-        # ── Meta label: first table or relative date ─────────────────────────
-        meta = tables[0] if tables else _relative_date(updated)
-        if meta:
+        # ── Modification date column (fixed width, far right) ────────────────
+        date_str = _literal_datetime_epoch(mtime)
+        date_w = 0.0
+        if date_str:
+            date_w = fm_s.horizontalAdvance(date_str) + 4
             painter.setFont(self._f_small)
             painter.setPen(self._c_tertiary)
             painter.drawText(
-                QRectF(x, y2, cw, _CHIP_H),
+                QRectF(x + cw - date_w, y2, date_w, _CHIP_H),
                 Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight,
-                meta,
+                date_str,
+            )
+
+        # ── Table name (elastic, right-aligned, left of the date column) ─────
+        table_name = tables[0] if tables else ""
+        if table_name:
+            gap = 8 if date_w else 0
+            table_w = cw - date_w - gap
+            elided_table = fm_s.elidedText(
+                table_name, Qt.TextElideMode.ElideRight, table_w
+            )
+            painter.setFont(self._f_small)
+            painter.setPen(self._c_tertiary)
+            painter.drawText(
+                QRectF(x, y2, table_w, _CHIP_H),
+                Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight,
+                elided_table,
             )
 
         painter.restore()
@@ -305,6 +312,7 @@ class QueryListWidget(QWidget):
             item.setData(r.tables,      _ROLE_TABLES)
             item.setData(r.updated_at,  _ROLE_UPDATED)
             item.setData(r.is_favorite, _ROLE_FAVORITE)
+            item.setData(r.file_mtime,  _ROLE_MTIME)
             self._model.appendRow(item)
             if r.rel_path == current_path:
                 restore_row = i
