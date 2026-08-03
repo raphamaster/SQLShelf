@@ -28,12 +28,14 @@ class SqlHighlighter(QSyntaxHighlighter):
         keyword_format = QTextCharFormat()
         keyword_format.setForeground(QColor(_tk.SYN_KEYWORD))
         keyword_format.setFontWeight(QFont.Weight.Bold)
-        for word in SQL_KEYWORDS:
-            pattern = QRegularExpression(
-                rf"\b{word}\b",
-                QRegularExpression.PatternOption.CaseInsensitiveOption,
-            )
-            self._rules.append((pattern, keyword_format))
+        # One alternation instead of one QRegularExpression per keyword: highlightBlock()
+        # runs per line, so 60+ separate regex scans per line made loading large files slow.
+        keyword_alt = "|".join(SQL_KEYWORDS)
+        keyword_pattern = QRegularExpression(
+            rf"\b(?:{keyword_alt})\b",
+            QRegularExpression.PatternOption.CaseInsensitiveOption,
+        )
+        self._rules.append((keyword_pattern, keyword_format))
 
         string_format = QTextCharFormat()
         string_format.setForeground(QColor(_tk.SYN_STRING))

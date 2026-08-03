@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+from collections import OrderedDict
 from pathlib import Path
 
 from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, QTimer, Signal
@@ -162,6 +163,35 @@ class _SearchWorker(QRunnable):
         except Exception:
             results = []
         self.signals.results_ready.emit(results, self._gen)
+
+
+# ---------------------------------------------------------------------------
+# Background SQL object-extraction worker (sqlglot parsing can be slow on
+# large scripts, so it must never run on the UI thread).
+# ---------------------------------------------------------------------------
+
+
+_ALIAS_CACHE_MAX = 24  # cap on memoized extract_objects() results, keyed by SQL body
+
+
+class _ExtractObjectsWorkerSignals(QObject):
+    finished = Signal(list, int)  # (sorted aliases, generation)
+
+
+class _ExtractObjectsWorker(QRunnable):
+    def __init__(self, body: str, gen: int) -> None:
+        super().__init__()
+        self.signals = _ExtractObjectsWorkerSignals()
+        self._body = body
+        self._gen = gen
+
+    def run(self) -> None:
+        try:
+            live_objects = extract_objects(self._body)
+            aliases = sorted(live_objects.get("alias", set()))
+        except Exception:
+            aliases = []
+        self.signals.finished.emit(aliases, self._gen)
 
 
 # ---------------------------------------------------------------------------
@@ -493,6 +523,19 @@ class MainWindow(QMainWindow):
         # Async search state
         self._search_gen: int = 0      # incremented per dispatch; workers check this
         self._pending_select: str | None = None  # rel_path to auto-select after search
+
+        # Async object-extraction state (sqlglot parsing of the open query).
+        # Debounced: fast list navigation (arrow keys / rapid clicks) must not
+        # spawn a heavy background parse per row passed through, only for the
+        # row the user actually settles on. Reselecting the same file (e.g. on
+        # every search-debounce cycle) is served from the cache instead.
+        self._extract_gen: int = 0
+        self._alias_cache: OrderedDict[str, list[str]] = OrderedDict()
+        self._pending_extract_body: str | None = None
+        self._extract_timer = QTimer(self)
+        self._extract_timer.setSingleShot(True)
+        self._extract_timer.setInterval(150)
+        self._extract_timer.timeout.connect(self._dispatch_extract)
 
         self._build_menu()
         self._build_ui()
@@ -1209,16 +1252,27 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
 
-        live_objects = extract_objects(body)
+        cached_aliases = self._alias_cache.get(body)
         self._metadata_panel.set_query(
             title=result.title,
             description=result.description,
             tags=result.tags,
             tables=objects.get("table", []),
             columns=objects.get("column", []),
-            aliases=sorted(live_objects.get("alias", set())),
+            aliases=cached_aliases or [],
         )
         self._metadata_panel.set_path(path)
+
+        # sqlglot parsing can be slow on large scripts — run it off the UI thread,
+        # debounced so that flipping quickly through many rows (arrow keys, rapid
+        # clicks) only parses the row the user settles on, not every row passed
+        # through. Skip entirely if this exact body was already parsed.
+        self._extract_timer.stop()
+        if cached_aliases is None:
+            self._pending_extract_body = body
+            self._extract_timer.start()
+        else:
+            self._pending_extract_body = None
 
         if not self._edit_mode:
             self._select_all_btn.setVisible(True)
@@ -1230,6 +1284,28 @@ class MainWindow(QMainWindow):
                 self._metadata_panel.set_favorite(is_fav)
             except Exception:
                 self._metadata_panel.set_favorite(False)
+
+    def _dispatch_extract(self) -> None:
+        body = self._pending_extract_body
+        if body is None:
+            return
+        self._pending_extract_body = None
+        self._extract_gen += 1
+        worker = _ExtractObjectsWorker(body, self._extract_gen)
+        worker.signals.finished.connect(
+            lambda aliases, gen, b=body: self._on_objects_extracted(aliases, gen, b)
+        )
+        QThreadPool.globalInstance().start(worker)
+
+    def _on_objects_extracted(self, aliases: list[str], gen: int, body: str) -> None:
+        self._alias_cache[body] = aliases
+        self._alias_cache.move_to_end(body)
+        if len(self._alias_cache) > _ALIAS_CACHE_MAX:
+            self._alias_cache.popitem(last=False)
+
+        if gen != self._extract_gen:
+            return  # stale result — user has since opened another query
+        self._metadata_panel.set_aliases(aliases)
 
     # ------------------------------------------------------------------
     # Search / tag / sidebar filtering
