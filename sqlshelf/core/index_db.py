@@ -22,7 +22,7 @@ class IndexDB:
     the file-watcher thread can share one instance safely.
     """
 
-    SCHEMA_VERSION = "3"
+    SCHEMA_VERSION = "4"
 
     def __init__(self, project_root: Path) -> None:
         self._project_root = project_root
@@ -58,8 +58,13 @@ class IndexDB:
                     self._create_fresh_schema()
                 elif v == "1":
                     self._migrate_v1_to_v2()
+                    self._migrate_v2_to_v3()
+                    self._migrate_v3_to_v4()
                 elif v == "2":
                     self._migrate_v2_to_v3()
+                    self._migrate_v3_to_v4()
+                elif v == "3":
+                    self._migrate_v3_to_v4()
 
     def _is_schema_compatible(self) -> bool:
         """Return True if the queries table has all required columns."""
@@ -138,6 +143,29 @@ class IndexDB:
             "INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '3')"
         )
         self._conn.execute("COMMIT")
+
+    def _migrate_v3_to_v4(self) -> None:
+        """Allow cached table aliases in query_objects (v3 → v4)."""
+        self._conn.executescript("""
+            BEGIN;
+            ALTER TABLE query_objects RENAME TO query_objects_v3;
+            CREATE TABLE query_objects (
+                query_id    INTEGER NOT NULL REFERENCES queries(id) ON DELETE CASCADE,
+                object_type TEXT    NOT NULL CHECK (
+                    object_type IN ('table','column','alias','procedure','function')
+                ),
+                object_name TEXT    NOT NULL COLLATE NOCASE,
+                PRIMARY KEY (query_id, object_type, object_name)
+            );
+            INSERT INTO query_objects (query_id, object_type, object_name)
+                SELECT query_id, object_type, object_name FROM query_objects_v3;
+            DROP TABLE query_objects_v3;
+            CREATE INDEX ix_query_objects_name
+                ON query_objects (object_name, object_type);
+            INSERT OR REPLACE INTO meta (key, value)
+                VALUES ('schema_version', '4');
+            COMMIT;
+        """)
 
     # ------------------------------------------------------------------
     # Public API — bulk operations
@@ -329,7 +357,11 @@ class IndexDB:
                 (query_id,),
             ).fetchall()
         result: dict[str, list[str]] = {
-            "table": [], "column": [], "procedure": [], "function": []
+            "table": [],
+            "column": [],
+            "procedure": [],
+            "function": [],
+            "alias": [],
         }
         for obj_type, obj_name in rows:
             if obj_type in result:

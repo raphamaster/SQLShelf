@@ -98,6 +98,17 @@ class TestIndexAll:
         assert db.count() == 1
         db.close()
 
+    def test_get_objects_returns_indexed_aliases(self, project_dir: Path) -> None:
+        body = "SELECT customer.id FROM dbo.Customers AS customer"
+        p = make_sql_file(project_dir, "aliases.sql", body)
+        db = IndexDB(project_dir)
+        db.index_all([Query(path=p, title="Aliases", body=body)])
+
+        query_id = db.get_query_id(p)
+        assert query_id is not None
+        assert db.get_objects(query_id)["alias"] == ["customer"]
+        db.close()
+
     def test_multiple_queries(self, project_dir: Path) -> None:
         queries = [
             Query(path=make_sql_file(project_dir, f"q{i}.sql", f"SELECT {i}"), title=f"Q{i}", body=f"SELECT {i}")
@@ -375,7 +386,7 @@ class TestSchemaV2:
             "SELECT name FROM sqlite_master WHERE type='table' AND name='recently_viewed'"
         ).fetchone()
         db.close()
-        assert row[0] == "2"
+        assert row[0] == IndexDB.SCHEMA_VERSION
         assert fav_table is not None
         assert rv_table is not None
 
@@ -389,13 +400,13 @@ class TestSchemaV3:
         db.close()
         assert row is not None
 
-    def test_schema_version_is_3(self, project_dir: Path) -> None:
+    def test_schema_version_is_current(self, project_dir: Path) -> None:
         db = IndexDB(project_dir)
         row = db._conn.execute(
             "SELECT value FROM meta WHERE key='schema_version'"
         ).fetchone()
         db.close()
-        assert row is not None and row[0] == "3"
+        assert row is not None and row[0] == IndexDB.SCHEMA_VERSION
 
     def test_migration_v2_to_v3(self, project_dir: Path) -> None:
         """Simulate a v2 DB and verify migration adds access_log."""
@@ -436,7 +447,7 @@ class TestSchemaV3:
             "SELECT name FROM sqlite_master WHERE type='table' AND name='access_log'"
         ).fetchone()
         db.close()
-        assert row[0] == "3"
+        assert row[0] == IndexDB.SCHEMA_VERSION
         assert al_table is not None
 
 

@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.0.9] - 2026-08-12
+
+### Changed
+- **Default query ordering** — query lists now open with the most recently modified files first in every navigation view
+- **Large-file rendering** — scripts above 1,000 lines remain fully viewable and editable while expensive whole-document syntax and occurrence highlighting are suspended
+
+### Fixed
+- **Navigation freezes** — switching among folders, Favorites, Recent, tags and global navigation no longer blocks the interface on file reads or SQLite index locks
+- **Redundant query reloads** — refreshing or reordering a result list preserves the selected query without reopening the same file
+- **Alias extraction cache** — table aliases are now persisted in index schema v4, avoiding repeated `sqlglot` parsing during navigation
+- **Stale query display** — the previous SQL body is cleared while a newly selected file loads asynchronously, preventing actions from targeting old content
+
+### Tests
+- Added UI regression coverage for large files, selection preservation, cross-folder result identity and default modification-date ordering
+
 ## [1.0.8] - 2026-08-03
 
 ### Added

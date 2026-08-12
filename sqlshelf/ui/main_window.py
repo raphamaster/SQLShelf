@@ -119,7 +119,7 @@ class _ForceReindexWorker(QRunnable):
 # ---------------------------------------------------------------------------
 
 class _SearchWorkerSignals(QObject):
-    results_ready = Signal(list, int)   # (list[SearchResult], generation)
+    results_ready = Signal(list, list, int)  # (results, sidebar tags, generation)
 
 
 class _SearchWorker(QRunnable):
@@ -128,6 +128,7 @@ class _SearchWorker(QRunnable):
         dbs: dict,
         text: str,
         browse_folder,
+        mode: str,
         gen: int,
     ) -> None:
         super().__init__()
@@ -135,63 +136,154 @@ class _SearchWorker(QRunnable):
         self._dbs = dbs
         self._text = text
         self._browse_folder = browse_folder
+        self._mode = mode
         self._gen = gen
 
     def run(self) -> None:
         try:
-            results = []
-            if self._browse_folder is not None:
-                db = self._dbs.get(self._browse_folder)
-                if db:
-                    results = db.search(self._text)
-                    for r in results:
-                        r.folder = self._browse_folder
-            else:
+            results: list[SearchResult] = []
+            scoped_dbs = (
+                {self._browse_folder: self._dbs[self._browse_folder]}
+                if self._browse_folder is not None
+                and self._browse_folder in self._dbs
+                else self._dbs
+            )
+
+            if self._mode == "favorites":
+                # Favorites intentionally span every known folder.
                 for folder, db in self._dbs.items():
                     try:
-                        folder_results = db.search(self._text)
-                        for r in folder_results:
-                            r.folder = folder
-                        results.extend(folder_results)
+                        for result in db.get_favorites():
+                            result.folder = folder
+                            results.append(result)
                     except Exception:
-                        pass
-                # FTS results: rank by relevance; otherwise sort by most recently modified.
-                if any(r.rank != 0.0 for r in results):
-                    results.sort(key=lambda r: r.rank)
+                        continue
+            elif self._mode == "recent":
+                for folder, db in scoped_dbs.items():
+                    try:
+                        for result in db.get_recently_viewed():
+                            result.folder = folder
+                            results.append(result)
+                    except Exception:
+                        continue
+            else:
+                if self._browse_folder is not None:
+                    db = self._dbs.get(self._browse_folder)
+                    if db:
+                        results = db.search(self._text)
+                        for result in results:
+                            result.folder = self._browse_folder
                 else:
-                    results.sort(key=lambda r: r.file_mtime, reverse=True)
+                    for folder, db in self._dbs.items():
+                        try:
+                            folder_results = db.search(self._text)
+                        except Exception:
+                            continue
+                        for result in folder_results:
+                            result.folder = folder
+                        results.extend(folder_results)
+                    # FTS results: rank by relevance; otherwise most recently modified.
+                    if any(result.rank != 0.0 for result in results):
+                        results.sort(key=lambda result: result.rank)
+                    else:
+                        results.sort(key=lambda result: result.file_mtime, reverse=True)
+
+            tags_set: set[str] = set()
+            for db in scoped_dbs.values():
+                try:
+                    tags_set.update(db.get_all_tags())
+                except Exception:
+                    continue
+            tags = sorted(tags_set)
         except Exception:
             results = []
-        self.signals.results_ready.emit(results, self._gen)
+            tags = []
+        self.signals.results_ready.emit(results, tags, self._gen)
 
 
 # ---------------------------------------------------------------------------
-# Background SQL object-extraction worker (sqlglot parsing can be slow on
-# large scripts, so it must never run on the UI thread).
+# Background query loader. File reads (especially cloud-backed paths) and
+# IndexDB calls can both block, so none of them may run on the GUI thread.
 # ---------------------------------------------------------------------------
 
 
-_ALIAS_CACHE_MAX = 24  # cap on memoized extract_objects() results, keyed by SQL body
+_LIVE_ALIAS_MAX_LINES = 1000
+_LIVE_ALIAS_MAX_CHARS = 200_000
+_ALIAS_CACHE_MAX = 128
 
 
-class _ExtractObjectsWorkerSignals(QObject):
-    finished = Signal(list, int)  # (sorted aliases, generation)
+class _LoadQueryWorkerSignals(QObject):
+    finished = Signal(object, int)  # (payload, generation)
 
 
-class _ExtractObjectsWorker(QRunnable):
-    def __init__(self, body: str, gen: int) -> None:
+class _LoadQueryWorker(QRunnable):
+    def __init__(
+        self,
+        db: IndexDB | None,
+        path: Path,
+        result: SearchResult,
+        gen: int,
+        track_access: bool = True,
+        cached_aliases: list[str] | None = None,
+    ) -> None:
         super().__init__()
-        self.signals = _ExtractObjectsWorkerSignals()
-        self._body = body
+        self.signals = _LoadQueryWorkerSignals()
+        self._db = db
+        self._path = path
+        self._result = result
         self._gen = gen
+        self._track_access = track_access
+        self._cached_aliases = cached_aliases
+
+    def run(self) -> None:
+        metadata, body, _has_frontmatter = read_sql_file(self._path)
+        objects: dict[str, list[str]] = {"table": [], "column": [], "alias": []}
+        is_favorite = False
+        try:
+            if self._db is not None:
+                objects = self._db.get_objects(self._result.query_id)
+                is_favorite = self._db.is_favorite(self._result.rel_path)
+                if self._track_access:
+                    self._db.add_recently_viewed(self._result.rel_path)
+                    self._db.record_access(self._result.rel_path, "open")
+        except Exception:
+            pass
+        if not objects.get("alias"):
+            if self._cached_aliases is not None:
+                objects["alias"] = self._cached_aliases
+            elif (
+                len(body) <= _LIVE_ALIAS_MAX_CHARS
+                and body.count("\n") + 1 <= _LIVE_ALIAS_MAX_LINES
+            ):
+                # Old indexes did not persist aliases. Preserve the feature for
+                # normal files, but never spend CPU parsing large scripts during
+                # navigation. The result is cached by path+mtime for this session.
+                objects["alias"] = sorted(extract_objects(body).get("alias", set()))
+        payload = (
+            self._path,
+            self._result,
+            metadata,
+            body,
+            objects,
+            is_favorite,
+        )
+        self.signals.finished.emit(payload, self._gen)
+
+
+class _RecordAccessWorker(QRunnable):
+    """Best-effort access logging that never waits on the GUI thread."""
+
+    def __init__(self, db: IndexDB, rel_path: str, action: str) -> None:
+        super().__init__()
+        self._db = db
+        self._rel_path = rel_path
+        self._action = action
 
     def run(self) -> None:
         try:
-            live_objects = extract_objects(self._body)
-            aliases = sorted(live_objects.get("alias", set()))
+            self._db.record_access(self._rel_path, self._action)
         except Exception:
-            aliases = []
-        self.signals.finished.emit(aliases, self._gen)
+            pass
 
 
 # ---------------------------------------------------------------------------
@@ -626,18 +718,17 @@ class MainWindow(QMainWindow):
         self._search_gen: int = 0      # incremented per dispatch; workers check this
         self._pending_select: str | None = None  # rel_path to auto-select after search
 
-        # Async object-extraction state (sqlglot parsing of the open query).
-        # Debounced: fast list navigation (arrow keys / rapid clicks) must not
-        # spawn a heavy background parse per row passed through, only for the
-        # row the user actually settles on. Reselecting the same file (e.g. on
-        # every search-debounce cycle) is served from the cache instead.
-        self._extract_gen: int = 0
-        self._alias_cache: OrderedDict[str, list[str]] = OrderedDict()
-        self._pending_extract_body: str | None = None
-        self._extract_timer = QTimer(self)
-        self._extract_timer.setSingleShot(True)
-        self._extract_timer.setInterval(150)
-        self._extract_timer.timeout.connect(self._dispatch_extract)
+        # Async query loading state. Rapid list navigation is debounced so only
+        # the row where the user settles performs disk and database I/O.
+        self._load_gen: int = 0
+        self._pending_load: (
+            tuple[IndexDB | None, Path, SearchResult, int, bool] | None
+        ) = None
+        self._load_timer = QTimer(self)
+        self._load_timer.setSingleShot(True)
+        self._load_timer.setInterval(75)
+        self._load_timer.timeout.connect(self._dispatch_query_load)
+        self._alias_cache: OrderedDict[tuple[str, int], list[str]] = OrderedDict()
 
         self._build_menu()
         self._build_ui()
@@ -910,6 +1001,7 @@ class MainWindow(QMainWindow):
         font.setPointSize(11)
         self._editor.setFont(font)
         self._highlighter = SqlHighlighter(self._editor.document())
+        self._editor.set_syntax_highlighter(self._highlighter)
 
         # Top section — metadata + toolbar share a dark card background
         top_section = QWidget()
@@ -1208,9 +1300,13 @@ class MainWindow(QMainWindow):
 
     def _reset_editor(self) -> None:
         """Clear editor and reset state without reloading from disk."""
+        self._load_gen += 1
+        self._load_timer.stop()
+        self._pending_load = None
         self._edit_mode = False
         self._editor.setReadOnly(True)
         self._editor.clear()
+        self._edit_toggle_btn.setEnabled(False)
         self._metadata_panel.clear()
         self._save_btn.setVisible(False)
         self._cancel_btn.setVisible(False)
@@ -1248,18 +1344,6 @@ class MainWindow(QMainWindow):
         self._update_content_view()
         if not self._known_dbs:
             return
-        if self._browse_folder is not None:
-            db = self._known_dbs.get(self._browse_folder)
-            tags = db.get_all_tags() if db else []
-        else:
-            tags_set: set[str] = set()
-            for db in self._known_dbs.values():
-                try:
-                    tags_set.update(db.get_all_tags())
-                except Exception:
-                    pass
-            tags = sorted(tags_set)
-        self._sidebar.set_tags(tags)
         self._do_search()
 
     def _do_search(self) -> None:
@@ -1272,15 +1356,19 @@ class MainWindow(QMainWindow):
             dict(self._known_dbs),
             self._search_bar.text(),
             self._browse_folder,
+            self._sidebar_mode,
             self._search_gen,
         )
         worker.signals.results_ready.connect(self._on_search_results)
         QThreadPool.globalInstance().start(worker)
 
-    def _on_search_results(self, results: list, gen: int) -> None:
+    def _on_search_results(self, results: list, tags: list[str], gen: int) -> None:
         if gen != self._search_gen:
             return  # stale result from a superseded search
+        self._sidebar.set_tags(tags)
         self._query_list.set_results(results)
+        if not results:
+            self._reset_editor()
         if self._pending_select is not None:
             self._query_list.select_by_rel_path(self._pending_select)
             self._pending_select = None
@@ -1292,7 +1380,15 @@ class MainWindow(QMainWindow):
         q_word = ntr("word.query", "word.queries", count)
         search_text = self._search_bar.text().strip()
 
-        if self._sidebar_mode == "tag" and self._active_tag:
+        if self._sidebar_mode == "favorites":
+            self._status_bar.showMessage(
+                tr("status.favorites_count", count=count, query=q_word)
+            )
+        elif self._sidebar_mode == "recent":
+            self._status_bar.showMessage(
+                tr("status.recent_count", count=count, query=q_word)
+            )
+        elif self._sidebar_mode == "tag" and self._active_tag:
             self._status_bar.showMessage(
                 tr("status.tag_count", tag=self._active_tag, count=count, query=q_word)
             )
@@ -1305,7 +1401,11 @@ class MainWindow(QMainWindow):
                 tr("status.search_count", count=count, query=q_word, filter=search_text)
             )
         else:
-            self._refresh_status_bar()
+            n = len(self._known_dbs)
+            f_word = ntr("word.folder", "word.folders", n)
+            self._status_bar.showMessage(
+                tr("status.folders_loaded", total=count, query=q_word, n=n, folder=f_word)
+            )
 
     # ------------------------------------------------------------------
     # Query selection
@@ -1332,96 +1432,80 @@ class MainWindow(QMainWindow):
         if self._folder is None:
             return
         path = self._folder / result.rel_path
-        self._load_query_from_disk(path, result)
+        self._load_gen += 1
+        self._pending_load = (self._db, path, result, self._load_gen, True)
+        self._load_timer.start()
 
-        if self._db is not None:
-            try:
-                self._db.add_recently_viewed(result.rel_path)
-            except Exception:
-                pass
-        self._record_access("open")
+        # Do not expose actions for the previous document while this selection
+        # is being loaded in the background.
+        self._current_metadata = {}
+        self._editor.clear()
+        self._edit_toggle_btn.setEnabled(False)
+        self._select_all_btn.setVisible(False)
+        self._copy_query_btn.setVisible(False)
+        self._metadata_panel.set_query(
+            title=result.title,
+            description=result.description,
+            tags=result.tags,
+            tables=[],
+            columns=[],
+            aliases=[],
+        )
+        self._metadata_panel.set_path(path)
 
     def _record_access(self, action: str) -> None:
         """Log an access event (open/copy/open_in_ssms) for the current query."""
         if self._db is None or self._current_result is None:
             return
-        try:
-            self._db.record_access(self._current_result.rel_path, action)
-        except Exception:
-            pass
+        worker = _RecordAccessWorker(self._db, self._current_result.rel_path, action)
+        QThreadPool.globalInstance().start(worker)
 
-    def _load_query_from_disk(self, path: Path, result: SearchResult) -> None:
-        try:
-            metadata, body, _has_fm = read_sql_file(path)
-        except Exception:
-            self._editor.setPlainText(f"-- Error reading {path}")
+    def _dispatch_query_load(self) -> None:
+        pending = self._pending_load
+        if pending is None:
             return
+        self._pending_load = None
+        db, path, result, gen, track_access = pending
+        alias_key = (str(path), result.file_mtime)
+        cached_aliases = self._alias_cache.get(alias_key)
+        worker = _LoadQueryWorker(
+            db,
+            path,
+            result,
+            gen,
+            track_access,
+            cached_aliases,
+        )
+        worker.signals.finished.connect(self._on_query_loaded)
+        QThreadPool.globalInstance().start(worker)
 
+    def _on_query_loaded(self, payload: tuple, gen: int) -> None:
+        if gen != self._load_gen:
+            return
+        path, result, metadata, body, objects, is_favorite = payload
+        alias_key = (str(path), result.file_mtime)
+        self._alias_cache[alias_key] = objects.get("alias", [])
+        self._alias_cache.move_to_end(alias_key)
+        if len(self._alias_cache) > _ALIAS_CACHE_MAX:
+            self._alias_cache.popitem(last=False)
         self._current_metadata = metadata
         self._editor.setPlainText(body)
-
-        objects: dict[str, list[str]] = {"table": [], "column": []}
-        if self._db is not None:
-            try:
-                obj_map = self._db.get_objects(result.query_id)
-                objects = obj_map
-            except Exception:
-                pass
-
-        cached_aliases = self._alias_cache.get(body)
         self._metadata_panel.set_query(
             title=result.title,
             description=result.description,
             tags=result.tags,
             tables=objects.get("table", []),
             columns=objects.get("column", []),
-            aliases=cached_aliases or [],
+            aliases=objects.get("alias", []),
         )
         self._metadata_panel.set_path(path)
 
-        # sqlglot parsing can be slow on large scripts — run it off the UI thread,
-        # debounced so that flipping quickly through many rows (arrow keys, rapid
-        # clicks) only parses the row the user settles on, not every row passed
-        # through. Skip entirely if this exact body was already parsed.
-        self._extract_timer.stop()
-        if cached_aliases is None:
-            self._pending_extract_body = body
-            self._extract_timer.start()
-        else:
-            self._pending_extract_body = None
-
         if not self._edit_mode:
+            self._edit_toggle_btn.setEnabled(True)
             self._select_all_btn.setVisible(True)
             self._copy_query_btn.setVisible(True)
 
-        if self._db is not None:
-            try:
-                is_fav = self._db.is_favorite(result.rel_path)
-                self._metadata_panel.set_favorite(is_fav)
-            except Exception:
-                self._metadata_panel.set_favorite(False)
-
-    def _dispatch_extract(self) -> None:
-        body = self._pending_extract_body
-        if body is None:
-            return
-        self._pending_extract_body = None
-        self._extract_gen += 1
-        worker = _ExtractObjectsWorker(body, self._extract_gen)
-        worker.signals.finished.connect(
-            lambda aliases, gen, b=body: self._on_objects_extracted(aliases, gen, b)
-        )
-        QThreadPool.globalInstance().start(worker)
-
-    def _on_objects_extracted(self, aliases: list[str], gen: int, body: str) -> None:
-        self._alias_cache[body] = aliases
-        self._alias_cache.move_to_end(body)
-        if len(self._alias_cache) > _ALIAS_CACHE_MAX:
-            self._alias_cache.popitem(last=False)
-
-        if gen != self._extract_gen:
-            return  # stale result — user has since opened another query
-        self._metadata_panel.set_aliases(aliases)
+        self._metadata_panel.set_favorite(is_favorite)
 
     # ------------------------------------------------------------------
     # Search / tag / sidebar filtering
@@ -1446,49 +1530,20 @@ class MainWindow(QMainWindow):
         self._refresh_ui()
 
     def _on_favorites_selected(self) -> None:
-        self._search_gen += 1   # discard any in-flight search worker
         self._search_timer.stop()
         self._sidebar_mode = "favorites"
         self._search_bar.blockSignals(True)
         self._search_bar.clear()
         self._search_bar.blockSignals(False)
-        results: list[SearchResult] = []
-        for folder, db in self._known_dbs.items():
-            try:
-                for r in db.get_favorites():
-                    r.folder = folder
-                    results.append(r)
-            except Exception:
-                pass
-        self._query_list.set_results(results)
-        count = len(results)
-        q_word = ntr("word.query", "word.queries", count)
-        self._status_bar.showMessage(tr("status.favorites_count", count=count, query=q_word))
+        self._do_search()
 
     def _on_recent_selected(self) -> None:
-        self._search_gen += 1   # discard any in-flight search worker
         self._search_timer.stop()
         self._sidebar_mode = "recent"
         self._search_bar.blockSignals(True)
         self._search_bar.clear()
         self._search_bar.blockSignals(False)
-        results: list[SearchResult] = []
-        dbs = (
-            {self._browse_folder: self._known_dbs[self._browse_folder]}
-            if self._browse_folder and self._browse_folder in self._known_dbs
-            else self._known_dbs
-        )
-        for folder, db in dbs.items():
-            try:
-                for r in db.get_recently_viewed():
-                    r.folder = folder
-                    results.append(r)
-            except Exception:
-                pass
-        self._query_list.set_results(results)
-        count = len(results)
-        q_word = ntr("word.query", "word.queries", count)
-        self._status_bar.showMessage(tr("status.recent_count", count=count, query=q_word))
+        self._do_search()
 
     def _on_navigate_requested(self, token: str) -> None:
         """Jump to the first occurrence of *token* in the current SQL editor."""
@@ -1686,7 +1741,15 @@ class MainWindow(QMainWindow):
         # Reload from disk to discard unsaved changes
         if self._current_result is not None and self._folder is not None:
             path = self._folder / self._current_result.rel_path
-            self._load_query_from_disk(path, self._current_result)
+            self._load_gen += 1
+            self._pending_load = (
+                self._db,
+                path,
+                self._current_result,
+                self._load_gen,
+                False,
+            )
+            self._load_timer.start()
 
     def _cancel_edit(self) -> None:
         self._cancel_edit_mode()
