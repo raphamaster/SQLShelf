@@ -32,7 +32,7 @@ CREATE TABLE query_tags (
 
 CREATE TABLE query_objects (
     query_id    INTEGER NOT NULL REFERENCES queries(id) ON DELETE CASCADE,
-    object_type TEXT    NOT NULL CHECK (object_type IN ('table','column','procedure','function')),
+    object_type TEXT    NOT NULL CHECK (object_type IN ('table','column','alias','procedure','function')),
     object_name TEXT    NOT NULL COLLATE NOCASE,
     PRIMARY KEY (query_id, object_type, object_name)
 );

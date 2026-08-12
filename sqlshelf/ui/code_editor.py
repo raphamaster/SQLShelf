@@ -3,7 +3,14 @@ from __future__ import annotations
 import re
 
 from PySide6.QtCore import QPoint, QRect, QRegularExpression, QSize, Qt, QTimer
-from PySide6.QtGui import QColor, QPainter, QTextCursor, QTextDocument, QTextFormat
+from PySide6.QtGui import (
+    QColor,
+    QPainter,
+    QSyntaxHighlighter,
+    QTextCursor,
+    QTextDocument,
+    QTextFormat,
+)
 from PySide6.QtWidgets import QTextEdit
 from PySide6.QtWidgets import QPlainTextEdit, QWidget
 
@@ -60,10 +67,20 @@ class CodeEditor(QPlainTextEdit):
     # (below) updates immediately; occurrences catch up once the cursor settles.
     _OCCURRENCE_DEBOUNCE_MS = 150
 
+    # QSyntaxHighlighter processes every block synchronously when text is put
+    # in the document.  Past this limit, keeping it attached makes merely
+    # opening a query block the GUI for a noticeable amount of time.  Large
+    # scripts remain fully viewable/editable; only decorative whole-document
+    # syntax/occurrence highlighting is skipped.
+    _MAX_HIGHLIGHT_LINES = 1000
+    _MAX_HIGHLIGHT_CHARS = 200_000
+
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._gutter = _LineNumberArea(self)
         self._loading = False
+        self._large_document = False
+        self._syntax_highlighter: QSyntaxHighlighter | None = None
         self._occurrence_selections: list[QTextEdit.ExtraSelection] = []
 
         self._occurrence_timer = QTimer(self)
@@ -79,6 +96,10 @@ class CodeEditor(QPlainTextEdit):
         self._update_gutter_width(0)
         self._apply_selections()
 
+    def set_syntax_highlighter(self, highlighter: QSyntaxHighlighter) -> None:
+        """Register the editor highlighter so large loads can suspend it."""
+        self._syntax_highlighter = highlighter
+
     def setPlainText(self, text: str) -> None:
         # The cursor resets to position 0 as a side effect of loading new
         # content, which would otherwise trigger occurrence highlighting for
@@ -86,11 +107,22 @@ class CodeEditor(QPlainTextEdit):
         # full-document scan+format the user never asked for. Suppress it for
         # this reset only; the current-line highlight still applies below.
         self._loading = True
+        self._large_document = (
+            len(text) > self._MAX_HIGHLIGHT_CHARS
+            or text.count("\n") + 1 > self._MAX_HIGHLIGHT_LINES
+        )
         self._occurrence_timer.stop()
         self._occurrence_selections = []
+        highlighter = self._syntax_highlighter
+        if highlighter is not None:
+            # Detaching before insertion avoids an expensive highlightBlock()
+            # call for every line while QPlainTextEdit builds the document.
+            highlighter.setDocument(None)
         try:
             super().setPlainText(text)
         finally:
+            if highlighter is not None and not self._large_document:
+                highlighter.setDocument(self.document())
             self._loading = False
 
     # ------------------------------------------------------------------
@@ -164,6 +196,8 @@ class CodeEditor(QPlainTextEdit):
         CodeEditor._LINE_HIGHLIGHT = QColor(_tk.EDITOR_LINE_HL)
         CodeEditor._OCCURRENCE_BG  = QColor(_tk.EDITOR_OCCURRENCE_BG)
         CodeEditor._OCCURRENCE_FG  = QColor(_tk.EDITOR_OCCURRENCE_FG)
+        if self._syntax_highlighter is not None and not self._large_document:
+            self._syntax_highlighter.setDocument(self.document())
         self._recompute_occurrences()
         self._gutter.update()
 
@@ -208,6 +242,10 @@ class CodeEditor(QPlainTextEdit):
         _OCCURRENCE_DEBOUNCE_MS — since this is too costly to run on every
         single cursor/selection change in a large file."""
         selections: list[QTextEdit.ExtraSelection] = []
+        if self._large_document:
+            self._occurrence_selections = selections
+            self._apply_selections()
+            return
         token = self._token_at_cursor()
         if token:
             pattern = QRegularExpression(

@@ -241,7 +241,7 @@ class QueryListWidget(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._results: list[SearchResult] = []
-        self._sort = _SORT_NAME_ASC
+        self._sort = _SORT_MTIME_DESC
 
         self._model = QStandardItemModel(self)
 
@@ -288,13 +288,13 @@ class QueryListWidget(QWidget):
     # ------------------------------------------------------------------
 
     def set_results(self, results: list[SearchResult]) -> None:
+        current = self._current_result()
+        current_key = self._result_key(current)
         self._results = results
         self._sort_results()
-        self._populate_model()
+        self._populate_model(current_key)
 
-    def _populate_model(self) -> None:
-        current_path = self._current_rel_path()
-
+    def _populate_model(self, current_key=None) -> None:
         sel = self._list.selectionModel()
         sel.blockSignals(True)
         self._model.clear()
@@ -314,15 +314,18 @@ class QueryListWidget(QWidget):
             item.setData(r.is_favorite, _ROLE_FAVORITE)
             item.setData(r.file_mtime,  _ROLE_MTIME)
             self._model.appendRow(item)
-            if r.rel_path == current_path:
+            if self._result_key(r) == current_key:
                 restore_row = i
-
-        sel.blockSignals(False)
 
         if restore_row >= 0:
             self._list.setCurrentIndex(self._model.index(restore_row, 0))
         elif self._results:
             self._list.setCurrentIndex(self._model.index(0, 0))
+        sel.blockSignals(False)
+
+        selected = self._current_result()
+        if selected is not None and self._result_key(selected) != current_key:
+            self.query_selected.emit(selected)
 
     def select_by_rel_path(self, rel_path: str) -> None:
         for i, r in enumerate(self._results):
@@ -374,7 +377,8 @@ class QueryListWidget(QWidget):
             if chosen is act and key != self._sort:
                 self._sort = key
                 self._sort_results()
-                self._populate_model()
+                current = self._current_result()
+                self._populate_model(self._result_key(current))
                 break
 
     def _apply_sort_btn_style(self) -> None:
@@ -401,10 +405,21 @@ class QueryListWidget(QWidget):
     # ------------------------------------------------------------------
 
     def _current_rel_path(self) -> str | None:
-        row = self._list.currentIndex().row()
-        if 0 <= row < len(self._results):
-            return self._results[row].rel_path
-        return None
+        current = self._current_result()
+        return current.rel_path if current is not None else None
+
+    def _current_result(self) -> SearchResult | None:
+        index = self._list.currentIndex()
+        if not index.isValid():
+            return None
+        result = index.data(_ROLE_RESULT)
+        return result if isinstance(result, SearchResult) else None
+
+    @staticmethod
+    def _result_key(result: SearchResult | None):
+        if result is None:
+            return None
+        return result.folder, result.rel_path
 
     def _on_row_changed(self, current: QModelIndex, _previous: QModelIndex) -> None:
         row = current.row()
