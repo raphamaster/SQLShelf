@@ -72,6 +72,23 @@ def _make_chip_scroll(content: QWidget) -> QScrollArea:
     return sa
 
 
+def _section_header(section: QWidget) -> QLabel | None:
+    """The QLabel a collapsible section puts first in its layout, if any.
+
+    Every hop here is optional in Qt's own typing — a widget may have no
+    layout, a layout may have no item at 0, and an item may hold a spacer
+    rather than a widget — so each one is checked instead of chained.
+    """
+    layout = section.layout()
+    if layout is None:
+        return None
+    item = layout.itemAt(0)
+    if item is None:
+        return None
+    widget = item.widget()
+    return widget if isinstance(widget, QLabel) else None
+
+
 class MetadataPanel(QWidget):
     """Right-panel top section — query title, description, tags, SQL objects.
 
@@ -258,9 +275,10 @@ class MetadataPanel(QWidget):
     def _clear_flow(self, flow: FlowLayout) -> None:
         while flow.count():
             item = flow.takeAt(0)
-            if item and item.widget():
-                item.widget().hide()
-                item.widget().deleteLater()
+            widget = item.widget() if item else None
+            if widget is not None:
+                widget.hide()
+                widget.deleteLater()
 
     def _make_object_chip(self, label: str, kind: str) -> QPushButton:
         """Create a chip that navigates to *label* on left-click and shows a
@@ -428,19 +446,21 @@ class MetadataPanel(QWidget):
             (self._path_section, "metadata.section_file"),
             (self._mtime_section, "metadata.section_mtime"),
         ]:
-            lbl = section.layout().itemAt(0).widget() if section.layout() else None
-            if isinstance(lbl, QLabel):
-                lbl.setText(tr(key))
+            header = _section_header(section)
+            if header is not None:
+                header.setText(tr(key))
         # Form row labels
-        lbl = self._edit_form.labelForField(self._title_edit)
-        if lbl:
-            lbl.setText(tr("metadata.label_title"))
-        lbl = self._edit_form.labelForField(self._desc_edit)
-        if lbl:
-            lbl.setText(tr("metadata.label_desc"))
-        lbl = self._edit_form.labelForField(self._tags_input)
-        if lbl:
-            lbl.setText(tr("metadata.label_tags"))
+        for field, key in [
+            (self._title_edit, "metadata.label_title"),
+            (self._desc_edit, "metadata.label_desc"),
+            (self._tags_input, "metadata.label_tags"),
+        ]:
+            # labelForField is typed as returning a plain QWidget; a row built
+            # with a string label always gets a QLabel, but a row built with a
+            # widget label would not, so the cast is checked rather than assumed.
+            row_label = self._edit_form.labelForField(field)
+            if isinstance(row_label, QLabel):
+                row_label.setText(tr(key))
 
     def refresh_theme(self) -> None:
         self._title_label.setStyleSheet(
@@ -471,7 +491,7 @@ class MetadataPanel(QWidget):
             self._path_section,
             self._mtime_section,
         ]:
-            lbl = section.layout().itemAt(0).widget() if section.layout() else None
+            lbl = _section_header(section)
             if isinstance(lbl, QLabel):
                 lbl.setStyleSheet(style)
 

@@ -81,7 +81,12 @@ class TestExtractObjects:
 
 class TestObjectsToText:
     def test_empty_objects(self) -> None:
-        objs = {"table": set(), "column": set(), "procedure": set(), "function": set()}
+        objs: dict[str, set[str]] = {
+            "table": set(),
+            "column": set(),
+            "procedure": set(),
+            "function": set(),
+        }
         assert objects_to_text(objs) == ""
 
     def test_names_joined_with_spaces(self) -> None:

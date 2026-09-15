@@ -127,71 +127,94 @@ QT_MATERIAL_THEMES: dict[str, str] = {
 # Module-level constants (initialised to DARK; patched by set_active_palette)
 # ---------------------------------------------------------------------------
 
+
+def _color(key: str) -> str:
+    """Bind a colour token, narrowing it to str.
+
+    The palette is heterogeneous — three of its entries are pixel metrics, not
+    colours — so it is typed dict[str, object]. Narrowing happens here, at the
+    single place the module constants are bound, rather than at each of the
+    hundred call sites that interpolate a token into a stylesheet.
+    """
+    value = DARK[key]
+    if not isinstance(value, str):
+        raise TypeError(f"theme token {key!r} is not a colour: {value!r}")
+    return value
+
+
+def _metric(key: str) -> int:
+    """Bind a pixel-metric token, narrowing it to int."""
+    value = DARK[key]
+    if not isinstance(value, bool) and isinstance(value, int):
+        return value
+    raise TypeError(f"theme token {key!r} is not a metric: {value!r}")
+
+
 ACTIVE_THEME: str = "dark"
 
 # Surfaces
-BG_APP = DARK["BG_APP"]
-SURFACE = DARK["SURFACE"]
-CARD = DARK["CARD"]
-EDITOR_BG = DARK["EDITOR_BG"]
+BG_APP = _color("BG_APP")
+SURFACE = _color("SURFACE")
+CARD = _color("CARD")
+EDITOR_BG = _color("EDITOR_BG")
 
 # Borders
-BORDER = DARK["BORDER"]
-BORDER_EMPH = DARK["BORDER_EMPH"]
+BORDER = _color("BORDER")
+BORDER_EMPH = _color("BORDER_EMPH")
 
 # Accent
-ACCENT = DARK["ACCENT"]
-ACCENT_FILL = DARK["ACCENT_FILL"]
-ACCENT_BORDER = DARK["ACCENT_BORDER"]
-ACCENT_FOCUS_BG = DARK["ACCENT_FOCUS_BG"]
+ACCENT = _color("ACCENT")
+ACCENT_FILL = _color("ACCENT_FILL")
+ACCENT_BORDER = _color("ACCENT_BORDER")
+ACCENT_FOCUS_BG = _color("ACCENT_FOCUS_BG")
 
 # Text
-TEXT_PRIMARY = DARK["TEXT_PRIMARY"]
-TEXT_SECONDARY = DARK["TEXT_SECONDARY"]
-TEXT_TERTIARY = DARK["TEXT_TERTIARY"]
+TEXT_PRIMARY = _color("TEXT_PRIMARY")
+TEXT_SECONDARY = _color("TEXT_SECONDARY")
+TEXT_TERTIARY = _color("TEXT_TERTIARY")
 
 # Selection
-SELECTION_BG = DARK["SELECTION_BG"]
-SELECTION_FG = DARK["SELECTION_FG"]
+SELECTION_BG = _color("SELECTION_BG")
+SELECTION_FG = _color("SELECTION_FG")
 
 # Hover overlays
-HOVER_BG_LIGHT = DARK["HOVER_BG_LIGHT"]
-HOVER_BG_MEDIUM = DARK["HOVER_BG_MEDIUM"]
-HOVER_BG_STRONG = DARK["HOVER_BG_STRONG"]
+HOVER_BG_LIGHT = _color("HOVER_BG_LIGHT")
+HOVER_BG_MEDIUM = _color("HOVER_BG_MEDIUM")
+HOVER_BG_STRONG = _color("HOVER_BG_STRONG")
 
 # Tags
-TAG_BG = DARK["TAG_BG"]
-TAG_TEXT = DARK["TAG_TEXT"]
-TAG_RADIUS = DARK["TAG_RADIUS"]
+TAG_BG = _color("TAG_BG")
+TAG_TEXT = _color("TAG_TEXT")
+TAG_RADIUS = _metric("TAG_RADIUS")
 
 # Spacing
-PAD_GLOBAL = DARK["PAD_GLOBAL"]
-RADIUS = DARK["RADIUS"]
+PAD_GLOBAL = _metric("PAD_GLOBAL")
+RADIUS = _metric("RADIUS")
 
 # Semantic supplements
-STAR_ACTIVE = DARK["STAR_ACTIVE"]
-STAR_HOVER = DARK["STAR_HOVER"]
-LINK = DARK["LINK"]
-LINK_PREFIX = DARK["LINK_PREFIX"]
-CHIP_DELETE_BG = DARK["CHIP_DELETE_BG"]
-CHIP_DELETE_FG = DARK["CHIP_DELETE_FG"]
+STAR_ACTIVE = _color("STAR_ACTIVE")
+STAR_HOVER = _color("STAR_HOVER")
+LINK = _color("LINK")
+LINK_PREFIX = _color("LINK_PREFIX")
+CHIP_DELETE_BG = _color("CHIP_DELETE_BG")
+CHIP_DELETE_FG = _color("CHIP_DELETE_FG")
 
 # QueryList item hover
-LIST_ITEM_HOVER_BG = DARK["LIST_ITEM_HOVER_BG"]
+LIST_ITEM_HOVER_BG = _color("LIST_ITEM_HOVER_BG")
 
 # CodeEditor gutter
-GUTTER_BG = DARK["GUTTER_BG"]
-GUTTER_NUM_INACTIVE = DARK["GUTTER_NUM_INACTIVE"]
-GUTTER_NUM_CURRENT = DARK["GUTTER_NUM_CURRENT"]
-EDITOR_LINE_HL = DARK["EDITOR_LINE_HL"]
-EDITOR_OCCURRENCE_BG = DARK["EDITOR_OCCURRENCE_BG"]
-EDITOR_OCCURRENCE_FG = DARK["EDITOR_OCCURRENCE_FG"]
+GUTTER_BG = _color("GUTTER_BG")
+GUTTER_NUM_INACTIVE = _color("GUTTER_NUM_INACTIVE")
+GUTTER_NUM_CURRENT = _color("GUTTER_NUM_CURRENT")
+EDITOR_LINE_HL = _color("EDITOR_LINE_HL")
+EDITOR_OCCURRENCE_BG = _color("EDITOR_OCCURRENCE_BG")
+EDITOR_OCCURRENCE_FG = _color("EDITOR_OCCURRENCE_FG")
 
 # SQL syntax highlighting
-SYN_KEYWORD = DARK["SYN_KEYWORD"]
-SYN_STRING = DARK["SYN_STRING"]
-SYN_NUMBER = DARK["SYN_NUMBER"]
-SYN_COMMENT = DARK["SYN_COMMENT"]
+SYN_KEYWORD = _color("SYN_KEYWORD")
+SYN_STRING = _color("SYN_STRING")
+SYN_NUMBER = _color("SYN_NUMBER")
+SYN_COMMENT = _color("SYN_COMMENT")
 
 
 # ---------------------------------------------------------------------------

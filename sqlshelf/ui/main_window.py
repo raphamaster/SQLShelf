@@ -35,7 +35,7 @@ from PySide6.QtWidgets import (
 from ..core import config as cfg
 from ..core.frontmatter import read_sql_file, write_sql_file
 from ..core.i18n import available_languages, get_language, ntr, set_language, tr
-from ..core.index_db import IndexDB
+from ..core.index_db import IndexDB, IndexStats
 from ..core.models import SearchResult
 from ..core.scanner import scan_file, scan_folder
 from ..core.snippets import list_templates
@@ -388,7 +388,9 @@ class _UpdateDialog(QDialog):
         super().__init__(parent)
         self._current_version = current_version
         self.setWindowTitle(tr("update.dialog_title"))
-        self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
+        self.setWindowFlags(
+            self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint
+        )
         self.setFixedWidth(400)
         self._setup_ui()
         self._start_check()
@@ -412,9 +414,10 @@ class _UpdateDialog(QDialog):
         self._body_label = QLabel("")
         self._body_label.setWordWrap(True)
         self._body_label.setOpenExternalLinks(True)
-        self._body_label.setTextFormat(Qt.RichText)
+        self._body_label.setTextFormat(Qt.TextFormat.RichText)
         self._body_label.setTextInteractionFlags(
-            Qt.TextSelectableByMouse | Qt.LinksAccessibleByMouse
+            Qt.TextInteractionFlag.TextSelectableByMouse
+            | Qt.TextInteractionFlag.LinksAccessibleByMouse
         )
         self._body_label.hide()
         self._layout.addWidget(self._body_label)
@@ -570,7 +573,9 @@ class _StatsDialog(QDialog):
     def __init__(self, known_dbs: dict, parent=None) -> None:
         super().__init__(parent)
         self.setWindowTitle(tr("stats.title"))
-        self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
+        self.setWindowFlags(
+            self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint
+        )
         self.setFixedWidth(400)
 
         layout = QVBoxLayout(self)
@@ -582,21 +587,10 @@ class _StatsDialog(QDialog):
             lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
             layout.addWidget(lbl)
         else:
-            combined: dict[str, object] = {
-                "queries": 0,
-                "tag_names": set(),
-                "favorites": 0,
-                "table_names": set(),
-                "column_names": set(),
-            }
+            combined = IndexStats.empty()
             for db in known_dbs.values():
                 try:
-                    s = db.get_stats()
-                    combined["queries"] += s["queries"]
-                    combined["favorites"] += s["favorites"]
-                    combined["tag_names"] |= s["tag_names"]
-                    combined["table_names"] |= s["table_names"]
-                    combined["column_names"] |= s["column_names"]
+                    combined.merge(db.get_stats())
                 except Exception:
                     pass
 
@@ -605,11 +599,11 @@ class _StatsDialog(QDialog):
 
             rows = [
                 (tr("stats.folders"), str(len(known_dbs))),
-                (tr("stats.queries"), str(combined["queries"])),
-                (tr("stats.tags"), str(len(combined["tag_names"]))),
-                (tr("stats.favorites"), str(combined["favorites"])),
-                (tr("stats.tables"), str(len(combined["table_names"]))),
-                (tr("stats.columns"), str(len(combined["column_names"]))),
+                (tr("stats.queries"), str(combined.queries)),
+                (tr("stats.tags"), str(len(combined.tag_names))),
+                (tr("stats.favorites"), str(combined.favorites)),
+                (tr("stats.tables"), str(len(combined.table_names))),
+                (tr("stats.columns"), str(len(combined.column_names))),
             ]
 
             for label_text, value_text in rows:
@@ -652,7 +646,9 @@ class _ReportsDialog(QDialog):
     def __init__(self, known_dbs: dict, parent=None) -> None:
         super().__init__(parent)
         self.setWindowTitle(tr("reports.title"))
-        self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
+        self.setWindowFlags(
+            self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint
+        )
         self.setFixedWidth(440)
 
         layout = QVBoxLayout(self)
@@ -2111,7 +2107,7 @@ class MainWindow(QMainWindow):
         path = self._folder / self._current_result.rel_path
         if sys.platform == "win32":
             try:
-                os.startfile(str(path))  # type: ignore[attr-defined]
+                os.startfile(str(path))
                 self._record_access("open_in_ssms")
             except Exception as exc:
                 QMessageBox.warning(self, tr("msg.open_ssms.title"), str(exc))
@@ -2180,7 +2176,9 @@ class MainWindow(QMainWindow):
     def _show_about(self) -> None:
         dlg = QDialog(self)
         dlg.setWindowTitle(tr("about.title"))
-        dlg.setWindowFlags(dlg.windowFlags() & ~Qt.WindowContextHelpButtonHint)
+        dlg.setWindowFlags(
+            dlg.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint
+        )
         dlg.setFixedWidth(420)
 
         layout = QVBoxLayout(dlg)
@@ -2193,7 +2191,9 @@ class MainWindow(QMainWindow):
         logo_label = QLabel()
         logo_path = Path(__file__).parent.parent.parent / "images" / "logo_sqlshelf.png"
         if logo_path.exists():
-            pix = QPixmap(str(logo_path)).scaledToHeight(48, Qt.SmoothTransformation)
+            pix = QPixmap(str(logo_path)).scaledToHeight(
+                48, Qt.TransformationMode.SmoothTransformation
+            )
             logo_label.setPixmap(pix)
         header.addWidget(logo_label)
         header.addStretch()
@@ -2216,9 +2216,10 @@ class MainWindow(QMainWindow):
         body.setWordWrap(True)
         body.setOpenExternalLinks(True)
         body.setTextInteractionFlags(
-            Qt.TextSelectableByMouse | Qt.LinksAccessibleByMouse
+            Qt.TextInteractionFlag.TextSelectableByMouse
+            | Qt.TextInteractionFlag.LinksAccessibleByMouse
         )
-        body.setTextFormat(Qt.RichText)
+        body.setTextFormat(Qt.TextFormat.RichText)
         layout.addWidget(body)
 
         # OK button
@@ -2245,8 +2246,10 @@ class MainWindow(QMainWindow):
 
         set_active_palette(name)
 
+        # instance() is typed as the QCoreApplication base, which knows nothing
+        # about stylesheets; a headless run would genuinely have no QApplication.
         app = QApplication.instance()
-        if app is None:
+        if not isinstance(app, QApplication):
             return
 
         try:
@@ -2350,7 +2353,9 @@ class MainWindow(QMainWindow):
     def _show_preferences(self) -> None:
         dlg = QDialog(self)
         dlg.setWindowTitle(tr("prefs.title"))
-        dlg.setWindowFlags(dlg.windowFlags() & ~Qt.WindowContextHelpButtonHint)
+        dlg.setWindowFlags(
+            dlg.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint
+        )
         dlg.setFixedWidth(360)
 
         layout = QVBoxLayout(dlg)

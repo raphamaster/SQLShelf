@@ -3,7 +3,14 @@ from __future__ import annotations
 import re
 from datetime import datetime
 
-from PySide6.QtCore import QModelIndex, QRectF, QSize, Qt, Signal
+from PySide6.QtCore import (
+    QModelIndex,
+    QPersistentModelIndex,
+    QRectF,
+    QSize,
+    Qt,
+    Signal,
+)
 from PySide6.QtGui import (
     QColor,
     QFont,
@@ -126,10 +133,15 @@ class QueryItemDelegate(QStyledItemDelegate):
         self._c_tag_txt = _qc(_tk.TAG_TEXT)
         self._c_star = _qc(_tk.STAR_ACTIVE)
 
-    def sizeHint(self, option, index) -> QSize:  # type: ignore[override]
+    def sizeHint(self, option, index) -> QSize:
         return QSize(option.rect.width(), _ITEM_H)
 
-    def paint(self, painter: QPainter, option, index: QModelIndex) -> None:
+    def paint(
+        self,
+        painter: QPainter,
+        option,
+        index: QModelIndex | QPersistentModelIndex,
+    ) -> None:
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 

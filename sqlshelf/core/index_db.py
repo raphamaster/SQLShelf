@@ -24,6 +24,40 @@ _BATCH_BUDGET_MS = 40.0
 
 
 @dataclass
+class IndexStats:
+    """What one project index holds. Returned by IndexDB.get_stats().
+
+    A dataclass rather than a dict so callers that add or count these fields
+    are checked; the dict this replaced was typed dict[str, object], which made
+    every len() and += on its values invisible to the type checker.
+    """
+
+    queries: int
+    favorites: int
+    tag_names: set[str]
+    table_names: set[str]
+    column_names: set[str]
+
+    def merge(self, other: "IndexStats") -> None:
+        """Fold *other* into this one, for totals across several folders."""
+        self.queries += other.queries
+        self.favorites += other.favorites
+        self.tag_names |= other.tag_names
+        self.table_names |= other.table_names
+        self.column_names |= other.column_names
+
+    @classmethod
+    def empty(cls) -> "IndexStats":
+        return cls(
+            queries=0,
+            favorites=0,
+            tag_names=set(),
+            table_names=set(),
+            column_names=set(),
+        )
+
+
+@dataclass
 class _PreparedQuery:
     """A Query with everything expensive already computed off the DB lock.
 
@@ -416,7 +450,7 @@ class IndexDB:
                 ).fetchall()
             ]
 
-    def get_stats(self) -> dict[str, object]:
+    def get_stats(self) -> IndexStats:
         """Return aggregated statistics for this project index."""
         with self._read_lock:
             queries = self._read_conn.execute(
@@ -441,13 +475,13 @@ class IndexDB:
                     "SELECT DISTINCT object_name FROM query_objects WHERE object_type='column'"
                 ).fetchall()
             }
-        return {
-            "queries": queries,
-            "tag_names": tag_names,
-            "favorites": favorites,
-            "table_names": table_names,
-            "column_names": column_names,
-        }
+        return IndexStats(
+            queries=queries,
+            tag_names=tag_names,
+            favorites=favorites,
+            table_names=table_names,
+            column_names=column_names,
+        )
 
     def get_objects(self, query_id: int) -> dict[str, list[str]]:
         """Return {object_type: [names]} for a query."""

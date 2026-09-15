@@ -134,9 +134,10 @@ class TagDisplayWidget(QWidget):
     def _clear(self) -> None:
         while self._flow.count():
             item = self._flow.takeAt(0)
-            if item and item.widget():
-                item.widget().hide()
-                item.widget().deleteLater()
+            widget = item.widget() if item else None
+            if widget is not None:
+                widget.hide()
+                widget.deleteLater()
 
 
 # ---------------------------------------------------------------------------
@@ -209,11 +210,12 @@ class TagInputWidget(QWidget):
 
     def _rebuild(self) -> None:
         # Remove all chips (but keep self._input)
-        to_remove = []
+        to_remove: list[QWidget] = []
         for i in range(self._flow.count()):
             item = self._flow.itemAt(i)
-            if item and item.widget() and item.widget() is not self._input:
-                to_remove.append(item.widget())
+            widget = item.widget() if item else None
+            if widget is not None and widget is not self._input:
+                to_remove.append(widget)
         for w in to_remove:
             self._flow.removeWidget(w)
             w.hide()

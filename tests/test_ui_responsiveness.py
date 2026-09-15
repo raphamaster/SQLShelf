@@ -17,7 +17,10 @@ _APP: QApplication | None = None
 
 def _app() -> QApplication:
     global _APP
-    _APP = QApplication.instance() or QApplication([])
+    # instance() is typed as the QCoreApplication base; anything a widget test
+    # needs lives on QApplication, so an existing non-widget app is not reusable.
+    existing = QApplication.instance()
+    _APP = existing if isinstance(existing, QApplication) else QApplication([])
     return _APP
 
 
