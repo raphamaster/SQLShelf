@@ -20,11 +20,11 @@ from PySide6.QtWidgets import (
 
 from ..core.i18n import tr
 from .theme import tokens as _tk
-from .theme.tokens import ACCENT, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_TERTIARY
+from .theme.tokens import TEXT_TERTIARY
 
 _ROLE_PATH = Qt.ItemDataRole.UserRole
 _IMAGES = Path(__file__).parent.parent.parent / "images"
-_LOGO_DARK  = _IMAGES / "logo_sqlshelf.png"
+_LOGO_DARK = _IMAGES / "logo_sqlshelf.png"
 _LOGO_LIGHT = _IMAGES / "logo_sqlshelf_white.png"
 
 
@@ -47,7 +47,9 @@ class CollapsibleSection(QWidget):
         self._header.setText(title)
         self._header.setCheckable(True)
         self._header.setChecked(True)
-        self._header.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self._header.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
         self._header.setCursor(Qt.CursorShape.PointingHandCursor)
         self._header.toggled.connect(self._on_toggled)
 
@@ -81,10 +83,10 @@ class SidebarWidget(QWidget):
     """
 
     open_folder_requested = Signal()
-    folder_selected = Signal(object)           # Path
-    folder_remove_requested = Signal(object)   # Path
+    folder_selected = Signal(object)  # Path
+    folder_remove_requested = Signal(object)  # Path
     folder_deindex_requested = Signal(object)  # Path
-    folder_favorite_toggled = Signal(object)   # Path
+    folder_favorite_toggled = Signal(object)  # Path
     tag_selected = Signal(str)
     favorites_selected = Signal()
     recent_selected = Signal()
@@ -110,9 +112,13 @@ class SidebarWidget(QWidget):
         self._logo_lbl = QLabel()
         self._logo_lbl.setObjectName("LogoLabel")
         self._logo_lbl.setStyleSheet("background: transparent;")
-        self._logo_lbl.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
-        self._logo_lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
-        self._logo_pix_dark  = QPixmap(str(_LOGO_DARK))
+        self._logo_lbl.setAlignment(
+            Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft
+        )
+        self._logo_lbl.setAttribute(
+            Qt.WidgetAttribute.WA_TransparentForMouseEvents, True
+        )
+        self._logo_pix_dark = QPixmap(str(_LOGO_DARK))
         self._logo_pix_light = QPixmap(str(_LOGO_LIGHT))
         self._update_logo_pixmap()
 
@@ -154,7 +160,9 @@ class SidebarWidget(QWidget):
         self._empty_label.setContentsMargins(4, 4, 4, 4)
 
         self._folders_list = QListWidget()
-        self._folders_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self._folders_list.setSelectionMode(
+            QAbstractItemView.SelectionMode.SingleSelection
+        )
         self._folders_list.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum
         )
@@ -175,7 +183,9 @@ class SidebarWidget(QWidget):
         folders_inner.addWidget(self._empty_label)
         folders_inner.addWidget(self._folders_list)
 
-        self._folders_section = CollapsibleSection(tr("sidebar.folders_section"), folders_content)
+        self._folders_section = CollapsibleSection(
+            tr("sidebar.folders_section"), folders_content
+        )
 
         # ── TAGS section content ─────────────────────────────────────────────
         self._tag_list = QListWidget()
@@ -184,7 +194,9 @@ class SidebarWidget(QWidget):
         )
         self._tag_list.itemClicked.connect(self._on_tag_item_clicked)
 
-        self._tags_section = CollapsibleSection(tr("sidebar.tags_section"), self._tag_list)
+        self._tags_section = CollapsibleSection(
+            tr("sidebar.tags_section"), self._tag_list
+        )
 
         # ── Layout ───────────────────────────────────────────────────────────
         layout = QVBoxLayout(self)
@@ -399,9 +411,7 @@ class SidebarWidget(QWidget):
 
     def _update_logo_pixmap(self) -> None:
         pix = (
-            self._logo_pix_light
-            if _tk.ACTIVE_THEME == "light"
-            else self._logo_pix_dark
+            self._logo_pix_light if _tk.ACTIVE_THEME == "light" else self._logo_pix_dark
         )
         if pix.isNull():
             self._logo_lbl.setText("SQLShelf")

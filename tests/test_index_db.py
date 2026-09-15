@@ -9,7 +9,6 @@ from sqlshelf.core.index_db import IndexDB
 from sqlshelf.core.models import Query
 from sqlshelf.core.scanner import scan_folder
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -54,7 +53,9 @@ class TestSchemaInit:
             ).fetchall()
         }
         db.close()
-        assert {"meta", "queries", "tags", "query_tags", "query_objects"}.issubset(names)
+        assert {"meta", "queries", "tags", "query_tags", "query_objects"}.issubset(
+            names
+        )
 
     def test_fts_virtual_table_exists(self, project_dir: Path) -> None:
         db = IndexDB(project_dir)
@@ -111,7 +112,11 @@ class TestIndexAll:
 
     def test_multiple_queries(self, project_dir: Path) -> None:
         queries = [
-            Query(path=make_sql_file(project_dir, f"q{i}.sql", f"SELECT {i}"), title=f"Q{i}", body=f"SELECT {i}")
+            Query(
+                path=make_sql_file(project_dir, f"q{i}.sql", f"SELECT {i}"),
+                title=f"Q{i}",
+                body=f"SELECT {i}",
+            )
             for i in range(5)
         ]
         db = IndexDB(project_dir)
@@ -172,14 +177,18 @@ class TestTags:
     def test_tags_indexed(self, project_dir: Path) -> None:
         p = make_sql_file(project_dir, "q.sql")
         db = IndexDB(project_dir)
-        db.index_all([Query(path=p, title="T", body="SELECT 1", tags=["finance", "report"])])
+        db.index_all(
+            [Query(path=p, title="T", body="SELECT 1", tags=["finance", "report"])]
+        )
         assert sorted(db.get_all_tags()) == ["finance", "report"]
         db.close()
 
     def test_tags_normalised_to_lowercase(self, project_dir: Path) -> None:
         p = make_sql_file(project_dir, "q.sql")
         db = IndexDB(project_dir)
-        db.index_all([Query(path=p, title="T", body="SELECT 1", tags=["Finance", "REPORT"])])
+        db.index_all(
+            [Query(path=p, title="T", body="SELECT 1", tags=["Finance", "REPORT"])]
+        )
         assert sorted(db.get_all_tags()) == ["finance", "report"]
         db.close()
 
@@ -192,14 +201,24 @@ class TestTags:
         assert count == 3
 
     def test_shared_tag_stored_once(self, project_dir: Path) -> None:
-        q1 = Query(path=make_sql_file(project_dir, "q1.sql", "SELECT 1"), title="Q1", body="SELECT 1", tags=["shared", "only-q1"])
-        q2 = Query(path=make_sql_file(project_dir, "q2.sql", "SELECT 2"), title="Q2", body="SELECT 2", tags=["shared", "only-q2"])
+        q1 = Query(
+            path=make_sql_file(project_dir, "q1.sql", "SELECT 1"),
+            title="Q1",
+            body="SELECT 1",
+            tags=["shared", "only-q1"],
+        )
+        q2 = Query(
+            path=make_sql_file(project_dir, "q2.sql", "SELECT 2"),
+            title="Q2",
+            body="SELECT 2",
+            tags=["shared", "only-q2"],
+        )
         db = IndexDB(project_dir)
         db.index_all([q1, q2])
         tag_count = db._conn.execute("SELECT COUNT(*) FROM tags").fetchone()[0]
         link_count = db._conn.execute("SELECT COUNT(*) FROM query_tags").fetchone()[0]
         db.close()
-        assert tag_count == 3   # shared, only-q1, only-q2
+        assert tag_count == 3  # shared, only-q1, only-q2
         assert link_count == 4  # 2 per query
 
     def test_no_tags_leaves_tables_empty(self, project_dir: Path) -> None:
@@ -254,14 +273,20 @@ class TestFTS:
     def test_fts_row_created_on_insert(self, project_dir: Path) -> None:
         p = make_sql_file(project_dir, "q.sql", "SELECT amount FROM invoices")
         db = IndexDB(project_dir)
-        db.index_all([Query(path=p, title="Invoices", body="SELECT amount FROM invoices")])
+        db.index_all(
+            [Query(path=p, title="Invoices", body="SELECT amount FROM invoices")]
+        )
         count = db._conn.execute("SELECT COUNT(*) FROM queries_fts").fetchone()[0]
         db.close()
         assert count == 1
 
     def test_fts_count_matches_queries_count(self, project_dir: Path) -> None:
         queries = [
-            Query(path=make_sql_file(project_dir, f"q{i}.sql", f"SELECT {i}"), title=f"Q{i}", body=f"SELECT {i}")
+            Query(
+                path=make_sql_file(project_dir, f"q{i}.sql", f"SELECT {i}"),
+                title=f"Q{i}",
+                body=f"SELECT {i}",
+            )
             for i in range(3)
         ]
         db = IndexDB(project_dir)
@@ -426,7 +451,9 @@ class TestSchemaV3:
             schema_sql,
             flags=re.DOTALL,
         )
-        v2_schema = re.sub(r"CREATE INDEX ix_access_log_\w+ [^;]*;", "", v2_schema).strip()
+        v2_schema = re.sub(
+            r"CREATE INDEX ix_access_log_\w+ [^;]*;", "", v2_schema
+        ).strip()
 
         conn = sqlite3.connect(str(db_path))
         conn.executescript(v2_schema)
@@ -583,7 +610,9 @@ class TestAccessLog:
         for i in range(n):
             p = make_sql_file(project_dir, f"q{i}.sql", f"SELECT {i}")
             q_tags = tags[i] if tags else []
-            queries.append(Query(path=p, title=f"Q{i}", body=f"SELECT {i}", tags=q_tags))
+            queries.append(
+                Query(path=p, title=f"Q{i}", body=f"SELECT {i}", tags=q_tags)
+            )
             rels.append(f"q{i}.sql")
         db = IndexDB(project_dir)
         db.index_all(queries)
@@ -744,9 +773,7 @@ class TestLockIsFreeDuringExpensiveWork:
             )
         return out
 
-    def _assert_lock_free_during_prepare(
-        self, db: IndexDB, run
-    ) -> None:
+    def _assert_lock_free_during_prepare(self, db: IndexDB, run) -> None:
         observed: list[bool] = []
         original = db._prepare
 
@@ -776,9 +803,7 @@ class TestLockIsFreeDuringExpensiveWork:
     ) -> None:
         queries = self._queries(project_dir, 5)
         db = IndexDB(project_dir)
-        self._assert_lock_free_during_prepare(
-            db, lambda: db.index_incremental(queries)
-        )
+        self._assert_lock_free_during_prepare(db, lambda: db.index_incremental(queries))
         assert db.count() == 5
         db.close()
 

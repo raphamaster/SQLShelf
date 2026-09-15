@@ -36,7 +36,7 @@ def read_sql_file(path: Path) -> tuple[dict, str, bool]:
     except yaml.YAMLError:
         return {}, content.strip(), False
 
-    body = content[match.end():].strip()
+    body = content[match.end() :].strip()
     return metadata, body, True
 
 

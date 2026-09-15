@@ -4,7 +4,7 @@ from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QClipboard, QGuiApplication
+from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import (
     QFormLayout,
     QFrame,
@@ -25,12 +25,8 @@ from .tag_widget import FlowLayout, TagDisplayWidget, TagInputWidget
 from .theme import tokens as _tk
 from .theme.tokens import (
     ACCENT,
-    ACCENT_FILL,
-    BORDER_EMPH,
     STAR_ACTIVE,
     STAR_HOVER,
-    TAG_BG,
-    TAG_RADIUS,
     TEXT_PRIMARY,
     TEXT_SECONDARY,
     TEXT_TERTIARY,
@@ -143,7 +139,9 @@ class MetadataPanel(QWidget):
 
         # ── Tags section (mint chips) ──────────────────────────────────────
         self._tags_display = TagDisplayWidget()
-        self._tags_section = _section_container(tr("metadata.section_tags"), self._tags_display)
+        self._tags_section = _section_container(
+            tr("metadata.section_tags"), self._tags_display
+        )
         self._tags_section.setVisible(False)
 
         # ── Tables section (clickable neutral chips, scrollable after 2 rows) ──
@@ -151,7 +149,9 @@ class MetadataPanel(QWidget):
         self._tables_flow = FlowLayout(self._tables_flow_widget, h_gap=4, v_gap=4)
         self._tables_flow_widget.setLayout(self._tables_flow)
         self._tables_scroll = _make_chip_scroll(self._tables_flow_widget)
-        self._tables_section = _section_container(tr("metadata.section_tables"), self._tables_scroll)
+        self._tables_section = _section_container(
+            tr("metadata.section_tables"), self._tables_scroll
+        )
         self._tables_section.setVisible(False)
 
         # ── Columns section (clickable neutral chips, scrollable after 2 rows) ─
@@ -159,7 +159,9 @@ class MetadataPanel(QWidget):
         self._columns_flow = FlowLayout(self._columns_flow_widget, h_gap=4, v_gap=4)
         self._columns_flow_widget.setLayout(self._columns_flow)
         self._columns_scroll = _make_chip_scroll(self._columns_flow_widget)
-        self._columns_section = _section_container(tr("metadata.section_columns"), self._columns_scroll)
+        self._columns_section = _section_container(
+            tr("metadata.section_columns"), self._columns_scroll
+        )
         self._columns_section.setVisible(False)
 
         # ── Aliases section (clickable neutral chips, scrollable after 2 rows) ─
@@ -167,7 +169,9 @@ class MetadataPanel(QWidget):
         self._aliases_flow = FlowLayout(self._aliases_flow_widget, h_gap=4, v_gap=4)
         self._aliases_flow_widget.setLayout(self._aliases_flow)
         self._aliases_scroll = _make_chip_scroll(self._aliases_flow_widget)
-        self._aliases_section = _section_container(tr("metadata.section_aliases"), self._aliases_scroll)
+        self._aliases_section = _section_container(
+            tr("metadata.section_aliases"), self._aliases_scroll
+        )
         self._aliases_section.setVisible(False)
 
         # ── File path (clickable, right-click to copy) ────────────────────
@@ -182,15 +186,17 @@ class MetadataPanel(QWidget):
         self._path_btn.clicked.connect(self.reveal_requested)
         self._path_btn.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self._path_btn.customContextMenuRequested.connect(self._show_path_menu)
-        self._path_section = _section_container(tr("metadata.section_file"), self._path_btn)
+        self._path_section = _section_container(
+            tr("metadata.section_file"), self._path_btn
+        )
         self._path_section.setVisible(False)
 
         # ── Modification date ──────────────────────────────────────────────
         self._mtime_label = QLabel()
-        self._mtime_label.setStyleSheet(
-            f"color: {TEXT_SECONDARY}; font-size: 11px;"
+        self._mtime_label.setStyleSheet(f"color: {TEXT_SECONDARY}; font-size: 11px;")
+        self._mtime_section = _section_container(
+            tr("metadata.section_mtime"), self._mtime_label
         )
-        self._mtime_section = _section_container(tr("metadata.section_mtime"), self._mtime_label)
         self._mtime_section.setVisible(False)
 
         # ── Read-only container ────────────────────────────────────────────
@@ -264,7 +270,9 @@ class MetadataPanel(QWidget):
         btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
         btn.setToolTip(tr("metadata.chip_tooltip_navigate"))
-        btn.clicked.connect(lambda checked=False, t=label: self.navigate_requested.emit(t))
+        btn.clicked.connect(
+            lambda checked=False, t=label: self.navigate_requested.emit(t)
+        )
         btn.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         btn.customContextMenuRequested.connect(
             lambda pos, t=label, k=kind: self._show_chip_menu(btn, t, k)
@@ -284,6 +292,7 @@ class MetadataPanel(QWidget):
             self.filter_requested.emit(kind, token)
         elif chosen == copy_act:
             from PySide6.QtGui import QGuiApplication
+
             QGuiApplication.clipboard().setText(token)
 
     def _rebuild_object_chips(self) -> None:
@@ -362,7 +371,9 @@ class MetadataPanel(QWidget):
         copy_dir_act = menu.addAction(tr("metadata.copy_folder_path"))
         menu.addSeparator()
         reveal_act = menu.addAction(tr("metadata.reveal_in_explorer"))
-        chosen = menu.exec(self._path_btn.mapToGlobal(self._path_btn.rect().bottomLeft()))
+        chosen = menu.exec(
+            self._path_btn.mapToGlobal(self._path_btn.rect().bottomLeft())
+        )
         if chosen == copy_act:
             QGuiApplication.clipboard().setText(str(self._file_path))
         elif chosen == copy_dir_act:
@@ -447,8 +458,11 @@ class MetadataPanel(QWidget):
         self._rebuild_object_chips()
         # Refresh section labels
         from PySide6.QtWidgets import QLabel
+
         style = _section_label_style()
-        self._mtime_label.setStyleSheet(f"color: {_tk.TEXT_SECONDARY}; font-size: 11px;")
+        self._mtime_label.setStyleSheet(
+            f"color: {_tk.TEXT_SECONDARY}; font-size: 11px;"
+        )
         for section in [
             self._tags_section,
             self._tables_section,
@@ -480,6 +494,7 @@ class MetadataPanel(QWidget):
 
 
 # ── Module-level helper (avoids repeating section-building boilerplate) ────────
+
 
 def _section_container(label_text: str, content: QWidget) -> QWidget:
     w = QWidget()

@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
     QFileDialog,
+    QHBoxLayout,
     QInputDialog,
     QLabel,
     QMainWindow,
@@ -27,7 +28,6 @@ from PySide6.QtWidgets import (
     QStatusBar,
     QStyle,
     QSystemTrayIcon,
-    QHBoxLayout,
     QVBoxLayout,
     QWidget,
 )
@@ -38,12 +38,10 @@ from ..core.i18n import available_languages, get_language, ntr, set_language, tr
 from ..core.index_db import IndexDB
 from ..core.models import SearchResult
 from ..core.scanner import scan_file, scan_folder
-from ..core.sql_objects import extract_objects
 from ..core.snippets import list_templates
+from ..core.sql_objects import extract_objects
 from ..core.watcher import FolderWatcher
 from .code_editor import CodeEditor
-from .theme import tokens as _tk
-from .theme.tokens import ACCENT, ACCENT_BORDER, ACCENT_FILL, TEXT_SECONDARY, TEXT_TERTIARY
 from .command_palette import CommandPalette
 from .highlighter import SqlHighlighter
 from .metadata_panel import MetadataPanel
@@ -52,6 +50,12 @@ from .query_list import QueryListWidget
 from .search_bar import SearchBar
 from .sidebar import SidebarWidget
 from .template_dialog import TemplateDialog
+from .theme import tokens as _tk
+from .theme.tokens import (
+    ACCENT,
+    TEXT_SECONDARY,
+    TEXT_TERTIARY,
+)
 
 
 def _icon(style_enum) -> QIcon:
@@ -126,9 +130,7 @@ class _WatchSyncWorker(QRunnable):
     changed file — seconds of frozen window every time a folder was synced.
     """
 
-    def __init__(
-        self, db: IndexDB, modified: set[Path], deleted: set[Path]
-    ) -> None:
+    def __init__(self, db: IndexDB, modified: set[Path], deleted: set[Path]) -> None:
         super().__init__()
         self.signals = _IndexWorkerSignals()
         self._db = db
@@ -180,6 +182,7 @@ class _ForceReindexWorker(QRunnable):
 # Background search worker
 # ---------------------------------------------------------------------------
 
+
 class _SearchWorkerSignals(QObject):
     results_ready = Signal(list, list, int)  # (results, sidebar tags, generation)
 
@@ -206,8 +209,7 @@ class _SearchWorker(QRunnable):
             results: list[SearchResult] = []
             scoped_dbs = (
                 {self._browse_folder: self._dbs[self._browse_folder]}
-                if self._browse_folder is not None
-                and self._browse_folder in self._dbs
+                if self._browse_folder is not None and self._browse_folder in self._dbs
                 else self._dbs
             )
 
@@ -394,7 +396,6 @@ class _UpdateDialog(QDialog):
     # ------------------------------------------------------------------
 
     def _setup_ui(self) -> None:
-        from .theme.tokens import ACCENT
 
         self._layout = QVBoxLayout(self)
         self._layout.setContentsMargins(24, 24, 24, 20)
@@ -513,8 +514,11 @@ class _UpdateDialog(QDialog):
 # Progress dialog shown while indexing a new folder
 # ---------------------------------------------------------------------------
 
+
 class _IndexProgressDialog(QDialog):
-    def __init__(self, folder_name: str, parent=None, title_key: str = "progress.importing") -> None:
+    def __init__(
+        self, folder_name: str, parent=None, title_key: str = "progress.importing"
+    ) -> None:
         super().__init__(
             parent,
             Qt.WindowType.WindowTitleHint | Qt.WindowType.CustomizeWindowHint,
@@ -549,7 +553,9 @@ class _IndexProgressDialog(QDialog):
             self._bar.setRange(0, total)
         self._bar.setValue(current)
         pct = int(current / total * 100)
-        self._detail_label.setText(tr("progress.indexing_files", current=current, total=total))
+        self._detail_label.setText(
+            tr("progress.indexing_files", current=current, total=total)
+        )
         self._pct_label.setText(f"{pct}%")
 
 
@@ -612,7 +618,9 @@ class _StatsDialog(QDialog):
                 row_layout.setContentsMargins(0, 0, 0, 0)
                 lbl = QLabel(label_text)
                 val = QLabel(value_text)
-                val.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                val.setAlignment(
+                    Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+                )
                 font = val.font()
                 font.setBold(True)
                 val.setFont(font)
@@ -665,22 +673,32 @@ class _ReportsDialog(QDialog):
                 try:
                     total_accesses += db.get_access_total()
                     for stat in db.get_top_queries(limit=10):
-                        label = f"{stat.label}  ({folder.name})" if multi_folder else stat.label
+                        label = (
+                            f"{stat.label}  ({folder.name})"
+                            if multi_folder
+                            else stat.label
+                        )
                         top_queries.append((label, stat.count))
                     for stat in db.get_top_tags(limit=10):
-                        tag_counts[stat.label] = tag_counts.get(stat.label, 0) + stat.count
+                        tag_counts[stat.label] = (
+                            tag_counts.get(stat.label, 0) + stat.count
+                        )
                 except Exception:
                     pass
 
             top_queries.sort(key=lambda row: row[1], reverse=True)
             top_queries = top_queries[:10]
-            top_tags = sorted(tag_counts.items(), key=lambda row: row[1], reverse=True)[:10]
+            top_tags = sorted(tag_counts.items(), key=lambda row: row[1], reverse=True)[
+                :10
+            ]
 
             total_row = QHBoxLayout()
             total_row.setContentsMargins(0, 0, 0, 0)
             total_lbl = QLabel(tr("reports.total_accesses"))
             total_val = QLabel(str(total_accesses))
-            total_val.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            total_val.setAlignment(
+                Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+            )
             font = total_val.font()
             font.setBold(True)
             total_val.setFont(font)
@@ -726,7 +744,9 @@ class _ReportsDialog(QDialog):
                 lbl = QLabel(label_text)
                 lbl.setWordWrap(True)
                 val = QLabel(str(count))
-                val.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                val.setAlignment(
+                    Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+                )
                 row_layout.addWidget(lbl)
                 row_layout.addStretch()
                 row_layout.addWidget(val)
@@ -739,6 +759,7 @@ class _ReportsDialog(QDialog):
 # Watcher → Qt bridge
 # ---------------------------------------------------------------------------
 
+
 class _WatcherBridge(QObject):
     files_changed = Signal(object, object)
 
@@ -749,6 +770,7 @@ class _WatcherBridge(QObject):
 # ---------------------------------------------------------------------------
 # Main window
 # ---------------------------------------------------------------------------
+
 
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
@@ -773,11 +795,11 @@ class MainWindow(QMainWindow):
         self._browse_folder: Path | None = None  # None = show all known folders
 
         # Sidebar navigation state — used to compose status bar messages
-        self._sidebar_mode: str = "all"   # "all" | "tag" | "favorites" | "recent"
+        self._sidebar_mode: str = "all"  # "all" | "tag" | "favorites" | "recent"
         self._active_tag: str = ""
 
         # Async search state
-        self._search_gen: int = 0      # incremented per dispatch; workers check this
+        self._search_gen: int = 0  # incremented per dispatch; workers check this
         self._pending_select: str | None = None  # rel_path to auto-select after search
 
         # Async query loading state. Rapid list navigation is debounced so only
@@ -848,7 +870,9 @@ class MainWindow(QMainWindow):
         self._file_menu.addAction(self._new_act)
 
         self._duplicate_act = QAction(
-            _icon(QStyle.StandardPixmap.SP_FileLinkIcon), tr("menu.duplicate_query"), self
+            _icon(QStyle.StandardPixmap.SP_FileLinkIcon),
+            tr("menu.duplicate_query"),
+            self,
         )
         self._duplicate_act.setShortcut(QKeySequence("Ctrl+D"))
         self._duplicate_act.triggered.connect(self.duplicate_current)
@@ -864,7 +888,9 @@ class MainWindow(QMainWindow):
         self._file_menu.addSeparator()
 
         self._reindex_act = QAction(
-            _icon(QStyle.StandardPixmap.SP_BrowserReload), tr("menu.force_reindex"), self
+            _icon(QStyle.StandardPixmap.SP_BrowserReload),
+            tr("menu.force_reindex"),
+            self,
         )
         self._reindex_act.triggered.connect(self.force_reindex)
         self._file_menu.addAction(self._reindex_act)
@@ -881,9 +907,13 @@ class MainWindow(QMainWindow):
         self._edit_menu = QMenu(tr("menu.edit"), self)
         mb.addMenu(self._edit_menu)
 
-        self._copy_frontmatter_template_act = QAction(tr("menu.copy_frontmatter_template"), self)
+        self._copy_frontmatter_template_act = QAction(
+            tr("menu.copy_frontmatter_template"), self
+        )
         self._copy_frontmatter_template_act.setShortcut(QKeySequence("Ctrl+Shift+F"))
-        self._copy_frontmatter_template_act.triggered.connect(self.copy_frontmatter_template)
+        self._copy_frontmatter_template_act.triggered.connect(
+            self.copy_frontmatter_template
+        )
         self._edit_menu.addAction(self._copy_frontmatter_template_act)
 
         self._edit_menu.addSeparator()
@@ -906,7 +936,10 @@ class MainWindow(QMainWindow):
         theme_group = QActionGroup(self)
         theme_group.setExclusive(True)
         self._theme_acts: dict[str, QAction] = {}
-        for key, label_key in [("dark", "menu.theme_dark"), ("light", "menu.theme_light")]:
+        for key, label_key in [
+            ("dark", "menu.theme_dark"),
+            ("light", "menu.theme_light"),
+        ]:
             act = QAction(tr(label_key), self)
             act.setCheckable(True)
             act.setChecked(key == current_theme)
@@ -951,7 +984,6 @@ class MainWindow(QMainWindow):
         self._reveal_act.triggered.connect(self.reveal_in_explorer)
         self._view_menu.addAction(self._reveal_act)
 
-
         self._copy_act = QAction(
             _icon(QStyle.StandardPixmap.SP_DialogSaveButton),
             tr("menu.copy_sql"),
@@ -980,7 +1012,9 @@ class MainWindow(QMainWindow):
         self._sidebar.open_folder_requested.connect(self.open_folder)
         self._sidebar.folder_selected.connect(self._on_sidebar_folder_selected)
         self._sidebar.folder_remove_requested.connect(self._on_folder_remove_requested)
-        self._sidebar.folder_deindex_requested.connect(self._on_folder_deindex_requested)
+        self._sidebar.folder_deindex_requested.connect(
+            self._on_folder_deindex_requested
+        )
         self._sidebar.folder_favorite_toggled.connect(self._on_folder_favorite_toggled)
         self._sidebar.tag_selected.connect(self._on_tag_selected)
         self._sidebar.favorites_selected.connect(self._on_favorites_selected)
@@ -1015,7 +1049,9 @@ class MainWindow(QMainWindow):
         self._metadata_panel.filter_requested.connect(self._on_filter_requested)
         self._metadata_panel.favorite_toggled.connect(self._toggle_favorite)
         self._metadata_panel.reveal_requested.connect(self.reveal_in_explorer)
-        self._metadata_panel.command_palette_requested.connect(self.open_command_palette)
+        self._metadata_panel.command_palette_requested.connect(
+            self.open_command_palette
+        )
 
         # Editor toolbar
         self._toolbar = QWidget()
@@ -1143,7 +1179,7 @@ class MainWindow(QMainWindow):
 
         self._content_stack = QStackedWidget()
         self._content_stack.addWidget(self._inner_splitter)  # index 0 — normal view
-        self._content_stack.addWidget(self._onboarding)      # index 1 — onboarding
+        self._content_stack.addWidget(self._onboarding)  # index 1 — onboarding
 
         # ── Outer splitter: sidebar | content ────────────────────────────────
         splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -1160,16 +1196,19 @@ class MainWindow(QMainWindow):
         self.setStatusBar(self._status_bar)
 
     def _build_shortcuts(self) -> None:
+        from PySide6.QtCore import Qt as _Qt
         from PySide6.QtGui import QShortcut
 
-        from PySide6.QtCore import Qt as _Qt
-
-        QShortcut(QKeySequence("Ctrl+F"), self).activated.connect(self._search_bar.focus)
+        QShortcut(QKeySequence("Ctrl+F"), self).activated.connect(
+            self._search_bar.focus
+        )
         QShortcut(QKeySequence("Ctrl+S"), self).activated.connect(self.save_current)
         QShortcut(QKeySequence("Ctrl+E"), self).activated.connect(
             lambda: self._edit_toggle_btn.click()
         )
-        QShortcut(QKeySequence("Ctrl+P"), self).activated.connect(self.open_command_palette)
+        QShortcut(QKeySequence("Ctrl+P"), self).activated.connect(
+            self.open_command_palette
+        )
         esc = QShortcut(QKeySequence(_Qt.Key.Key_Escape), self)
         esc.setContext(_Qt.ShortcutContext.WindowShortcut)
         esc.activated.connect(self._cancel_edit_mode)
@@ -1201,7 +1240,9 @@ class MainWindow(QMainWindow):
         self._reindex_act.setText(tr("menu.force_reindex"))
         self._quit_act.setText(tr("menu.quit"))
         self._edit_menu.setTitle(tr("menu.edit"))
-        self._copy_frontmatter_template_act.setText(tr("menu.copy_frontmatter_template"))
+        self._copy_frontmatter_template_act.setText(
+            tr("menu.copy_frontmatter_template")
+        )
         self._reveal_act.setText(tr("menu.reveal_in_explorer"))
 
         self._copy_act.setText(tr("menu.copy_sql"))
@@ -1409,7 +1450,13 @@ class MainWindow(QMainWindow):
             q_word = ntr("word.query", "word.queries", total)
             f_word = ntr("word.folder", "word.folders", n)
             self._status_bar.showMessage(
-                tr("status.folders_loaded", total=total, query=q_word, n=n, folder=f_word)
+                tr(
+                    "status.folders_loaded",
+                    total=total,
+                    query=q_word,
+                    n=n,
+                    folder=f_word,
+                )
             )
         else:
             self._status_bar.showMessage(tr("status.no_folder"))
@@ -1422,7 +1469,7 @@ class MainWindow(QMainWindow):
 
     def _do_search(self) -> None:
         """Dispatch a search to the thread pool; discard result if superseded."""
-        self._search_timer.stop()   # cancel any still-pending debounce
+        self._search_timer.stop()  # cancel any still-pending debounce
         if not self._known_dbs:
             return
         self._search_gen += 1
@@ -1468,7 +1515,12 @@ class MainWindow(QMainWindow):
             )
         elif self._browse_folder is not None:
             self._status_bar.showMessage(
-                tr("status.folder_count", name=self._browse_folder.name, count=count, query=q_word)
+                tr(
+                    "status.folder_count",
+                    name=self._browse_folder.name,
+                    count=count,
+                    query=q_word,
+                )
             )
         elif search_text:
             self._status_bar.showMessage(
@@ -1478,7 +1530,13 @@ class MainWindow(QMainWindow):
             n = len(self._known_dbs)
             f_word = ntr("word.folder", "word.folders", n)
             self._status_bar.showMessage(
-                tr("status.folders_loaded", total=count, query=q_word, n=n, folder=f_word)
+                tr(
+                    "status.folders_loaded",
+                    total=count,
+                    query=q_word,
+                    n=n,
+                    folder=f_word,
+                )
             )
 
     # ------------------------------------------------------------------
@@ -1586,7 +1644,7 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _on_search_changed(self, _text: str) -> None:
-        self._search_timer.start()   # reset countdown on each keystroke
+        self._search_timer.start()  # reset countdown on each keystroke
 
     def _on_tag_selected(self, tag: str) -> None:
         if not tag:
@@ -1643,7 +1701,10 @@ class MainWindow(QMainWindow):
             self.duplicate_current()
         elif action == "copy":
             body = self._editor.toPlainText()
-            if self._current_result and self._current_result.rel_path != result.rel_path:
+            if (
+                self._current_result
+                and self._current_result.rel_path != result.rel_path
+            ):
                 # Load body from disk for the right-clicked item
                 if self._folder:
                     try:
@@ -1874,7 +1935,9 @@ class MainWindow(QMainWindow):
         self._edit_toggle_btn.setChecked(False)
         self._edit_toggle_btn.setText(tr("editor.btn_edit"))
         self._refresh_ui()
-        self._status_bar.showMessage(tr("status.saved", path=self._current_result.rel_path))
+        self._status_bar.showMessage(
+            tr("status.saved", path=self._current_result.rel_path)
+        )
 
     # ------------------------------------------------------------------
     # New query / duplicate / templates
@@ -1904,7 +1967,10 @@ class MainWindow(QMainWindow):
             QMessageBox.information(
                 self,
                 tr("msg.no_templates.title"),
-                tr("msg.no_templates.text", path=str(Path.home() / ".sqlshelf" / "templates")),
+                tr(
+                    "msg.no_templates.text",
+                    path=str(Path.home() / ".sqlshelf" / "templates"),
+                ),
             )
             return
         all_projects = [p for p, _ in cfg.get_known_folders()]
@@ -1970,7 +2036,9 @@ class MainWindow(QMainWindow):
             str(p.relative_to(self._folder))
             for p in self._folder.rglob("*")
             if p.is_dir()
-            and not any(part.startswith(".") for part in p.relative_to(self._folder).parts)
+            and not any(
+                part.startswith(".") for part in p.relative_to(self._folder).parts
+            )
         ]
 
     def _post_create(self, path: Path) -> None:
@@ -2134,12 +2202,16 @@ class MainWindow(QMainWindow):
         # Body text with clickable links — inline style is the only reliable
         # way to set link color when qt-material overrides the QPalette.
         from sqlshelf import __version__
-        from .theme.tokens import ACCENT
+
         version_line = f'<span style="color:{ACCENT};font-size:12px;">v{__version__}</span><br><br>'
-        about_html = tr("about.text").replace(
-            "<b>SQLShelf</b><br><br>",
-            f"<b>SQLShelf</b><br>{version_line}",
-        ).replace("<a href=", f'<a style="color:{ACCENT};" href=')
+        about_html = (
+            tr("about.text")
+            .replace(
+                "<b>SQLShelf</b><br><br>",
+                f"<b>SQLShelf</b><br>{version_line}",
+            )
+            .replace("<a href=", f'<a style="color:{ACCENT};" href=')
+        )
         body = QLabel(about_html)
         body.setWordWrap(True)
         body.setOpenExternalLinks(True)
@@ -2179,6 +2251,7 @@ class MainWindow(QMainWindow):
 
         try:
             import qt_material
+
             qt_material.apply_stylesheet(
                 app, theme=QT_MATERIAL_THEMES.get(name, "dark_teal.xml")
             )
@@ -2233,7 +2306,9 @@ class MainWindow(QMainWindow):
         icon = (
             QIcon(str(icon_path))
             if icon_path.exists()
-            else QApplication.style().standardIcon(QStyle.StandardPixmap.SP_ComputerIcon)
+            else QApplication.style().standardIcon(
+                QStyle.StandardPixmap.SP_ComputerIcon
+            )
         )
 
         self._tray = QSystemTrayIcon(icon, self)
@@ -2289,6 +2364,7 @@ class MainWindow(QMainWindow):
         autostart_cb = QCheckBox(tr("prefs.start_with_windows"))
         if sys.platform == "win32":
             from ..core.autostart import is_autostart_enabled
+
             autostart_cb.setChecked(is_autostart_enabled())
         else:
             autostart_cb.setEnabled(False)
@@ -2320,7 +2396,8 @@ class MainWindow(QMainWindow):
             self._tray.hide()
 
         if sys.platform == "win32":
-            from ..core.autostart import enable_autostart, disable_autostart
+            from ..core.autostart import disable_autostart, enable_autostart
+
             if autostart_cb.isChecked():
                 enable_autostart()
             else:

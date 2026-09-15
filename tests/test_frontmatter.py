@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from sqlshelf.core.frontmatter import read_sql_file, write_sql_file
 
 
@@ -80,6 +78,7 @@ class TestWriteSqlFile:
             "/* ---\ntitle: Original\ncreated: 2026-01-01\ncustom_field: keep_me\n--- */\n\nSELECT 1",
         )
         from sqlshelf.core.frontmatter import read_sql_file
+
         meta, body, _ = read_sql_file(p)
         meta["title"] = "Updated"
         write_sql_file(p, meta, body)

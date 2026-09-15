@@ -24,6 +24,10 @@ line-length = 88
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I"]
+# black owns line length. It already wraps everything it can at 88; what is left
+# over is string literals it will not split (SQL, Qt stylesheets, frontmatter
+# fixtures), and breaking those by hand only makes them harder to read.
+ignore = ["E501"]
 
 [tool.black]
 target-version = ["py312"]

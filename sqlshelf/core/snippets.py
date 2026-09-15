@@ -35,6 +35,7 @@ def extract_params(template_body: str) -> list[str]:
 
 def apply_template(template_body: str, params: dict[str, str]) -> str:
     """Substitute {{param}} placeholders with the supplied values."""
+
     def _replace(m: re.Match) -> str:  # type: ignore[type-arg]
         return params.get(m.group(1), m.group(0))
 

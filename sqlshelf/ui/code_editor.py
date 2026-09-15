@@ -2,17 +2,15 @@ from __future__ import annotations
 
 import re
 
-from PySide6.QtCore import QPoint, QRect, QRegularExpression, QSize, Qt, QTimer
+from PySide6.QtCore import QRect, QRegularExpression, QSize, Qt, QTimer
 from PySide6.QtGui import (
     QColor,
     QPainter,
     QSyntaxHighlighter,
     QTextCursor,
-    QTextDocument,
     QTextFormat,
 )
-from PySide6.QtWidgets import QTextEdit
-from PySide6.QtWidgets import QPlainTextEdit, QWidget
+from PySide6.QtWidgets import QPlainTextEdit, QTextEdit, QWidget
 
 from .theme import tokens as _tk
 from .theme.tokens import (
@@ -44,12 +42,12 @@ class CodeEditor(QPlainTextEdit):
     and the active line is always highlighted.
     """
 
-    _GUTTER_BG       = QColor(GUTTER_BG)
-    _NUM_INACTIVE    = QColor(GUTTER_NUM_INACTIVE)
-    _NUM_CURRENT     = QColor(GUTTER_NUM_CURRENT)
-    _LINE_HIGHLIGHT  = QColor(EDITOR_LINE_HL)
-    _OCCURRENCE_BG   = QColor(EDITOR_OCCURRENCE_BG)
-    _OCCURRENCE_FG   = QColor(EDITOR_OCCURRENCE_FG)
+    _GUTTER_BG = QColor(GUTTER_BG)
+    _NUM_INACTIVE = QColor(GUTTER_NUM_INACTIVE)
+    _NUM_CURRENT = QColor(GUTTER_NUM_CURRENT)
+    _LINE_HIGHLIGHT = QColor(EDITOR_LINE_HL)
+    _OCCURRENCE_BG = QColor(EDITOR_OCCURRENCE_BG)
+    _OCCURRENCE_FG = QColor(EDITOR_OCCURRENCE_FG)
 
     # Minimum token length to trigger occurrence highlighting.
     _MIN_OCCURRENCE_LEN = 2
@@ -174,7 +172,8 @@ class CodeEditor(QPlainTextEdit):
                     self._NUM_CURRENT if block_num == current else self._NUM_INACTIVE
                 )
                 painter.drawText(
-                    0, top,
+                    0,
+                    top,
                     self._gutter.width() - 4,
                     fm.height(),
                     Qt.AlignmentFlag.AlignRight,
@@ -190,12 +189,12 @@ class CodeEditor(QPlainTextEdit):
     # ------------------------------------------------------------------
 
     def refresh_theme(self) -> None:
-        CodeEditor._GUTTER_BG      = QColor(_tk.GUTTER_BG)
-        CodeEditor._NUM_INACTIVE   = QColor(_tk.GUTTER_NUM_INACTIVE)
-        CodeEditor._NUM_CURRENT    = QColor(_tk.GUTTER_NUM_CURRENT)
+        CodeEditor._GUTTER_BG = QColor(_tk.GUTTER_BG)
+        CodeEditor._NUM_INACTIVE = QColor(_tk.GUTTER_NUM_INACTIVE)
+        CodeEditor._NUM_CURRENT = QColor(_tk.GUTTER_NUM_CURRENT)
         CodeEditor._LINE_HIGHLIGHT = QColor(_tk.EDITOR_LINE_HL)
-        CodeEditor._OCCURRENCE_BG  = QColor(_tk.EDITOR_OCCURRENCE_BG)
-        CodeEditor._OCCURRENCE_FG  = QColor(_tk.EDITOR_OCCURRENCE_FG)
+        CodeEditor._OCCURRENCE_BG = QColor(_tk.EDITOR_OCCURRENCE_BG)
+        CodeEditor._OCCURRENCE_FG = QColor(_tk.EDITOR_OCCURRENCE_FG)
         if self._syntax_highlighter is not None and not self._large_document:
             self._syntax_highlighter.setDocument(self.document())
         self._recompute_occurrences()
@@ -208,7 +207,11 @@ class CodeEditor(QPlainTextEdit):
         cursor = self.textCursor()
         if cursor.hasSelection():
             text = cursor.selectedText().strip()
-            if len(text) >= self._MIN_OCCURRENCE_LEN and " " not in text and "\n" not in text:
+            if (
+                len(text) >= self._MIN_OCCURRENCE_LEN
+                and " " not in text
+                and "\n" not in text
+            ):
                 return text
             return ""
         # No explicit selection — use word under cursor.

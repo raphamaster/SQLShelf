@@ -32,7 +32,9 @@ class CommandPalette(QDialog):
 
     query_selected = Signal(object)  # SearchResult
 
-    def __init__(self, results: list[SearchResult], parent: QWidget | None = None) -> None:
+    def __init__(
+        self, results: list[SearchResult], parent: QWidget | None = None
+    ) -> None:
         super().__init__(parent)
         self.setWindowTitle("")
         self.setWindowFlags(
@@ -77,7 +79,9 @@ class CommandPalette(QDialog):
         self._all_results = results
 
         hint = QLabel(tr("command_palette.hint"))
-        hint.setStyleSheet(f"color: {_tk.TEXT_TERTIARY}; font-size: 11px; padding: 2px 4px;")
+        hint.setStyleSheet(
+            f"color: {_tk.TEXT_TERTIARY}; font-size: 11px; padding: 2px 4px;"
+        )
 
         self._search = QLineEdit()
         self._search.setPlaceholderText(tr("command_palette.placeholder"))
@@ -139,7 +143,8 @@ class CommandPalette(QDialog):
         if free_text:
             needle = free_text.lower()
             results = [
-                r for r in results
+                r
+                for r in results
                 if needle in r.title.lower()
                 or needle in r.rel_path.lower()
                 or any(needle in t.lower() for t in r.tags)

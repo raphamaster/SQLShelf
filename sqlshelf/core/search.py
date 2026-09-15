@@ -50,7 +50,9 @@ def _parse_date_filter(date_str: str) -> tuple[int, int] | None:
     try:
         d = datetime.strptime(date_str, "%d/%m/%Y")
         start = int(d.replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
-        end = int(d.replace(hour=23, minute=59, second=59, microsecond=999999).timestamp())
+        end = int(
+            d.replace(hour=23, minute=59, second=59, microsecond=999999).timestamp()
+        )
         return start, end
     except ValueError:
         return None
@@ -185,9 +187,7 @@ def _all_queries(conn: sqlite3.Connection) -> list[SearchResult]:
     return _rows_to_results(conn, rows)
 
 
-def _rows_to_results(
-    conn: sqlite3.Connection, rows: list[tuple]
-) -> list[SearchResult]:
+def _rows_to_results(conn: sqlite3.Connection, rows: list[tuple]) -> list[SearchResult]:
     if not rows:
         return []
 
@@ -208,7 +208,18 @@ def _rows_to_results(
 
     results = []
     for row in rows:
-        qid, rel_path, title, description, snippet, rank, updated_at, tables_str, is_fav, file_mtime = row
+        (
+            qid,
+            rel_path,
+            title,
+            description,
+            snippet,
+            rank,
+            updated_at,
+            tables_str,
+            is_fav,
+            file_mtime,
+        ) = row
         tables = [t for t in (tables_str or "").split(",") if t]
         results.append(
             SearchResult(

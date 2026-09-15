@@ -13,7 +13,9 @@ class TestExtractObjects:
         assert "name" in result["column"]
 
     def test_join_extracts_multiple_tables(self) -> None:
-        sql = "SELECT o.id, c.name FROM Orders o JOIN Customers c ON o.customer_id = c.id"
+        sql = (
+            "SELECT o.id, c.name FROM Orders o JOIN Customers c ON o.customer_id = c.id"
+        )
         result = extract_objects(sql)
         assert "Orders" in result["table"]
         assert "Customers" in result["table"]
@@ -83,13 +85,23 @@ class TestObjectsToText:
         assert objects_to_text(objs) == ""
 
     def test_names_joined_with_spaces(self) -> None:
-        objs = {"table": {"Orders"}, "column": {"id"}, "procedure": set(), "function": set()}
+        objs = {
+            "table": {"Orders"},
+            "column": {"id"},
+            "procedure": set(),
+            "function": set(),
+        }
         text = objects_to_text(objs)
         assert "Orders" in text
         assert "id" in text
 
     def test_sorted_within_each_type(self) -> None:
-        objs = {"table": {"Zebra", "Alpha"}, "column": set(), "procedure": set(), "function": set()}
+        objs = {
+            "table": {"Zebra", "Alpha"},
+            "column": set(),
+            "procedure": set(),
+            "function": set(),
+        }
         text = objects_to_text(objs)
         assert text.index("Alpha") < text.index("Zebra")
 

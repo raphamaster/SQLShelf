@@ -120,9 +120,17 @@ class IndexDB:
             for row in self._conn.execute("PRAGMA table_info(queries)").fetchall()
         }
         required = {
-            "id", "rel_path", "title", "description", "body",
-            "file_mtime", "file_size", "content_hash",
-            "has_frontmatter", "created_at", "updated_at",
+            "id",
+            "rel_path",
+            "title",
+            "description",
+            "body",
+            "file_mtime",
+            "file_size",
+            "content_hash",
+            "has_frontmatter",
+            "created_at",
+            "updated_at",
         }
         return required.issubset(cols)
 
@@ -491,7 +499,9 @@ class IndexDB:
                 "SELECT 1 FROM favorites WHERE rel_path=?", (rel_path,)
             ).fetchone()
             if exists:
-                self._conn.execute("DELETE FROM favorites WHERE rel_path=?", (rel_path,))
+                self._conn.execute(
+                    "DELETE FROM favorites WHERE rel_path=?", (rel_path,)
+                )
                 return False
             else:
                 self._conn.execute(
@@ -508,7 +518,7 @@ class IndexDB:
             )
 
     def get_favorites(self) -> list[SearchResult]:
-        from .search import _TABLES_SUBQ, _IS_FAV_SUBQ
+        from .search import _IS_FAV_SUBQ, _TABLES_SUBQ
 
         with self._read_lock:
             rows = self._read_conn.execute(
@@ -544,7 +554,7 @@ class IndexDB:
             )
 
     def get_recently_viewed(self, limit: int = 20) -> list[SearchResult]:
-        from .search import _TABLES_SUBQ, _IS_FAV_SUBQ
+        from .search import _IS_FAV_SUBQ, _TABLES_SUBQ
 
         with self._read_lock:
             rows = self._read_conn.execute(
@@ -589,7 +599,10 @@ class IndexDB:
                 " LIMIT ?",
                 (limit,),
             ).fetchall()
-        return [AccessStat(label=title, count=cnt, rel_path=rel_path) for rel_path, title, cnt in rows]
+        return [
+            AccessStat(label=title, count=cnt, rel_path=rel_path)
+            for rel_path, title, cnt in rows
+        ]
 
     def get_top_tags(self, limit: int = 10) -> list[AccessStat]:
         """Return the most-accessed tags, ranked by total accesses of their queries."""

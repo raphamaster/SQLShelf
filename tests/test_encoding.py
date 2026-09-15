@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from sqlshelf.core.encoding import detect_encoding, read_text, write_text
 
 

@@ -12,7 +12,6 @@ from sqlshelf.ui.code_editor import CodeEditor
 from sqlshelf.ui.highlighter import SqlHighlighter
 from sqlshelf.ui.query_list import QueryListWidget
 
-
 _APP: QApplication | None = None
 
 

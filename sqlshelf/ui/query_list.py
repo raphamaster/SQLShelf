@@ -42,32 +42,32 @@ from .theme.tokens import (
 )
 
 # ── Sort keys ───────────────────────────────────────────────────────────────
-_SORT_NAME_ASC   = "name_asc"
-_SORT_NAME_DESC  = "name_desc"
+_SORT_NAME_ASC = "name_asc"
+_SORT_NAME_DESC = "name_desc"
 _SORT_MTIME_DESC = "mtime_desc"
-_SORT_MTIME_ASC  = "mtime_asc"
+_SORT_MTIME_ASC = "mtime_asc"
 
 # ── Item data roles ─────────────────────────────────────────────────────────
-_ROLE_RESULT   = Qt.ItemDataRole.UserRole        # SearchResult
-_ROLE_TAGS     = Qt.ItemDataRole.UserRole + 1    # list[str]
-_ROLE_TABLES   = Qt.ItemDataRole.UserRole + 2    # list[str]
-_ROLE_UPDATED  = Qt.ItemDataRole.UserRole + 3    # str | None (ISO date)
-_ROLE_FAVORITE = Qt.ItemDataRole.UserRole + 4    # bool
-_ROLE_MTIME    = Qt.ItemDataRole.UserRole + 5    # int (epoch seconds)
+_ROLE_RESULT = Qt.ItemDataRole.UserRole  # SearchResult
+_ROLE_TAGS = Qt.ItemDataRole.UserRole + 1  # list[str]
+_ROLE_TABLES = Qt.ItemDataRole.UserRole + 2  # list[str]
+_ROLE_UPDATED = Qt.ItemDataRole.UserRole + 3  # str | None (ISO date)
+_ROLE_FAVORITE = Qt.ItemDataRole.UserRole + 4  # bool
+_ROLE_MTIME = Qt.ItemDataRole.UserRole + 5  # int (epoch seconds)
 
 # ── Layout constants ────────────────────────────────────────────────────────
-_ITEM_H    = 60
-_PAD_H     = 12
-_PAD_V     = 10
-_LINE_GAP  = 4
-_CHIP_H    = 18
-_CHIP_PAD  = 6    # horizontal padding inside chip
-_CHIP_GAP  = 5    # gap between chips
-_ACCENT_W  = 2    # selected accent bar width
+_ITEM_H = 60
+_PAD_H = 12
+_PAD_V = 10
+_LINE_GAP = 4
+_CHIP_H = 18
+_CHIP_PAD = 6  # horizontal padding inside chip
+_CHIP_GAP = 5  # gap between chips
+_ACCENT_W = 2  # selected accent bar width
 _MAX_CHIPS = 2
-_STAR_W    = 18
-_DATE_PAD  = 6    # breathing room around the date column
-_COL_GAP   = 8    # gap between the table-name and date columns
+_STAR_W = 18
+_DATE_PAD = 6  # breathing room around the date column
+_COL_GAP = 8  # gap between the table-name and date columns
 
 # ── Color parsing ───────────────────────────────────────────────────────────
 _RGBA_RE = re.compile(r"rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)")
@@ -93,6 +93,7 @@ def _literal_datetime_epoch(ts: int) -> str:
 
 # ── Delegate ────────────────────────────────────────────────────────────────
 
+
 class QueryItemDelegate(QStyledItemDelegate):
     """Two-line item: title (line 1) + tag chips + meta label (line 2)."""
 
@@ -106,24 +107,24 @@ class QueryItemDelegate(QStyledItemDelegate):
         self._f_small = QFont()
         self._f_small.setPointSize(9)
 
-        self._c_sel_bg   = _qc(CARD)
-        self._c_hov_bg   = _qc(LIST_ITEM_HOVER_BG)
-        self._c_accent   = _qc(ACCENT)
-        self._c_primary  = _qc(TEXT_PRIMARY)
+        self._c_sel_bg = _qc(CARD)
+        self._c_hov_bg = _qc(LIST_ITEM_HOVER_BG)
+        self._c_accent = _qc(ACCENT)
+        self._c_primary = _qc(TEXT_PRIMARY)
         self._c_tertiary = _qc(TEXT_TERTIARY)
-        self._c_tag_bg   = _qc(TAG_BG)
-        self._c_tag_txt  = _qc(TAG_TEXT)
-        self._c_star     = _qc(STAR_ACTIVE)
+        self._c_tag_bg = _qc(TAG_BG)
+        self._c_tag_txt = _qc(TAG_TEXT)
+        self._c_star = _qc(STAR_ACTIVE)
 
     def refresh_theme(self) -> None:
-        self._c_sel_bg   = _qc(_tk.CARD)
-        self._c_hov_bg   = _qc(_tk.LIST_ITEM_HOVER_BG)
-        self._c_accent   = _qc(_tk.ACCENT)
-        self._c_primary  = _qc(_tk.TEXT_PRIMARY)
+        self._c_sel_bg = _qc(_tk.CARD)
+        self._c_hov_bg = _qc(_tk.LIST_ITEM_HOVER_BG)
+        self._c_accent = _qc(_tk.ACCENT)
+        self._c_primary = _qc(_tk.TEXT_PRIMARY)
         self._c_tertiary = _qc(_tk.TEXT_TERTIARY)
-        self._c_tag_bg   = _qc(_tk.TAG_BG)
-        self._c_tag_txt  = _qc(_tk.TAG_TEXT)
-        self._c_star     = _qc(_tk.STAR_ACTIVE)
+        self._c_tag_bg = _qc(_tk.TAG_BG)
+        self._c_tag_txt = _qc(_tk.TAG_TEXT)
+        self._c_star = _qc(_tk.STAR_ACTIVE)
 
     def sizeHint(self, option, index) -> QSize:  # type: ignore[override]
         return QSize(option.rect.width(), _ITEM_H)
@@ -136,11 +137,11 @@ class QueryItemDelegate(QStyledItemDelegate):
         sel = bool(option.state & QStyle.StateFlag.State_Selected)
         hov = bool(option.state & QStyle.StateFlag.State_MouseOver)
 
-        title: str  = index.data(Qt.ItemDataRole.DisplayRole) or ""
-        tags: list  = index.data(_ROLE_TAGS) or []
+        title: str = index.data(Qt.ItemDataRole.DisplayRole) or ""
+        tags: list = index.data(_ROLE_TAGS) or []
         tables: list = index.data(_ROLE_TABLES) or []
-        mtime: int  = index.data(_ROLE_MTIME) or 0
-        fav: bool   = bool(index.data(_ROLE_FAVORITE))
+        mtime: int = index.data(_ROLE_MTIME) or 0
+        fav: bool = bool(index.data(_ROLE_FAVORITE))
 
         # ── Background ──────────────────────────────────────────────────────
         if sel:
@@ -156,8 +157,8 @@ class QueryItemDelegate(QStyledItemDelegate):
 
         # ── Content origin ──────────────────────────────────────────────────
         x_off = _ACCENT_W if sel else 0
-        x  = rect.left() + _PAD_H + x_off
-        y1 = rect.top()  + _PAD_V
+        x = rect.left() + _PAD_H + x_off
+        y1 = rect.top() + _PAD_V
         y2 = y1 + 18 + _LINE_GAP
         cw = rect.width() - _PAD_H * 2 - x_off
 
@@ -240,10 +241,11 @@ class QueryItemDelegate(QStyledItemDelegate):
 
 # ── Widget ──────────────────────────────────────────────────────────────────
 
+
 class QueryListWidget(QWidget):
     """Middle panel: displays search results with a custom two-line delegate."""
 
-    query_selected = Signal(object)       # SearchResult
+    query_selected = Signal(object)  # SearchResult
     context_action = Signal(str, object)  # (action_name, SearchResult)
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -315,12 +317,12 @@ class QueryListWidget(QWidget):
                 tooltip += "\n" + "  ".join(f"#{t}" for t in r.tags)
             item.setToolTip(tooltip)
             item.setEditable(False)
-            item.setData(r,             _ROLE_RESULT)
-            item.setData(r.tags,        _ROLE_TAGS)
-            item.setData(r.tables,      _ROLE_TABLES)
-            item.setData(r.updated_at,  _ROLE_UPDATED)
+            item.setData(r, _ROLE_RESULT)
+            item.setData(r.tags, _ROLE_TAGS)
+            item.setData(r.tables, _ROLE_TABLES)
+            item.setData(r.updated_at, _ROLE_UPDATED)
             item.setData(r.is_favorite, _ROLE_FAVORITE)
-            item.setData(r.file_mtime,  _ROLE_MTIME)
+            item.setData(r.file_mtime, _ROLE_MTIME)
             self._model.appendRow(item)
             if self._result_key(r) == current_key:
                 restore_row = i
@@ -367,12 +369,12 @@ class QueryListWidget(QWidget):
     def _show_sort_menu(self) -> None:
         menu = QMenu(self._sort_btn)
         actions = {
-            _SORT_NAME_ASC:   menu.addAction(tr("sort.name_asc")),
-            _SORT_NAME_DESC:  menu.addAction(tr("sort.name_desc")),
+            _SORT_NAME_ASC: menu.addAction(tr("sort.name_asc")),
+            _SORT_NAME_DESC: menu.addAction(tr("sort.name_desc")),
         }
         menu.addSeparator()
         actions[_SORT_MTIME_DESC] = menu.addAction(tr("sort.mtime_desc"))
-        actions[_SORT_MTIME_ASC]  = menu.addAction(tr("sort.mtime_asc"))
+        actions[_SORT_MTIME_ASC] = menu.addAction(tr("sort.mtime_asc"))
 
         for key, act in actions.items():
             act.setCheckable(True)
@@ -449,9 +451,9 @@ class QueryListWidget(QWidget):
         result = self._results[row]
 
         menu = QMenu(self._list)
-        fav_act    = menu.addAction(tr("context_menu.toggle_favorite"))
-        dup_act    = menu.addAction(tr("context_menu.duplicate"))
-        copy_act   = menu.addAction(tr("context_menu.copy_sql"))
+        fav_act = menu.addAction(tr("context_menu.toggle_favorite"))
+        dup_act = menu.addAction(tr("context_menu.duplicate"))
+        copy_act = menu.addAction(tr("context_menu.copy_sql"))
         menu.addSeparator()
         reveal_act = menu.addAction(tr("context_menu.reveal"))
 

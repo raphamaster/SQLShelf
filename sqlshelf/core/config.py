@@ -19,12 +19,15 @@ def _load() -> dict:
 
 def _save(data: dict) -> None:
     _CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    _CONFIG_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    _CONFIG_FILE.write_text(
+        json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
 
 
 # ---------------------------------------------------------------------------
 # Recent projects (File menu history)
 # ---------------------------------------------------------------------------
+
 
 def get_recent_projects() -> list[Path]:
     """Return list of recently opened project folders (most-recent first)."""
@@ -59,6 +62,7 @@ def get_last_project() -> Path | None:
 # Known folders (sidebar explorer)
 # Each entry: {"path": str, "favorited": bool}
 # ---------------------------------------------------------------------------
+
 
 def get_known_folders() -> list[tuple[Path, bool]]:
     """Return (path, is_favorited) for each known folder that still exists on disk."""
@@ -108,6 +112,7 @@ def toggle_folder_favorite(path: Path) -> bool:
 # Theme preference
 # ---------------------------------------------------------------------------
 
+
 def get_theme() -> str:
     """Return the saved theme name; defaults to 'dark'."""
     return _load().get("theme", "dark")
@@ -124,6 +129,7 @@ def set_theme(name: str) -> None:
 # Language preference
 # ---------------------------------------------------------------------------
 
+
 def get_language() -> str:
     """Return the saved language code; defaults to 'en'."""
     return _load().get("language", "en")
@@ -139,6 +145,7 @@ def set_language(lang: str) -> None:
 # ---------------------------------------------------------------------------
 # System tray / startup preference
 # ---------------------------------------------------------------------------
+
 
 def get_minimize_to_tray() -> bool:
     """Return whether closing the window should minimize to tray (default True)."""

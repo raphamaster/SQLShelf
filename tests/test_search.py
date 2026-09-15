@@ -34,7 +34,9 @@ def db_with_data(tmp_path: Path) -> IndexDB:
         body="SELECT id, total FROM dbo.Orders",
     )
     q3 = Query(
-        path=make_sql_file(tmp_path, "products.sql", "SELECT name, price FROM Products"),
+        path=make_sql_file(
+            tmp_path, "products.sql", "SELECT name, price FROM Products"
+        ),
         title="Product catalog",
         description="Full product listing",
         tags=["catalog"],
@@ -128,7 +130,9 @@ class TestSearch:
         results = db_with_data.search("zzznomatch")
         assert results == []
 
-    def test_invalid_fts_query_returns_empty_not_error(self, db_with_data: IndexDB) -> None:
+    def test_invalid_fts_query_returns_empty_not_error(
+        self, db_with_data: IndexDB
+    ) -> None:
         results = db_with_data.search("AND OR")
         assert isinstance(results, list)
 
@@ -220,8 +224,20 @@ class TestDateSearch:
         p2 = make_sql_file(tmp_path, "b.sql", "SELECT 2")
         os.utime(p1, (ts, ts))
         os.utime(p2, (ts, ts))
-        q1 = Query(path=p1, title="Tagged query", description="", tags=["report"], body="SELECT 1")
-        q2 = Query(path=p2, title="Other query", description="", tags=["other"], body="SELECT 2")
+        q1 = Query(
+            path=p1,
+            title="Tagged query",
+            description="",
+            tags=["report"],
+            body="SELECT 1",
+        )
+        q2 = Query(
+            path=p2,
+            title="Other query",
+            description="",
+            tags=["other"],
+            body="SELECT 2",
+        )
         db = IndexDB(tmp_path)
         db.index_all([q1, q2])
 
