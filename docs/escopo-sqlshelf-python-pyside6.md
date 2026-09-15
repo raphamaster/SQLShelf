@@ -54,6 +54,7 @@ sqlshelf/
 | Extração de objetos SQL | `sqlglot` | Pure Python, bom suporte a T-SQL, sem fallback regex necessário |
 | Testes | `pytest` | Padrão de fato |
 | Lint/format | `ruff` + `black` | Configuração mínima, rápidos |
+| Type check | `mypy` | Roda sobre `sqlshelf/`, `main.py` e `tests/` |
 | Empacotamento (Fase 2) | `PyInstaller` | Quando for distribuir |
 
 **Princípio geral:** preferir stdlib e bibliotecas puro-Python. Evitar pacotes com extensões compiladas (exceto PySide6, que já fornece wheels pré-compiladas para todas as plataformas).
@@ -98,7 +99,7 @@ Regras:
 sqlshelf/
 ├── main.py                       # entry point — python main.py
 ├── requirements.txt
-├── pyproject.toml                # config do ruff/black/pytest
+├── pyproject.toml                # config do ruff/black/mypy/pytest
 ├── README.md
 ├── LICENSE                        # MIT
 ├── .gitignore                     # inclui .sqlshelf/, venv/, __pycache__/
@@ -316,9 +317,10 @@ python main.py
 # Testes
 pytest
 
-# Lint/format
+# Lint/format/tipos
 ruff check .
 black .
+mypy
 ```
 
 **Extensões VS Code:**
