@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import time
 from collections import OrderedDict
 from pathlib import Path
 
@@ -36,7 +37,7 @@ from ..core.frontmatter import read_sql_file, write_sql_file
 from ..core.i18n import available_languages, get_language, ntr, set_language, tr
 from ..core.index_db import IndexDB
 from ..core.models import SearchResult
-from ..core.scanner import scan_folder
+from ..core.scanner import scan_file, scan_folder
 from ..core.sql_objects import extract_objects
 from ..core.snippets import list_templates
 from ..core.watcher import FolderWatcher
@@ -62,10 +63,38 @@ def _icon(style_enum) -> QIcon:
 # Background indexing worker
 # ---------------------------------------------------------------------------
 
+# Indexing runs on its own pool. On the global pool a long reindex occupied the
+# only available threads, so searches and query loads queued behind it and the
+# window looked frozen even though nothing was blocking the GUI thread itself.
+_INDEX_POOL = QThreadPool()
+_INDEX_POOL.setMaxThreadCount(1)
+
+# Emitting one progress signal per file floods the GUI event loop: each one is a
+# queued call that relabels the dialog and repaints it. Files arrive far faster
+# than a human can read them, so coalesce to a readable rate.
+_PROGRESS_INTERVAL_MS = 60
+
+
 class _IndexWorkerSignals(QObject):
     finished = Signal(int)
     error = Signal(str)
     progress = Signal(int, int)  # (current, total)
+
+
+def _throttled(emit) -> "object":
+    """Wrap a progress emitter so it fires at most every _PROGRESS_INTERVAL_MS.
+
+    The final call always gets through, so the bar never stops short of 100%.
+    """
+    last = [0.0]
+
+    def _cb(current: int, total: int) -> None:
+        now = time.monotonic() * 1000.0
+        if current >= total or now - last[0] >= _PROGRESS_INTERVAL_MS:
+            last[0] = now
+            emit(current, total)
+
+    return _cb
 
 
 class _IndexWorker(QRunnable):
@@ -82,10 +111,44 @@ class _IndexWorker(QRunnable):
             if total:
                 self.signals.progress.emit(0, total)
 
-            def _cb(current: int, t: int) -> None:
-                self.signals.progress.emit(current, t)
+            _cb = _throttled(self.signals.progress.emit)
 
             self._db.index_incremental(queries, progress_cb=_cb)
+            self.signals.finished.emit(self._db.count())
+        except Exception as exc:
+            self.signals.error.emit(str(exc))
+
+
+class _WatchSyncWorker(QRunnable):
+    """Apply file-watcher events to the index, off the GUI thread.
+
+    This used to run inline in the watcher slot, calling scan_folder() once per
+    changed file — seconds of frozen window every time a folder was synced.
+    """
+
+    def __init__(
+        self, db: IndexDB, modified: set[Path], deleted: set[Path]
+    ) -> None:
+        super().__init__()
+        self.signals = _IndexWorkerSignals()
+        self._db = db
+        self._modified = modified
+        self._deleted = deleted
+
+    def run(self) -> None:
+        for path in self._modified:
+            try:
+                query = scan_file(path)
+                if query is not None:
+                    self._db.upsert_query(query)
+            except Exception:
+                continue
+        for path in self._deleted:
+            try:
+                self._db.remove_file(path)
+            except Exception:
+                continue
+        try:
             self.signals.finished.emit(self._db.count())
         except Exception as exc:
             self.signals.error.emit(str(exc))
@@ -105,8 +168,7 @@ class _ForceReindexWorker(QRunnable):
             if total:
                 self.signals.progress.emit(0, total)
 
-            def _cb(current: int, t: int) -> None:
-                self.signals.progress.emit(current, t)
+            _cb = _throttled(self.signals.progress.emit)
 
             self._db.index_all(queries, progress_cb=_cb)
             self.signals.finished.emit(self._db.count())
@@ -1215,10 +1277,20 @@ class MainWindow(QMainWindow):
         worker.signals.progress.connect(self._on_index_progress)
         worker.signals.finished.connect(self._on_index_finished)
         worker.signals.error.connect(self._on_index_error)
-        QThreadPool.globalInstance().start(worker)
+        _INDEX_POOL.start(worker)
 
         self._progress_dialog.show()
 
+        self._start_watcher(folder)
+
+    def _start_watcher(self, folder: Path) -> None:
+        """Watch *folder*, replacing any watcher on a previous folder.
+
+        Switching folders used to leave the watcher on the old one, so its
+        events were applied against the new folder's index — where they matched
+        nothing, and only cost a wasted UI refresh.
+        """
+        self._stop_watcher()
         self._watcher_bridge = _WatcherBridge()
         self._watcher_bridge.files_changed.connect(self._handle_files_changed)
         self._watcher = FolderWatcher(folder, self._watcher_bridge.on_changed)
@@ -1228,6 +1300,8 @@ class MainWindow(QMainWindow):
         """Switch the query list to *folder* without a full reindex."""
         if not folder.is_dir():
             return
+        if folder != self._folder:
+            self._start_watcher(folder)
         self._folder = folder
         self._browse_folder = folder
         self._sidebar_mode = "all"
@@ -1278,7 +1352,7 @@ class MainWindow(QMainWindow):
         worker.signals.progress.connect(self._on_index_progress)
         worker.signals.finished.connect(self._on_index_finished)
         worker.signals.error.connect(self._on_index_error)
-        QThreadPool.globalInstance().start(worker)
+        _INDEX_POOL.start(worker)
 
         self._progress_dialog.show()
 
@@ -1784,9 +1858,12 @@ class MainWindow(QMainWindow):
             return
 
         if self._db is not None:
-            updated = [q for q in scan_folder(self._folder) if q.path == path]
-            if updated:
-                self._db.upsert_query(updated[0])
+            # scan_file, never scan_folder: re-scanning the whole folder to find
+            # one known file took seconds on real folders, all of it on the GUI
+            # thread.
+            updated = scan_file(path)
+            if updated is not None:
+                self._db.upsert_query(updated)
 
         self._edit_mode = False
         self._editor.setReadOnly(True)
@@ -1917,9 +1994,9 @@ class MainWindow(QMainWindow):
 
         if self._folder is None:
             return
-        updated = [q for q in scan_folder(self._folder) if q.path == path]
-        if updated and self._db is not None:
-            self._db.upsert_query(updated[0])
+        updated = scan_file(path)
+        if updated is not None and self._db is not None:
+            self._db.upsert_query(updated)
         try:
             self._pending_select = path.relative_to(self._folder).as_posix()
         except ValueError:
@@ -1932,23 +2009,18 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _handle_files_changed(self, modified: set[Path], deleted: set[Path]) -> None:
+        """Reindex what the watcher reported, without touching the GUI thread."""
         if self._db is None or self._folder is None:
             return
-        for path in modified:
-            if path.is_file():
-                try:
-                    hits = [q for q in scan_folder(self._folder) if q.path == path]
-                    if hits:
-                        self._db.upsert_query(hits[0])
-                except Exception:
-                    pass
-        for path in deleted:
-            try:
-                self._db.remove_file(path)
-            except Exception:
-                pass
+        if not modified and not deleted:
+            return
+        worker = _WatchSyncWorker(self._db, set(modified), set(deleted))
+        worker.signals.finished.connect(self._on_watch_sync_finished)
+        _INDEX_POOL.start(worker)
+
+    def _on_watch_sync_finished(self, count: int) -> None:
         self._refresh_ui()
-        self._status_bar.showMessage(tr("status.indexed", count=self._db.count()))
+        self._status_bar.showMessage(tr("status.indexed", count=count))
 
     # ------------------------------------------------------------------
     # System actions
@@ -2140,6 +2212,10 @@ class MainWindow(QMainWindow):
             self.hide()
             return
         self._stop_watcher()
+        # Let running workers finish before the connections they hold go away.
+        # Bounded, so a wedged worker can never block the app from exiting.
+        _INDEX_POOL.waitForDone(3000)
+        QThreadPool.globalInstance().waitForDone(3000)
         for db in self._known_dbs.values():
             try:
                 db.close()
