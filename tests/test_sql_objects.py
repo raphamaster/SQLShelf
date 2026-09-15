@@ -92,3 +92,63 @@ class TestObjectsToText:
         objs = {"table": {"Zebra", "Alpha"}, "column": set(), "procedure": set(), "function": set()}
         text = objects_to_text(objs)
         assert text.index("Alpha") < text.index("Zebra")
+
+
+class TestAliasesNeverLeakIntoTables:
+    """Regression: the query list showed aliases where table names belong."""
+
+    def test_update_with_from_alias(self) -> None:
+        # sqlglot models the leading `t` of an UPDATE as a Table node even
+        # though it only names the alias declared in the FROM clause.
+        sql = "UPDATE t SET x = 1 FROM MyTable t WHERE t.a = 1"
+        result = extract_objects(sql)
+        assert result["table"] == {"MyTable"}
+        assert "t" in result["alias"]
+
+    def test_delete_with_from_alias(self) -> None:
+        sql = "DELETE t FROM MyTable t WHERE t.a = 1"
+        result = extract_objects(sql)
+        assert result["table"] == {"MyTable"}
+
+    def test_backtick_identifiers_are_not_parsed_as_tsql(self) -> None:
+        # Under tsql these tokenise into a table literally named '`'.
+        sql = (
+            "SELECT s.id, u.nome FROM `proj.ds.sig` s "
+            "JOIN `proj.ds.usuario_pda` u ON u.id = s.user_id"
+        )
+        result = extract_objects(sql)
+        assert result["table"] == {"sig", "usuario_pda"}
+
+    @pytest.mark.parametrize("junk", ["`", "'", '"', "(", ");", "[", ",,"])
+    def test_punctuation_never_becomes_a_name(self, junk: str) -> None:
+        result = extract_objects(f"SELECT * FROM {junk}")
+        assert junk not in result["table"]
+
+    def test_unparseable_script_degrades_to_empty(self) -> None:
+        # A sqlcmd/batch script sqlglot cannot handle must not raise.
+        result = extract_objects(":setvar x 1\nGO\nEXEC sp_who2 @@@")
+        assert isinstance(result["table"], set)
+
+
+class TestVariablesNeverLeakIntoTables:
+    """A T-SQL @variable is not a database object and must not be indexed."""
+
+    @pytest.mark.parametrize(
+        "sql,name",
+        [
+            ("DECLARE @rv int; EXECUTE @rv = msdb.dbo.sysmail_add_account_sp", "rv"),
+            ("EXEC @ret = dbo.MyProc", "ret"),
+            ("SELECT * FROM @tvp", "tvp"),
+            ("INSERT INTO @results SELECT 1", "results"),
+        ],
+    )
+    def test_variable_is_not_a_table(self, sql: str, name: str) -> None:
+        # sqlglot wraps the variable in a Table node and strips the '@', so
+        # without filtering these were listed as tables in the query list.
+        result = extract_objects(sql)
+        assert name not in result["table"]
+        assert name not in result["column"]
+
+    def test_real_tables_alongside_a_variable_survive(self) -> None:
+        result = extract_objects("INSERT INTO @results SELECT * FROM dbo.Real")
+        assert result["table"] == {"Real"}
