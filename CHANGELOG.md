@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.0.10] - 2026-09-15
+
+### Fixed
+- **Table names in the query list** — aliases and T-SQL `@variables` were being indexed and shown where table names belong; `UPDATE t SET ... FROM MyTable t` listed `t`, and `EXEC @rv = dbo.MyProc` listed `rv`. Across a 192-file library this removed every bogus name
+- **Modification date losing its first digit** — the date column rendered `4/09/2026 18:56` instead of `14/09/2026 18:56`, because the column was measured with the wrong font metrics and then elided
+- **Search dying on a quote** — typing `"` built an unterminated FTS5 expression; the error was swallowed and the box returned nothing, so search looked dead until the text was cleared. Quotes are now escaped
+- **Search silently losing whole folders** — an `UPDATE` on an indexed row, including a modification-time-only touch from a cloud-sync client, erased table and column names from the full-text row, so `table:` and `col:` searches stopped matching. The FTS row is now written by the indexer, which is the only code that has the names
+
+### Performance
+- **Interface no longer freezes during indexing** — reads and writes use separate SQLite connections, so navigating and searching no longer queue behind a reindex. Opening a 59-file folder stalls the interface for 212 ms instead of 713 ms, and searching during a full reindex of 109 files stays under 10 ms
+- **Faster text search** — dropped the per-row snippet generation that accounted for 87 of the 92 ms a text search took on a 109-file folder, for a string the interface never displayed
+
+### Internal
+- Project is now type-checked with `mypy` and formatted with `black`, both wired into `pyproject.toml`, with the development tools recorded in `requirements-dev.txt`
+
+### Tests
+- Regression coverage for alias and variable extraction, special characters in search, and full-text consistency after reindexing — 174 tests
+
 ## [1.0.9] - 2026-08-12
 
 ### Changed
