@@ -7,7 +7,6 @@ from PySide6.QtCore import QModelIndex, QRectF, QSize, Qt, Signal
 from PySide6.QtGui import (
     QColor,
     QFont,
-    QFontMetrics,
     QPainter,
     QPainterPath,
     QStandardItem,
@@ -67,6 +66,8 @@ _CHIP_GAP  = 5    # gap between chips
 _ACCENT_W  = 2    # selected accent bar width
 _MAX_CHIPS = 2
 _STAR_W    = 18
+_DATE_PAD  = 6    # breathing room around the date column
+_COL_GAP   = 8    # gap between the table-name and date columns
 
 # ── Color parsing ───────────────────────────────────────────────────────────
 _RGBA_RE = re.compile(r"rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)")
@@ -173,10 +174,16 @@ class QueryItemDelegate(QStyledItemDelegate):
             )
 
         # ── Title ───────────────────────────────────────────────────────────
-        title_w = cw - star_taken
-        fm = QFontMetrics(self._f_title)
-        elided = fm.elidedText(title, Qt.TextElideMode.ElideRight, title_w)
+        # Measure through the painter, never through QFontMetrics(self._f_*).
+        # These fonts leave the family unresolved, so the stylesheet's family
+        # (Roboto, from qt-material) wins at paint time while QFontMetrics would
+        # measure the default UI font instead — a narrower one. Right-aligned
+        # text drawn from a too-small width then loses its first character:
+        # "14/09/2026 18:56" rendered as "4/09/2026 18:56".
         painter.setFont(self._f_title)
+        fm = painter.fontMetrics()
+        title_w = cw - star_taken
+        elided = fm.elidedText(title, Qt.TextElideMode.ElideRight, title_w)
         painter.setPen(self._c_primary)
         painter.drawText(
             QRectF(x, y1, title_w, 18),
@@ -185,7 +192,8 @@ class QueryItemDelegate(QStyledItemDelegate):
         )
 
         # ── Tag chips ───────────────────────────────────────────────────────
-        fm_s = QFontMetrics(self._f_small)
+        painter.setFont(self._f_small)
+        fm_s = painter.fontMetrics()
         chip_x = float(x)
         for tag in tags[:_MAX_CHIPS]:
             tw = fm_s.horizontalAdvance(tag) + _CHIP_PAD * 2
@@ -202,8 +210,7 @@ class QueryItemDelegate(QStyledItemDelegate):
         date_str = _literal_datetime_epoch(mtime)
         date_w = 0.0
         if date_str:
-            date_w = fm_s.horizontalAdvance(date_str) + 4
-            painter.setFont(self._f_small)
+            date_w = fm_s.horizontalAdvance(date_str) + _DATE_PAD
             painter.setPen(self._c_tertiary)
             painter.drawText(
                 QRectF(x + cw - date_w, y2, date_w, _CHIP_H),
@@ -214,18 +221,19 @@ class QueryItemDelegate(QStyledItemDelegate):
         # ── Table name (elastic, right-aligned, left of the date column) ─────
         table_name = tables[0] if tables else ""
         if table_name:
-            gap = 8 if date_w else 0
-            table_w = cw - date_w - gap
-            elided_table = fm_s.elidedText(
-                table_name, Qt.TextElideMode.ElideRight, table_w
-            )
-            painter.setFont(self._f_small)
-            painter.setPen(self._c_tertiary)
-            painter.drawText(
-                QRectF(x, y2, table_w, _CHIP_H),
-                Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight,
-                elided_table,
-            )
+            # Start past the chips so a long tag row never overprints the name.
+            table_x = max(float(x), chip_x)
+            table_w = (x + cw - date_w - (_COL_GAP if date_w else 0)) - table_x
+            if table_w > 0:
+                elided_table = fm_s.elidedText(
+                    table_name, Qt.TextElideMode.ElideRight, table_w
+                )
+                painter.setPen(self._c_tertiary)
+                painter.drawText(
+                    QRectF(table_x, y2, table_w, _CHIP_H),
+                    Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight,
+                    elided_table,
+                )
 
         painter.restore()
 
