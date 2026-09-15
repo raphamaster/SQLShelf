@@ -24,7 +24,26 @@ line-length = 88
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I"]
+# black owns line length. It already wraps everything it can at 88; what is left
+# over is string literals it will not split (SQL, Qt stylesheets, frontmatter
+# fixtures), and breaking those by hand only makes them harder to read.
+ignore = ["E501"]
 
 [tool.black]
 target-version = ["py312"]
 line-length = 88
+
+[tool.mypy]
+python_version = "3.12"
+files = ["main.py", "sqlshelf", "tests"]
+# Rules the codebase already satisfies. Deliberately short of --strict: the Qt
+# layer overrides plenty of virtuals whose stubs use untyped *args, and forcing
+# annotations there buys noise rather than safety.
+warn_unused_ignores = true
+warn_redundant_casts = true
+no_implicit_optional = true
+
+[[tool.mypy.overrides]]
+# qt-material ships no py.typed marker.
+module = ["qt_material.*"]
+ignore_missing_imports = true

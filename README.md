@@ -167,9 +167,12 @@ The file stays 100% valid SQL. Open it in SSMS, run it, edit it — SQLShelf wil
 ## Development
 
 ```bash
+pip install -r requirements-dev.txt   # ruff, black, mypy
+
 pytest          # run tests
 ruff check .    # lint
 black .         # format
+mypy            # type check (paths come from pyproject.toml)
 ```
 
 Tests cover: `frontmatter`, `encoding`, `sql_objects`, `search`, `index_db`.

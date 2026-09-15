@@ -47,7 +47,7 @@ def _make_search_icon() -> QIcon:
     pen.setCapStyle(Qt.PenCapStyle.RoundCap)
     p.setPen(pen)
     p.setBrush(Qt.BrushStyle.NoBrush)
-    p.drawEllipse(QRectF(1.5, 1.5, 9.0, 9.0))        # lens
+    p.drawEllipse(QRectF(1.5, 1.5, 9.0, 9.0))  # lens
     p.drawLine(QPointF(9.5, 9.5), QPointF(14.0, 14.0))  # handle
     p.end()
     return QIcon(pix)
@@ -83,8 +83,7 @@ class SearchBar(QWidget):
         self._edit.setToolTip(tr("search.help"))
 
     def refresh_theme(self) -> None:
-        self.setStyleSheet(
-            f"""
+        self.setStyleSheet(f"""
             QLineEdit#SearchInput {{
                 background-color: {_tk.ACCENT_FILL};
                 border: 1px solid {_tk.ACCENT_BORDER};
@@ -98,8 +97,7 @@ class SearchBar(QWidget):
                 background-color: {_tk.ACCENT_FOCUS_BG};
                 border: 2px solid {_tk.ACCENT};
             }}
-            """
-        )
+            """)
         self._edit.removeAction(self._icon_action)
         self._icon_action = self._edit.addAction(
             _make_search_icon(), QLineEdit.ActionPosition.LeadingPosition

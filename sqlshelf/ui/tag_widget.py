@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PySide6.QtCore import QPoint, QRect, QSize, QStringListModel, QTimer, Qt, Signal
+from PySide6.QtCore import QPoint, QRect, QSize, QStringListModel, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
     QCompleter,
     QLabel,
@@ -14,24 +14,18 @@ from PySide6.QtWidgets import (
 )
 
 from .theme import tokens as _tk
-from .theme.tokens import (
-    ACCENT,
-    ACCENT_FILL,
-    CHIP_DELETE_BG,
-    CHIP_DELETE_FG,
-    TAG_BG,
-    TAG_RADIUS,
-    TAG_TEXT,
-)
 
 # ---------------------------------------------------------------------------
 # Flow layout (wrapping horizontal layout)
 # ---------------------------------------------------------------------------
 
+
 class FlowLayout(QLayout):
     """Items flow left-to-right and wrap to the next row when width is exceeded."""
 
-    def __init__(self, parent: QWidget | None = None, h_gap: int = 4, v_gap: int = 4) -> None:
+    def __init__(
+        self, parent: QWidget | None = None, h_gap: int = 4, v_gap: int = 4
+    ) -> None:
         super().__init__(parent)
         self._items: list[QLayoutItem] = []
         self._h_gap = h_gap
@@ -98,6 +92,7 @@ class FlowLayout(QLayout):
 # Shared chip styles
 # ---------------------------------------------------------------------------
 
+
 def _display_chip_style(bg: str, fg: str) -> str:
     return (
         f"background-color: {bg}; color: {fg}; "
@@ -116,6 +111,7 @@ def _input_chip_style(bg: str, fg: str) -> str:
 # ---------------------------------------------------------------------------
 # TagDisplayWidget — read-only chips
 # ---------------------------------------------------------------------------
+
 
 class TagDisplayWidget(QWidget):
     """Displays tags as colored chips with rounded corners (read-only)."""
@@ -138,14 +134,16 @@ class TagDisplayWidget(QWidget):
     def _clear(self) -> None:
         while self._flow.count():
             item = self._flow.takeAt(0)
-            if item and item.widget():
-                item.widget().hide()
-                item.widget().deleteLater()
+            widget = item.widget() if item else None
+            if widget is not None:
+                widget.hide()
+                widget.deleteLater()
 
 
 # ---------------------------------------------------------------------------
 # TagInputWidget — editable chips
 # ---------------------------------------------------------------------------
+
 
 class TagInputWidget(QWidget):
     """Chip-style tag editor: existing tags show as removable badges, with an
@@ -212,11 +210,12 @@ class TagInputWidget(QWidget):
 
     def _rebuild(self) -> None:
         # Remove all chips (but keep self._input)
-        to_remove = []
+        to_remove: list[QWidget] = []
         for i in range(self._flow.count()):
             item = self._flow.itemAt(i)
-            if item and item.widget() and item.widget() is not self._input:
-                to_remove.append(item.widget())
+            widget = item.widget() if item else None
+            if widget is not None and widget is not self._input:
+                to_remove.append(widget)
         for w in to_remove:
             self._flow.removeWidget(w)
             w.hide()
@@ -228,10 +227,9 @@ class TagInputWidget(QWidget):
             chip.setStyleSheet(_input_chip_style(_tk.TAG_BG, _tk.TAG_TEXT))
             chip.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
             chip.clicked.connect(lambda checked=False, t=tag: self._remove_tag(t))
-            # Insert before the input field
-            idx = self._flow.indexOf(self._input) if hasattr(self._flow, "indexOf") else -1
-            self._flow.addWidget(chip)  # added at end; we'll reorder via takeAt below
-        # Reorder: move _input to the end
+            # Appended at the end; _ensure_input_last puts the input back after
+            # the chips.
+            self._flow.addWidget(chip)
         self._ensure_input_last()
         self.updateGeometry()
 

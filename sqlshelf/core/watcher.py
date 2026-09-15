@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import threading
 from pathlib import Path
 from typing import Callable
@@ -26,9 +27,16 @@ class _SqlEventHandler(FileSystemEventHandler):
         self._timer: threading.Timer | None = None
         self._lock = threading.Lock()
 
-    def _is_sql(self, src: str) -> bool:
-        p = Path(src)
-        return p.suffix.lower() == ".sql" and ".sqlshelf" not in p.parts
+    @staticmethod
+    def _to_path(src: str | bytes) -> Path:
+        """watchdog types event paths as ``str | bytes`` — it hands back bytes
+        when the watch was scheduled with a bytes path. os.fsdecode covers both
+        and uses the filesystem encoding, so a non-ASCII name survives."""
+        return Path(os.fsdecode(src))
+
+    @staticmethod
+    def _is_sql(path: Path) -> bool:
+        return path.suffix.lower() == ".sql" and ".sqlshelf" not in path.parts
 
     def _schedule(self) -> None:
         if self._timer is not None:
@@ -48,32 +56,43 @@ class _SqlEventHandler(FileSystemEventHandler):
             self._callback(modified, deleted)
 
     def on_created(self, event: FileSystemEvent) -> None:
-        if not event.is_directory and self._is_sql(event.src_path):
+        if event.is_directory:
+            return
+        src = self._to_path(event.src_path)
+        if self._is_sql(src):
             with self._lock:
-                self._modified.add(Path(event.src_path))
+                self._modified.add(src)
             self._schedule()
 
     def on_modified(self, event: FileSystemEvent) -> None:
-        if not event.is_directory and self._is_sql(event.src_path):
+        if event.is_directory:
+            return
+        src = self._to_path(event.src_path)
+        if self._is_sql(src):
             with self._lock:
-                self._modified.add(Path(event.src_path))
+                self._modified.add(src)
             self._schedule()
 
     def on_deleted(self, event: FileSystemEvent) -> None:
-        if not event.is_directory and self._is_sql(event.src_path):
+        if event.is_directory:
+            return
+        src = self._to_path(event.src_path)
+        if self._is_sql(src):
             with self._lock:
-                self._modified.discard(Path(event.src_path))
-                self._deleted.add(Path(event.src_path))
+                self._modified.discard(src)
+                self._deleted.add(src)
             self._schedule()
 
     def on_moved(self, event: FileSystemEvent) -> None:
         if event.is_directory:
             return
+        src = self._to_path(event.src_path)
+        dest = self._to_path(event.dest_path)
         with self._lock:
-            if self._is_sql(event.src_path):
-                self._deleted.add(Path(event.src_path))
-            if self._is_sql(event.dest_path):
-                self._modified.add(Path(event.dest_path))
+            if self._is_sql(src):
+                self._deleted.add(src)
+            if self._is_sql(dest):
+                self._modified.add(dest)
         self._schedule()
 
 

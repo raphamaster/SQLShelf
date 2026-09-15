@@ -67,11 +67,13 @@ docs/
 python -m venv venv
 venv\Scripts\activate
 pip install -r requirements.txt
+pip install -r requirements-dev.txt   # ruff, black, mypy
 
 python main.py        # rodar
 pytest                # testes
 ruff check .           # lint
 black .                # format
+mypy                   # type check (paths vêm do pyproject.toml)
 ```
 
 ## Regras críticas de implementação

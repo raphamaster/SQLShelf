@@ -8,7 +8,7 @@ import pytest
 
 from sqlshelf.core.index_db import IndexDB
 from sqlshelf.core.models import Query
-from sqlshelf.core.search import _parse_date_filter, parse_query, search
+from sqlshelf.core.search import _build_fts_query, _parse_date_filter, parse_query
 
 
 def make_sql_file(folder: Path, name: str, content: str = "SELECT 1") -> Path:
@@ -34,7 +34,9 @@ def db_with_data(tmp_path: Path) -> IndexDB:
         body="SELECT id, total FROM dbo.Orders",
     )
     q3 = Query(
-        path=make_sql_file(tmp_path, "products.sql", "SELECT name, price FROM Products"),
+        path=make_sql_file(
+            tmp_path, "products.sql", "SELECT name, price FROM Products"
+        ),
         title="Product catalog",
         description="Full product listing",
         tags=["catalog"],
@@ -128,7 +130,9 @@ class TestSearch:
         results = db_with_data.search("zzznomatch")
         assert results == []
 
-    def test_invalid_fts_query_returns_empty_not_error(self, db_with_data: IndexDB) -> None:
+    def test_invalid_fts_query_returns_empty_not_error(
+        self, db_with_data: IndexDB
+    ) -> None:
         results = db_with_data.search("AND OR")
         assert isinstance(results, list)
 
@@ -220,11 +224,51 @@ class TestDateSearch:
         p2 = make_sql_file(tmp_path, "b.sql", "SELECT 2")
         os.utime(p1, (ts, ts))
         os.utime(p2, (ts, ts))
-        q1 = Query(path=p1, title="Tagged query", description="", tags=["report"], body="SELECT 1")
-        q2 = Query(path=p2, title="Other query", description="", tags=["other"], body="SELECT 2")
+        q1 = Query(
+            path=p1,
+            title="Tagged query",
+            description="",
+            tags=["report"],
+            body="SELECT 1",
+        )
+        q2 = Query(
+            path=p2,
+            title="Other query",
+            description="",
+            tags=["other"],
+            body="SELECT 2",
+        )
         db = IndexDB(tmp_path)
         db.index_all([q1, q2])
 
         results = db.search("date:15/06/2026 tag:report")
         assert len(results) == 1
         assert results[0].title == "Tagged query"
+
+
+class TestSearchSurvivesSpecialCharacters:
+    """Regression: typing a `"` made search silently return nothing."""
+
+    @pytest.mark.parametrize(
+        "text",
+        ['"', 'inv"oice', '""', 'a" OR b', "NEAR(", "invoice*", "^x", "-", "a:b"],
+    )
+    def test_special_characters_do_not_raise(
+        self, db_with_data: IndexDB, text: str
+    ) -> None:
+        assert isinstance(db_with_data.search(text), list)
+
+    def test_quote_is_escaped_not_dropped(self) -> None:
+        assert _build_fts_query('inv"oice') == '"inv""oice"*'
+
+    def test_quote_only_token_is_ignored(self) -> None:
+        assert _build_fts_query('"') == ""
+
+    def test_search_still_works_after_a_stray_quote(
+        self, db_with_data: IndexDB
+    ) -> None:
+        # The bug was stateful in practice: the failing query returned [] and
+        # the user saw search as "dead". Prove the next query is unaffected.
+        db_with_data.search('"')
+        results = db_with_data.search("invoice")
+        assert [r.title for r in results] == ["Invoice totals"]

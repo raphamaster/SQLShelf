@@ -14,7 +14,7 @@ _tokens.set_active_palette(_theme_name)
 i18n.set_language(cfg.get_language())
 
 # ── Now it is safe to import UI modules ─────────────────────────────────────
-from pathlib import Path
+from pathlib import Path  # noqa: E402
 
 from PySide6.QtGui import QIcon  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
@@ -26,6 +26,7 @@ from sqlshelf.ui.theme.tokens import QT_MATERIAL_THEMES, app_stylesheet  # noqa:
 
 try:
     import qt_material
+
     HAS_QT_MATERIAL = True
 except ImportError:
     HAS_QT_MATERIAL = False

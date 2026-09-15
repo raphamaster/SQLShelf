@@ -3,11 +3,17 @@ from __future__ import annotations
 import re
 from datetime import datetime
 
-from PySide6.QtCore import QModelIndex, QRectF, QSize, Qt, Signal
+from PySide6.QtCore import (
+    QModelIndex,
+    QPersistentModelIndex,
+    QRectF,
+    QSize,
+    Qt,
+    Signal,
+)
 from PySide6.QtGui import (
     QColor,
     QFont,
-    QFontMetrics,
     QPainter,
     QPainterPath,
     QStandardItem,
@@ -43,30 +49,32 @@ from .theme.tokens import (
 )
 
 # ── Sort keys ───────────────────────────────────────────────────────────────
-_SORT_NAME_ASC   = "name_asc"
-_SORT_NAME_DESC  = "name_desc"
+_SORT_NAME_ASC = "name_asc"
+_SORT_NAME_DESC = "name_desc"
 _SORT_MTIME_DESC = "mtime_desc"
-_SORT_MTIME_ASC  = "mtime_asc"
+_SORT_MTIME_ASC = "mtime_asc"
 
 # ── Item data roles ─────────────────────────────────────────────────────────
-_ROLE_RESULT   = Qt.ItemDataRole.UserRole        # SearchResult
-_ROLE_TAGS     = Qt.ItemDataRole.UserRole + 1    # list[str]
-_ROLE_TABLES   = Qt.ItemDataRole.UserRole + 2    # list[str]
-_ROLE_UPDATED  = Qt.ItemDataRole.UserRole + 3    # str | None (ISO date)
-_ROLE_FAVORITE = Qt.ItemDataRole.UserRole + 4    # bool
-_ROLE_MTIME    = Qt.ItemDataRole.UserRole + 5    # int (epoch seconds)
+_ROLE_RESULT = Qt.ItemDataRole.UserRole  # SearchResult
+_ROLE_TAGS = Qt.ItemDataRole.UserRole + 1  # list[str]
+_ROLE_TABLES = Qt.ItemDataRole.UserRole + 2  # list[str]
+_ROLE_UPDATED = Qt.ItemDataRole.UserRole + 3  # str | None (ISO date)
+_ROLE_FAVORITE = Qt.ItemDataRole.UserRole + 4  # bool
+_ROLE_MTIME = Qt.ItemDataRole.UserRole + 5  # int (epoch seconds)
 
 # ── Layout constants ────────────────────────────────────────────────────────
-_ITEM_H    = 60
-_PAD_H     = 12
-_PAD_V     = 10
-_LINE_GAP  = 4
-_CHIP_H    = 18
-_CHIP_PAD  = 6    # horizontal padding inside chip
-_CHIP_GAP  = 5    # gap between chips
-_ACCENT_W  = 2    # selected accent bar width
+_ITEM_H = 60
+_PAD_H = 12
+_PAD_V = 10
+_LINE_GAP = 4
+_CHIP_H = 18
+_CHIP_PAD = 6  # horizontal padding inside chip
+_CHIP_GAP = 5  # gap between chips
+_ACCENT_W = 2  # selected accent bar width
 _MAX_CHIPS = 2
-_STAR_W    = 18
+_STAR_W = 18
+_DATE_PAD = 6  # breathing room around the date column
+_COL_GAP = 8  # gap between the table-name and date columns
 
 # ── Color parsing ───────────────────────────────────────────────────────────
 _RGBA_RE = re.compile(r"rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)")
@@ -92,6 +100,7 @@ def _literal_datetime_epoch(ts: int) -> str:
 
 # ── Delegate ────────────────────────────────────────────────────────────────
 
+
 class QueryItemDelegate(QStyledItemDelegate):
     """Two-line item: title (line 1) + tag chips + meta label (line 2)."""
 
@@ -105,29 +114,34 @@ class QueryItemDelegate(QStyledItemDelegate):
         self._f_small = QFont()
         self._f_small.setPointSize(9)
 
-        self._c_sel_bg   = _qc(CARD)
-        self._c_hov_bg   = _qc(LIST_ITEM_HOVER_BG)
-        self._c_accent   = _qc(ACCENT)
-        self._c_primary  = _qc(TEXT_PRIMARY)
+        self._c_sel_bg = _qc(CARD)
+        self._c_hov_bg = _qc(LIST_ITEM_HOVER_BG)
+        self._c_accent = _qc(ACCENT)
+        self._c_primary = _qc(TEXT_PRIMARY)
         self._c_tertiary = _qc(TEXT_TERTIARY)
-        self._c_tag_bg   = _qc(TAG_BG)
-        self._c_tag_txt  = _qc(TAG_TEXT)
-        self._c_star     = _qc(STAR_ACTIVE)
+        self._c_tag_bg = _qc(TAG_BG)
+        self._c_tag_txt = _qc(TAG_TEXT)
+        self._c_star = _qc(STAR_ACTIVE)
 
     def refresh_theme(self) -> None:
-        self._c_sel_bg   = _qc(_tk.CARD)
-        self._c_hov_bg   = _qc(_tk.LIST_ITEM_HOVER_BG)
-        self._c_accent   = _qc(_tk.ACCENT)
-        self._c_primary  = _qc(_tk.TEXT_PRIMARY)
+        self._c_sel_bg = _qc(_tk.CARD)
+        self._c_hov_bg = _qc(_tk.LIST_ITEM_HOVER_BG)
+        self._c_accent = _qc(_tk.ACCENT)
+        self._c_primary = _qc(_tk.TEXT_PRIMARY)
         self._c_tertiary = _qc(_tk.TEXT_TERTIARY)
-        self._c_tag_bg   = _qc(_tk.TAG_BG)
-        self._c_tag_txt  = _qc(_tk.TAG_TEXT)
-        self._c_star     = _qc(_tk.STAR_ACTIVE)
+        self._c_tag_bg = _qc(_tk.TAG_BG)
+        self._c_tag_txt = _qc(_tk.TAG_TEXT)
+        self._c_star = _qc(_tk.STAR_ACTIVE)
 
-    def sizeHint(self, option, index) -> QSize:  # type: ignore[override]
+    def sizeHint(self, option, index) -> QSize:
         return QSize(option.rect.width(), _ITEM_H)
 
-    def paint(self, painter: QPainter, option, index: QModelIndex) -> None:
+    def paint(
+        self,
+        painter: QPainter,
+        option,
+        index: QModelIndex | QPersistentModelIndex,
+    ) -> None:
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
@@ -135,11 +149,11 @@ class QueryItemDelegate(QStyledItemDelegate):
         sel = bool(option.state & QStyle.StateFlag.State_Selected)
         hov = bool(option.state & QStyle.StateFlag.State_MouseOver)
 
-        title: str  = index.data(Qt.ItemDataRole.DisplayRole) or ""
-        tags: list  = index.data(_ROLE_TAGS) or []
+        title: str = index.data(Qt.ItemDataRole.DisplayRole) or ""
+        tags: list = index.data(_ROLE_TAGS) or []
         tables: list = index.data(_ROLE_TABLES) or []
-        mtime: int  = index.data(_ROLE_MTIME) or 0
-        fav: bool   = bool(index.data(_ROLE_FAVORITE))
+        mtime: int = index.data(_ROLE_MTIME) or 0
+        fav: bool = bool(index.data(_ROLE_FAVORITE))
 
         # ── Background ──────────────────────────────────────────────────────
         if sel:
@@ -155,8 +169,8 @@ class QueryItemDelegate(QStyledItemDelegate):
 
         # ── Content origin ──────────────────────────────────────────────────
         x_off = _ACCENT_W if sel else 0
-        x  = rect.left() + _PAD_H + x_off
-        y1 = rect.top()  + _PAD_V
+        x = rect.left() + _PAD_H + x_off
+        y1 = rect.top() + _PAD_V
         y2 = y1 + 18 + _LINE_GAP
         cw = rect.width() - _PAD_H * 2 - x_off
 
@@ -173,10 +187,16 @@ class QueryItemDelegate(QStyledItemDelegate):
             )
 
         # ── Title ───────────────────────────────────────────────────────────
-        title_w = cw - star_taken
-        fm = QFontMetrics(self._f_title)
-        elided = fm.elidedText(title, Qt.TextElideMode.ElideRight, title_w)
+        # Measure through the painter, never through QFontMetrics(self._f_*).
+        # These fonts leave the family unresolved, so the stylesheet's family
+        # (Roboto, from qt-material) wins at paint time while QFontMetrics would
+        # measure the default UI font instead — a narrower one. Right-aligned
+        # text drawn from a too-small width then loses its first character:
+        # "14/09/2026 18:56" rendered as "4/09/2026 18:56".
         painter.setFont(self._f_title)
+        fm = painter.fontMetrics()
+        title_w = cw - star_taken
+        elided = fm.elidedText(title, Qt.TextElideMode.ElideRight, title_w)
         painter.setPen(self._c_primary)
         painter.drawText(
             QRectF(x, y1, title_w, 18),
@@ -185,7 +205,8 @@ class QueryItemDelegate(QStyledItemDelegate):
         )
 
         # ── Tag chips ───────────────────────────────────────────────────────
-        fm_s = QFontMetrics(self._f_small)
+        painter.setFont(self._f_small)
+        fm_s = painter.fontMetrics()
         chip_x = float(x)
         for tag in tags[:_MAX_CHIPS]:
             tw = fm_s.horizontalAdvance(tag) + _CHIP_PAD * 2
@@ -202,8 +223,7 @@ class QueryItemDelegate(QStyledItemDelegate):
         date_str = _literal_datetime_epoch(mtime)
         date_w = 0.0
         if date_str:
-            date_w = fm_s.horizontalAdvance(date_str) + 4
-            painter.setFont(self._f_small)
+            date_w = fm_s.horizontalAdvance(date_str) + _DATE_PAD
             painter.setPen(self._c_tertiary)
             painter.drawText(
                 QRectF(x + cw - date_w, y2, date_w, _CHIP_H),
@@ -214,28 +234,30 @@ class QueryItemDelegate(QStyledItemDelegate):
         # ── Table name (elastic, right-aligned, left of the date column) ─────
         table_name = tables[0] if tables else ""
         if table_name:
-            gap = 8 if date_w else 0
-            table_w = cw - date_w - gap
-            elided_table = fm_s.elidedText(
-                table_name, Qt.TextElideMode.ElideRight, table_w
-            )
-            painter.setFont(self._f_small)
-            painter.setPen(self._c_tertiary)
-            painter.drawText(
-                QRectF(x, y2, table_w, _CHIP_H),
-                Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight,
-                elided_table,
-            )
+            # Start past the chips so a long tag row never overprints the name.
+            table_x = max(float(x), chip_x)
+            table_w = (x + cw - date_w - (_COL_GAP if date_w else 0)) - table_x
+            if table_w > 0:
+                elided_table = fm_s.elidedText(
+                    table_name, Qt.TextElideMode.ElideRight, table_w
+                )
+                painter.setPen(self._c_tertiary)
+                painter.drawText(
+                    QRectF(table_x, y2, table_w, _CHIP_H),
+                    Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight,
+                    elided_table,
+                )
 
         painter.restore()
 
 
 # ── Widget ──────────────────────────────────────────────────────────────────
 
+
 class QueryListWidget(QWidget):
     """Middle panel: displays search results with a custom two-line delegate."""
 
-    query_selected = Signal(object)       # SearchResult
+    query_selected = Signal(object)  # SearchResult
     context_action = Signal(str, object)  # (action_name, SearchResult)
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -307,12 +329,12 @@ class QueryListWidget(QWidget):
                 tooltip += "\n" + "  ".join(f"#{t}" for t in r.tags)
             item.setToolTip(tooltip)
             item.setEditable(False)
-            item.setData(r,             _ROLE_RESULT)
-            item.setData(r.tags,        _ROLE_TAGS)
-            item.setData(r.tables,      _ROLE_TABLES)
-            item.setData(r.updated_at,  _ROLE_UPDATED)
+            item.setData(r, _ROLE_RESULT)
+            item.setData(r.tags, _ROLE_TAGS)
+            item.setData(r.tables, _ROLE_TABLES)
+            item.setData(r.updated_at, _ROLE_UPDATED)
             item.setData(r.is_favorite, _ROLE_FAVORITE)
-            item.setData(r.file_mtime,  _ROLE_MTIME)
+            item.setData(r.file_mtime, _ROLE_MTIME)
             self._model.appendRow(item)
             if self._result_key(r) == current_key:
                 restore_row = i
@@ -359,12 +381,12 @@ class QueryListWidget(QWidget):
     def _show_sort_menu(self) -> None:
         menu = QMenu(self._sort_btn)
         actions = {
-            _SORT_NAME_ASC:   menu.addAction(tr("sort.name_asc")),
-            _SORT_NAME_DESC:  menu.addAction(tr("sort.name_desc")),
+            _SORT_NAME_ASC: menu.addAction(tr("sort.name_asc")),
+            _SORT_NAME_DESC: menu.addAction(tr("sort.name_desc")),
         }
         menu.addSeparator()
         actions[_SORT_MTIME_DESC] = menu.addAction(tr("sort.mtime_desc"))
-        actions[_SORT_MTIME_ASC]  = menu.addAction(tr("sort.mtime_asc"))
+        actions[_SORT_MTIME_ASC] = menu.addAction(tr("sort.mtime_asc"))
 
         for key, act in actions.items():
             act.setCheckable(True)
@@ -441,9 +463,9 @@ class QueryListWidget(QWidget):
         result = self._results[row]
 
         menu = QMenu(self._list)
-        fav_act    = menu.addAction(tr("context_menu.toggle_favorite"))
-        dup_act    = menu.addAction(tr("context_menu.duplicate"))
-        copy_act   = menu.addAction(tr("context_menu.copy_sql"))
+        fav_act = menu.addAction(tr("context_menu.toggle_favorite"))
+        dup_act = menu.addAction(tr("context_menu.duplicate"))
+        copy_act = menu.addAction(tr("context_menu.copy_sql"))
         menu.addSeparator()
         reveal_act = menu.addAction(tr("context_menu.reveal"))
 

@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
 from ..core.frontmatter import write_sql_file
 from ..core.i18n import tr
 from ..core.snippets import apply_template, extract_params, list_templates
-from .new_query_dialog import _FolderSelector, _safe_filename as _sf
+from .new_query_dialog import _FolderSelector
 
 
 def _safe_filename(title: str) -> str:
