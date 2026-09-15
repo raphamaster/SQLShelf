@@ -8,7 +8,7 @@ import pytest
 
 from sqlshelf.core.index_db import IndexDB
 from sqlshelf.core.models import Query
-from sqlshelf.core.search import _parse_date_filter, parse_query, search
+from sqlshelf.core.search import _build_fts_query, _parse_date_filter, parse_query
 
 
 def make_sql_file(folder: Path, name: str, content: str = "SELECT 1") -> Path:
@@ -228,3 +228,31 @@ class TestDateSearch:
         results = db.search("date:15/06/2026 tag:report")
         assert len(results) == 1
         assert results[0].title == "Tagged query"
+
+
+class TestSearchSurvivesSpecialCharacters:
+    """Regression: typing a `"` made search silently return nothing."""
+
+    @pytest.mark.parametrize(
+        "text",
+        ['"', 'inv"oice', '""', 'a" OR b', "NEAR(", "invoice*", "^x", "-", "a:b"],
+    )
+    def test_special_characters_do_not_raise(
+        self, db_with_data: IndexDB, text: str
+    ) -> None:
+        assert isinstance(db_with_data.search(text), list)
+
+    def test_quote_is_escaped_not_dropped(self) -> None:
+        assert _build_fts_query('inv"oice') == '"inv""oice"*'
+
+    def test_quote_only_token_is_ignored(self) -> None:
+        assert _build_fts_query('"') == ""
+
+    def test_search_still_works_after_a_stray_quote(
+        self, db_with_data: IndexDB
+    ) -> None:
+        # The bug was stateful in practice: the failing query returned [] and
+        # the user saw search as "dead". Prove the next query is unaffected.
+        db_with_data.search('"')
+        results = db_with_data.search("invoice")
+        assert [r.title for r in results] == ["Invoice totals"]

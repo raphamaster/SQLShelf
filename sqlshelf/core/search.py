@@ -9,12 +9,16 @@ from .models import SearchResult
 # Matches prefixes like table:Customers  col:OrderId  tag:finance  date:15/06/2026
 _PREFIX_RE = re.compile(r"(?:^|\s)(table|col|tag|date):(\S+)")
 
-# Subqueries appended to every SELECT for the new display fields
+# Subqueries appended to every SELECT for the new display fields.
+# GROUP_CONCAT has no defined order, and the list shows only the first table —
+# the inner ORDER BY keeps that choice stable between refreshes.
 _TABLES_SUBQ = (
     "COALESCE("
-    "  (SELECT GROUP_CONCAT(qo.object_name, ',')"
-    "   FROM query_objects qo"
-    "   WHERE qo.query_id=q.id AND qo.object_type='table'), '')"
+    "  (SELECT GROUP_CONCAT(name, ',') FROM ("
+    "     SELECT qo.object_name AS name FROM query_objects qo"
+    "     WHERE qo.query_id=q.id AND qo.object_type='table'"
+    "     ORDER BY qo.object_name"
+    "  )), '')"
 )
 _IS_FAV_SUBQ = (
     "CASE WHEN EXISTS"
@@ -53,11 +57,20 @@ def _parse_date_filter(date_str: str) -> tuple[int, int] | None:
 
 
 def _build_fts_query(text: str) -> str:
-    """Convert free text to an FTS5 MATCH expression (prefix-match each token)."""
-    tokens = [t for t in text.split() if t]
-    if not tokens:
-        return ""
-    return " ".join(f'"{t}"*' for t in tokens)
+    """Convert free text to an FTS5 MATCH expression (prefix-match each token).
+
+    Each token becomes an FTS5 string literal, so operators the user happens to
+    type are matched literally instead of parsed. Inside a literal the only
+    special character is the double quote, which FTS5 escapes by doubling —
+    without that, typing a single `"` raises "unterminated string" and the whole
+    search silently returns nothing until the character is deleted.
+    """
+    tokens = []
+    for raw in text.split():
+        token = raw.replace('"', '""')
+        if token.strip('"'):  # a token of nothing but quotes matches nothing
+            tokens.append(f'"{token}"*')
+    return " ".join(tokens)
 
 
 def search(conn: sqlite3.Connection, text: str) -> list[SearchResult]:
@@ -125,9 +138,13 @@ def search(conn: sqlite3.Connection, text: str) -> list[SearchResult]:
     where_clause = ("WHERE " + " AND ".join(where_parts)) if where_parts else ""
 
     if use_fts:
+        # No snippet() here on purpose. It has to re-tokenise the whole body of
+        # every matching row, and measured on a real 109-file folder it was 87
+        # of the 92 ms a text search took — for a string no part of the UI ever
+        # displays. SearchResult.snippet stays in the model, always empty.
         sql = f"""
             SELECT q.id, q.rel_path, q.title, COALESCE(q.description, ''),
-                   snippet(queries_fts, 2, '[', ']', '...', 20),
+                   '',
                    bm25(queries_fts),
                    q.updated_at,
                    {_TABLES_SUBQ},

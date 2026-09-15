@@ -49,20 +49,16 @@ CREATE VIRTUAL TABLE queries_fts USING fts5(
 
 -- Standard FTS5 table (no content= option) — sync via regular DELETE/INSERT,
 -- NOT the special 'delete' INSERT command (which is only for external-content tables).
-
-CREATE TRIGGER queries_ai AFTER INSERT ON queries BEGIN
-    INSERT INTO queries_fts(rowid, title, description, body, objects)
-    VALUES (new.id, new.title, new.description, new.body, '');
-END;
+--
+-- Rows are written by index_db._insert_prepared, which is the only code that knows
+-- the extracted object names. Insert/update triggers used to mirror the row
+-- automatically, but they could only write objects='' — so any UPDATE on
+-- queries (a mtime-only touch from OneDrive, say) silently erased the table and
+-- column names from the search index. Only the delete trigger remains, because
+-- several code paths remove rows straight from `queries`.
 
 CREATE TRIGGER queries_ad AFTER DELETE ON queries BEGIN
     DELETE FROM queries_fts WHERE rowid = old.id;
-END;
-
-CREATE TRIGGER queries_au AFTER UPDATE ON queries BEGIN
-    DELETE FROM queries_fts WHERE rowid = old.id;
-    INSERT INTO queries_fts(rowid, title, description, body, objects)
-    VALUES (new.id, new.title, new.description, new.body, '');
 END;
 
 CREATE TABLE favorites (
