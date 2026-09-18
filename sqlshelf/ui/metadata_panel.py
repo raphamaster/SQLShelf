@@ -96,7 +96,7 @@ class MetadataPanel(QWidget):
     Edit mode: title / description / tags are editable.
 
     Signals:
-        navigate_requested(token)     — user left-clicked a table/column/alias chip.
+        navigate_requested(token)     — user left-clicked a table chip.
         filter_requested(kind, value) — user chose "Search in all queries" on a chip.
         favorite_toggled              — star button pressed.
     """
@@ -111,8 +111,6 @@ class MetadataPanel(QWidget):
         super().__init__(parent)
         self._edit_mode = False
         self._tables: list[str] = []
-        self._columns: list[str] = []
-        self._aliases: list[str] = []
 
         self.setObjectName("MetadataPanel")
         self.setAutoFillBackground(True)
@@ -171,26 +169,6 @@ class MetadataPanel(QWidget):
         )
         self._tables_section.setVisible(False)
 
-        # ── Columns section (clickable neutral chips, scrollable after 2 rows) ─
-        self._columns_flow_widget = QWidget()
-        self._columns_flow = FlowLayout(self._columns_flow_widget, h_gap=4, v_gap=4)
-        self._columns_flow_widget.setLayout(self._columns_flow)
-        self._columns_scroll = _make_chip_scroll(self._columns_flow_widget)
-        self._columns_section = _section_container(
-            tr("metadata.section_columns"), self._columns_scroll
-        )
-        self._columns_section.setVisible(False)
-
-        # ── Aliases section (clickable neutral chips, scrollable after 2 rows) ─
-        self._aliases_flow_widget = QWidget()
-        self._aliases_flow = FlowLayout(self._aliases_flow_widget, h_gap=4, v_gap=4)
-        self._aliases_flow_widget.setLayout(self._aliases_flow)
-        self._aliases_scroll = _make_chip_scroll(self._aliases_flow_widget)
-        self._aliases_section = _section_container(
-            tr("metadata.section_aliases"), self._aliases_scroll
-        )
-        self._aliases_section.setVisible(False)
-
         # ── File path (clickable, right-click to copy) ────────────────────
         self._path_btn = QPushButton()
         self._path_btn.setFlat(True)
@@ -224,8 +202,6 @@ class MetadataPanel(QWidget):
         ro_layout.addWidget(self._desc_label)
         ro_layout.addWidget(self._tags_section)
         ro_layout.addWidget(self._tables_section)
-        ro_layout.addWidget(self._columns_section)
-        ro_layout.addWidget(self._aliases_section)
         _file_row = QHBoxLayout()
         _file_row.setContentsMargins(0, 0, 0, 0)
         _file_row.setSpacing(16)
@@ -315,25 +291,13 @@ class MetadataPanel(QWidget):
 
     def _rebuild_object_chips(self) -> None:
         self._clear_flow(self._tables_flow)
-        self._clear_flow(self._columns_flow)
-        self._clear_flow(self._aliases_flow)
 
         self._tables_section.setVisible(bool(self._tables))
-        self._columns_section.setVisible(bool(self._columns))
-        self._aliases_section.setVisible(bool(self._aliases))
 
         for table in sorted(self._tables):
             self._tables_flow.addWidget(self._make_object_chip(table, "table"))
 
-        for col in sorted(self._columns):
-            self._columns_flow.addWidget(self._make_object_chip(col, "col"))
-
-        for alias in sorted(self._aliases):
-            self._aliases_flow.addWidget(self._make_object_chip(alias, "alias"))
-
         self._tables_flow_widget.updateGeometry()
-        self._columns_flow_widget.updateGeometry()
-        self._aliases_flow_widget.updateGeometry()
 
     # ── Public API ─────────────────────────────────────────────────────────
 
@@ -343,26 +307,17 @@ class MetadataPanel(QWidget):
         description: str,
         tags: list[str],
         tables: list[str],
-        columns: list[str],
-        aliases: list[str] | None = None,
     ) -> None:
         self._title_label.setText(title)
         self._desc_label.setText(description)
         self._tags_display.set_tags(tags, accent=True)
         self._tags_section.setVisible(bool(tags))
         self._tables = list(tables)
-        self._columns = list(columns)
-        self._aliases = list(aliases) if aliases else []
         self._rebuild_object_chips()
 
         self._title_edit.setText(title)
         self._desc_edit.setPlainText(description)
         self._tags_input.set_tags(tags)
-
-    def set_aliases(self, aliases: list[str]) -> None:
-        """Update just the alias chips, e.g. once background extraction finishes."""
-        self._aliases = list(aliases)
-        self._rebuild_object_chips()
 
     def set_path(self, path: Path | None) -> None:
         self._file_path = path
@@ -441,8 +396,6 @@ class MetadataPanel(QWidget):
         for section, key in [
             (self._tags_section, "metadata.section_tags"),
             (self._tables_section, "metadata.section_tables"),
-            (self._columns_section, "metadata.section_columns"),
-            (self._aliases_section, "metadata.section_aliases"),
             (self._path_section, "metadata.section_file"),
             (self._mtime_section, "metadata.section_mtime"),
         ]:
@@ -486,8 +439,6 @@ class MetadataPanel(QWidget):
         for section in [
             self._tags_section,
             self._tables_section,
-            self._columns_section,
-            self._aliases_section,
             self._path_section,
             self._mtime_section,
         ]:
@@ -501,8 +452,6 @@ class MetadataPanel(QWidget):
         self._tags_display.set_tags([], accent=True)
         self._tags_section.setVisible(False)
         self._tables = []
-        self._columns = []
-        self._aliases = []
         self._rebuild_object_chips()
         self._title_edit.clear()
         self._desc_edit.clear()

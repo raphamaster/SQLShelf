@@ -4,7 +4,6 @@ import os
 import subprocess
 import sys
 import time
-from collections import OrderedDict
 from pathlib import Path
 
 from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, QTimer, Signal
@@ -39,7 +38,6 @@ from ..core.index_db import IndexDB, IndexStats
 from ..core.models import SearchResult
 from ..core.scanner import scan_file, scan_folder
 from ..core.snippets import list_templates
-from ..core.sql_objects import extract_objects
 from ..core.watcher import FolderWatcher
 from .code_editor import CodeEditor
 from .command_palette import CommandPalette
@@ -271,11 +269,6 @@ class _SearchWorker(QRunnable):
 # ---------------------------------------------------------------------------
 
 
-_LIVE_ALIAS_MAX_LINES = 1000
-_LIVE_ALIAS_MAX_CHARS = 200_000
-_ALIAS_CACHE_MAX = 128
-
-
 class _LoadQueryWorkerSignals(QObject):
     finished = Signal(object, int)  # (payload, generation)
 
@@ -288,7 +281,6 @@ class _LoadQueryWorker(QRunnable):
         result: SearchResult,
         gen: int,
         track_access: bool = True,
-        cached_aliases: list[str] | None = None,
     ) -> None:
         super().__init__()
         self.signals = _LoadQueryWorkerSignals()
@@ -297,7 +289,6 @@ class _LoadQueryWorker(QRunnable):
         self._result = result
         self._gen = gen
         self._track_access = track_access
-        self._cached_aliases = cached_aliases
 
     def run(self) -> None:
         metadata, body, _has_frontmatter = read_sql_file(self._path)
@@ -312,17 +303,6 @@ class _LoadQueryWorker(QRunnable):
                     self._db.record_access(self._result.rel_path, "open")
         except Exception:
             pass
-        if not objects.get("alias"):
-            if self._cached_aliases is not None:
-                objects["alias"] = self._cached_aliases
-            elif (
-                len(body) <= _LIVE_ALIAS_MAX_CHARS
-                and body.count("\n") + 1 <= _LIVE_ALIAS_MAX_LINES
-            ):
-                # Old indexes did not persist aliases. Preserve the feature for
-                # normal files, but never spend CPU parsing large scripts during
-                # navigation. The result is cached by path+mtime for this session.
-                objects["alias"] = sorted(extract_objects(body).get("alias", set()))
         payload = (
             self._path,
             self._result,
@@ -808,7 +788,6 @@ class MainWindow(QMainWindow):
         self._load_timer.setSingleShot(True)
         self._load_timer.setInterval(75)
         self._load_timer.timeout.connect(self._dispatch_query_load)
-        self._alias_cache: OrderedDict[tuple[str, int], list[str]] = OrderedDict()
 
         self._build_menu()
         self._build_ui()
@@ -1576,8 +1555,6 @@ class MainWindow(QMainWindow):
             description=result.description,
             tags=result.tags,
             tables=[],
-            columns=[],
-            aliases=[],
         )
         self._metadata_panel.set_path(path)
 
@@ -1594,15 +1571,12 @@ class MainWindow(QMainWindow):
             return
         self._pending_load = None
         db, path, result, gen, track_access = pending
-        alias_key = (str(path), result.file_mtime)
-        cached_aliases = self._alias_cache.get(alias_key)
         worker = _LoadQueryWorker(
             db,
             path,
             result,
             gen,
             track_access,
-            cached_aliases,
         )
         worker.signals.finished.connect(self._on_query_loaded)
         QThreadPool.globalInstance().start(worker)
@@ -1611,11 +1585,6 @@ class MainWindow(QMainWindow):
         if gen != self._load_gen:
             return
         path, result, metadata, body, objects, is_favorite = payload
-        alias_key = (str(path), result.file_mtime)
-        self._alias_cache[alias_key] = objects.get("alias", [])
-        self._alias_cache.move_to_end(alias_key)
-        if len(self._alias_cache) > _ALIAS_CACHE_MAX:
-            self._alias_cache.popitem(last=False)
         self._current_metadata = metadata
         self._editor.setPlainText(body)
         self._metadata_panel.set_query(
@@ -1623,8 +1592,6 @@ class MainWindow(QMainWindow):
             description=result.description,
             tags=result.tags,
             tables=objects.get("table", []),
-            columns=objects.get("column", []),
-            aliases=objects.get("alias", []),
         )
         self._metadata_panel.set_path(path)
 
