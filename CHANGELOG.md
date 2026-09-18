@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.0.11] - 2026-09-17
+
+### Changed
+- **Leaner metadata panel** — the query header no longer shows column and alias chips, only table names, which is what's actually useful at a glance
+
 ## [1.0.10] - 2026-09-15
 
 ### Fixed

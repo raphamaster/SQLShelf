@@ -5,7 +5,7 @@
 
 #define AppName      "SQLShelf"
 #ifndef AppVersion
-  #define AppVersion "1.0.10"
+  #define AppVersion "1.0.11"
 #endif
 #define AppPublisher "Raphael Franco"
 #define AppURL       "https://github.com/raphamaster/sqlshelf"
