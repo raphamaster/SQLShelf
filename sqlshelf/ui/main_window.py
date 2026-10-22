@@ -31,9 +31,11 @@ from PySide6.QtWidgets import (
 )
 
 from ..core import config as cfg
+from ..core.folder_tree import folder_prefix
 from ..core.frontmatter import read_sql_file, write_sql_file
 from ..core.i18n import available_languages, get_language, set_language, tr
 from ..core.index_db import IndexDB, IndexStats
+from ..core.library_summary import LibrarySummary, summarize_library
 from ..core.models import SearchResult
 from ..core.navigation import NavHistory, NavState, root_of, search_text, with_search
 from ..core.scanner import scan_file, scan_folder
@@ -189,10 +191,17 @@ class _ForceReindexWorker(QRunnable):
 
 
 class _SearchWorkerSignals(QObject):
-    results_ready = Signal(list, list, int)  # (results, sidebar tags, generation)
+    results_ready = Signal(list, int)  # (results, generation)
 
 
 class _SearchWorker(QRunnable):
+    """Run one search, Favorites or Recent off the GUI thread.
+
+    *browse_folder* is the folder in view: None for the whole library, a
+    library folder, or a subfolder of one. A subfolder narrows the results to
+    the files under it, by their path relative to the library folder.
+    """
+
     def __init__(
         self,
         dbs: dict,
@@ -209,15 +218,22 @@ class _SearchWorker(QRunnable):
         self._mode = mode
         self._gen = gen
 
-    def run(self) -> None:
+    def _scope(self) -> list[tuple[Path, IndexDB, str]]:
+        """(library folder, index, rel_path prefix) for each index searched."""
+        if self._browse_folder is None:
+            return [(folder, db, "") for folder, db in self._dbs.items()]
+        root = root_of(self._browse_folder, self._dbs)
+        if root is None:
+            return []
         try:
-            results: list[SearchResult] = []
-            scoped_dbs = (
-                {self._browse_folder: self._dbs[self._browse_folder]}
-                if self._browse_folder is not None and self._browse_folder in self._dbs
-                else self._dbs
-            )
+            prefix = folder_prefix(self._browse_folder, root)
+        except ValueError:
+            return []
+        return [(root, self._dbs[root], prefix)]
 
+    def run(self) -> None:
+        results: list[SearchResult] = []
+        try:
             if self._mode == "favorites":
                 # Favorites intentionally span every known folder.
                 for folder, db in self._dbs.items():
@@ -228,46 +244,60 @@ class _SearchWorker(QRunnable):
                     except Exception:
                         continue
             elif self._mode == "recent":
-                for folder, db in scoped_dbs.items():
+                for folder, db, prefix in self._scope():
                     try:
-                        for result in db.get_recently_viewed():
+                        for result in db.get_recently_viewed(prefix=prefix):
                             result.folder = folder
                             results.append(result)
                     except Exception:
                         continue
             else:
-                if self._browse_folder is not None:
-                    db = self._dbs.get(self._browse_folder)
-                    if db:
-                        results = db.search(self._text)
-                        for result in results:
-                            result.folder = self._browse_folder
-                else:
-                    for folder, db in self._dbs.items():
-                        try:
-                            folder_results = db.search(self._text)
-                        except Exception:
-                            continue
-                        for result in folder_results:
+                scope = self._scope()
+                for folder, db, prefix in scope:
+                    try:
+                        folder_results = db.search(self._text)
+                    except Exception:
+                        continue
+                    for result in folder_results:
+                        if result.rel_path.startswith(prefix):
                             result.folder = folder
-                        results.extend(folder_results)
+                            results.append(result)
+                if self._browse_folder is None:
                     # FTS results: rank by relevance; otherwise most recently modified.
                     if any(result.rank != 0.0 for result in results):
                         results.sort(key=lambda result: result.rank)
                     else:
                         results.sort(key=lambda result: result.file_mtime, reverse=True)
-
-            tags_set: set[str] = set()
-            for db in scoped_dbs.values():
-                try:
-                    tags_set.update(db.get_all_tags())
-                except Exception:
-                    continue
-            tags = sorted(tags_set)
         except Exception:
             results = []
-            tags = []
-        self.signals.results_ready.emit(results, tags, self._gen)
+        self.signals.results_ready.emit(results, self._gen)
+
+
+class _SummaryWorkerSignals(QObject):
+    ready = Signal(object, int)  # (LibrarySummary, generation)
+
+
+class _SummaryWorker(QRunnable):
+    """Gather the sidebar's counts, tags and (optionally) folder trees."""
+
+    def __init__(
+        self, dbs: dict, scope: Path | None, with_trees: bool, gen: int
+    ) -> None:
+        super().__init__()
+        self.signals = _SummaryWorkerSignals()
+        self._dbs = dbs
+        self._scope = scope
+        self._with_trees = with_trees
+        self._gen = gen
+
+    def run(self) -> None:
+        try:
+            summary = summarize_library(
+                self._dbs, self._scope, with_trees=self._with_trees
+            )
+        except Exception:
+            summary = LibrarySummary(trees={} if self._with_trees else None)
+        self.signals.ready.emit(summary, self._gen)
 
 
 # ---------------------------------------------------------------------------
@@ -759,6 +789,11 @@ class MainWindow(QMainWindow):
         self._search_gen: int = 0  # incremented per dispatch; workers check this
         self._pending_select: str | None = None  # rel_path to auto-select after search
 
+        # Sidebar counts. Folder trees are only regathered when the library
+        # changes; the flag survives a newer request that did not ask for them.
+        self._summary_gen: int = 0
+        self._summary_trees_pending = True
+
         # Async query loading state. Rapid list navigation is debounced so only
         # the row where the user settles performs disk and database I/O.
         self._load_gen: int = 0
@@ -1036,7 +1071,7 @@ class MainWindow(QMainWindow):
         self._sidebar.tag_selected.connect(self._on_tag_selected)
         self._sidebar.favorites_selected.connect(self._on_favorites_selected)
         self._sidebar.recent_selected.connect(self._on_recent_selected)
-        self._sidebar.set_folders(cfg.get_known_folders(), None)
+        self._sidebar.set_folders(cfg.get_known_folders())
 
         # Address and command bars span the window above the three panels.
         self._search_bar = SearchBar()
@@ -1349,7 +1384,7 @@ class MainWindow(QMainWindow):
         cfg.add_recent_project(folder)
         cfg.add_known_folder(folder)
         self._rebuild_recent_menu()
-        self._sidebar.set_folders(cfg.get_known_folders(), folder)
+        self._sidebar.set_folders(cfg.get_known_folders())
         self._reset_editor()
         self._start_index_job(_IndexWorker(db, folder), folder)
         self._sync_watchers()
@@ -1381,7 +1416,10 @@ class MainWindow(QMainWindow):
         self._watchers.clear()
 
     def _on_sidebar_folder_selected(self, folder: Path) -> None:
-        """Show *folder* without a full reindex."""
+        """Show *folder* (a library folder or a subfolder) without a reindex."""
+        if root_of(folder, self._known_dbs) is not None:
+            self._navigate(NavState("folder", folder))
+            return
         if not folder.is_dir():
             return
         if folder not in self._known_dbs:
@@ -1417,7 +1455,7 @@ class MainWindow(QMainWindow):
 
     def _on_index_finished(self, _count: int) -> None:
         self._end_index_job()
-        self._refresh_ui()
+        self._refresh_ui(library_changed=True)
 
     def _on_index_error(self, msg: str) -> None:
         self._end_index_job()
@@ -1480,10 +1518,39 @@ class MainWindow(QMainWindow):
         if not has_library:
             self._status_bar.set_no_library()
 
-    def _refresh_ui(self) -> None:
+    def _refresh_ui(self, *, library_changed: bool = False) -> None:
+        """Refresh the list and the sidebar counts for the current state.
+
+        *library_changed* also regathers the sidebar's folder trees, after
+        files were indexed, added or removed.
+        """
         self._update_content_view()
+        self._refresh_sidebar(trees=library_changed)
         if self._known_dbs:
             self._do_search()
+
+    def _refresh_sidebar(self, *, trees: bool = False) -> None:
+        """Gather the sidebar's counts (and folder trees) off the GUI thread."""
+        self._summary_trees_pending = self._summary_trees_pending or trees
+        self._summary_gen += 1
+        if not self._known_dbs:
+            self._sidebar.set_summary(None)
+            return
+        worker = _SummaryWorker(
+            dict(self._known_dbs),
+            self._nav.current.folder,
+            self._summary_trees_pending,
+            self._summary_gen,
+        )
+        worker.signals.ready.connect(self._on_summary_ready)
+        QThreadPool.globalInstance().start(worker)
+
+    def _on_summary_ready(self, summary: LibrarySummary, gen: int) -> None:
+        if gen != self._summary_gen:
+            return  # superseded by a newer request
+        if summary.trees is not None:
+            self._summary_trees_pending = False
+        self._sidebar.set_summary(summary)
 
     def _do_search(self) -> None:
         """Dispatch the current state's search; discard results if superseded."""
@@ -1503,12 +1570,9 @@ class MainWindow(QMainWindow):
         worker.signals.results_ready.connect(self._on_search_results)
         QThreadPool.globalInstance().start(worker)
 
-    def _on_search_results(self, results: list, tags: list[str], gen: int) -> None:
+    def _on_search_results(self, results: list, gen: int) -> None:
         if gen != self._search_gen:
             return  # stale result from a superseded search
-        self._sidebar.set_tags(tags)
-        # The tag list was just rebuilt; highlight the current tag again.
-        self._sidebar.show_state(self._nav.current)
         self._query_list.set_results(results)
         if not results:
             self._reset_editor()
@@ -1694,7 +1758,13 @@ class MainWindow(QMainWindow):
             track_access,
         )
         worker.signals.finished.connect(self._on_query_loaded)
+        if track_access:
+            # Opening a query puts it in Recent; its count may have changed.
+            worker.signals.finished.connect(self._on_access_tracked)
         QThreadPool.globalInstance().start(worker)
+
+    def _on_access_tracked(self, _payload: object, _gen: int) -> None:
+        self._refresh_sidebar()
 
     def _on_query_loaded(self, payload: tuple, gen: int) -> None:
         if gen != self._load_gen:
@@ -1826,7 +1896,7 @@ class MainWindow(QMainWindow):
                 pass
 
         self._rebuild_recent_menu()
-        self._sidebar.set_folders(cfg.get_known_folders(), None)
+        self._sidebar.set_folders(cfg.get_known_folders())
         if self._folder == folder:
             self._folder = None
             self._db = None
@@ -1834,6 +1904,7 @@ class MainWindow(QMainWindow):
         if not self._known_dbs:
             self._query_list.set_results([])
 
+        self._summary_trees_pending = True
         current = self._nav.current.folder
         if current is not None and root_of(current, [folder]) is not None:
             self._navigate(NavState("all"))
@@ -1842,7 +1913,7 @@ class MainWindow(QMainWindow):
 
     def _on_folder_favorite_toggled(self, folder: Path) -> None:
         cfg.toggle_folder_favorite(folder)
-        self._sidebar.set_folders(cfg.get_known_folders(), self._folder)
+        self._sidebar.set_folders(cfg.get_known_folders())
 
     # ------------------------------------------------------------------
     # Favorites
@@ -1865,6 +1936,7 @@ class MainWindow(QMainWindow):
             self._metadata_panel.set_favorite(is_fav)
         key = "status.added_favorite" if is_fav else "status.removed_favorite"
         self._status_bar.flash(tr(key, path=result.rel_path))
+        self._refresh_sidebar()
 
     # ------------------------------------------------------------------
     # Command palette (Ctrl+K)
@@ -2005,7 +2077,7 @@ class MainWindow(QMainWindow):
         self._editor_wrapper.setStyleSheet("")
         self._edit_toggle_btn.setChecked(False)
         self._edit_toggle_btn.setText(tr("editor.btn_edit"))
-        self._refresh_ui()
+        self._refresh_ui(library_changed=True)
         self._status_bar.flash(tr("status.saved", path=self._current_result.rel_path))
 
     # ------------------------------------------------------------------
@@ -2135,6 +2207,7 @@ class MainWindow(QMainWindow):
         if updated is not None:
             db.upsert_query(updated)
         self._pending_select = path.relative_to(target_project).as_posix()
+        self._summary_trees_pending = True  # the file may be in a new subfolder
         if self._nav.current.kind == "all":
             self._refresh_ui()
         else:
@@ -2157,7 +2230,7 @@ class MainWindow(QMainWindow):
         _INDEX_POOL.start(worker)
 
     def _on_watch_sync_finished(self, _count: int) -> None:
-        self._refresh_ui()
+        self._refresh_ui(library_changed=True)
 
     # ------------------------------------------------------------------
     # System actions

@@ -13,6 +13,8 @@
 - **Sentence-case labels** — sidebar and details-panel section titles (Browse, Folders, Tags, Tables, …) are no longer written in capitals, in all three languages
 - **Editor colours and font** — new syntax colours for both themes, italic comments, and Cascadia Mono 13 px (falling back to Consolas, then the system monospace font)
 - **Three-panel window** — sidebar, query list and details panel in one resizable row; the menu bar is hidden by default (View → Show Menu Bar brings it back) and every shortcut keeps working without it. This is the second slice (F2) of the redesign
+- **Sidebar as a folder tree** — All queries, Favorites and Recent, then every library folder with its subfolders (expand with the chevron; clicking a name opens it), then the most used tags with a colour dot and "All tags" for the rest. Every row shows how many queries it holds; Recent and the tags count what is inside the folder in view. Opening a folder moved to the + next to Folders. This is the third slice (F3) of the redesign
+- **Browse subfolders** — choosing a subfolder lists only the queries under it, and search, Recent and tags stay inside it
 - **Indexing no longer opens a dialog** — progress shows in the status bar and the window stays usable
 - **Every library folder is watched** — changes on disk are picked up in all open folders, not only the one in view
 - **Theme switching reaches the tag chips** — the tag chips in the details panel kept the old theme's colours after a dark/light switch until another query was opened
@@ -26,6 +28,7 @@
 ### Tests
 - Theme tokens: both themes define the same keys, tag colours are stable across runs, and every text colour has at least 4.5:1 contrast on every background; plus a live-switch check and a guard against all-caps UI strings
 - Navigation history (back, forward, up, dropping the forward stack on a new step), layout settings, and the main window offscreen: shortcuts with the menu bar hidden, Alt+P, Alt+arrows, search history and the status bar — 268 tests
+- Sidebar: folder trees and their counts, subfolder prefixes (no `LIKE` wildcards, case kept), tag and Recent counts per folder, the summary off the UI thread, and the sidebar widget itself (rows, active row, chevron and + clicks, folded tags); in the window, a subfolder narrows the list and the tags, and opening a query updates Recent — 334 tests
 
 ## [1.0.11] - 2026-09-17
 

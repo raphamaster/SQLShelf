@@ -829,3 +829,103 @@ class TestLockIsFreeDuringExpensiveWork:
         # One clearing transaction plus one per batch — the lock is released
         # between them, so a search never waits for the whole folder.
         assert len(transactions) >= 4
+
+
+# ---------------------------------------------------------------------------
+# Sidebar counts
+# ---------------------------------------------------------------------------
+
+
+class TestSidebarCounts:
+    FILES: dict[str, list[str]] = {
+        "top.sql": ["bi"],
+        "reports/a.sql": ["bi", "finance"],
+        "reports/monthly/b.sql": ["finance", "audit"],
+        "reports_old/c.sql": ["finance"],
+        "100%_done/d.sql": ["bi"],
+    }
+
+    def _db(self, project_dir: Path) -> IndexDB:
+        queries = []
+        for rel_path, tags in self.FILES.items():
+            path = project_dir / rel_path
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("SELECT 1", encoding="utf-8")
+            queries.append(Query(path=path, title=rel_path, body="SELECT 1", tags=tags))
+        db = IndexDB(project_dir)
+        db.index_all(queries)
+        return db
+
+    def test_get_rel_paths_lists_every_file(self, project_dir: Path) -> None:
+        db = self._db(project_dir)
+        assert sorted(db.get_rel_paths()) == sorted(self.FILES)
+        db.close()
+
+    def test_tag_counts_most_used_first(self, project_dir: Path) -> None:
+        db = self._db(project_dir)
+        counts = db.get_tag_counts()
+        db.close()
+        assert counts == [("bi", 3), ("finance", 3), ("audit", 1)]
+
+    @pytest.mark.parametrize(
+        ("prefix", "expected"),
+        [
+            ("reports/", [("finance", 2), ("audit", 1), ("bi", 1)]),
+            ("reports/monthly/", [("audit", 1), ("finance", 1)]),
+            ("reports_old/", [("finance", 1)]),
+            # % and _ are literal characters, not LIKE wildcards.
+            ("100%_done/", [("bi", 1)]),
+            ("REPORTS/", []),
+            ("missing/", []),
+        ],
+    )
+    def test_tag_counts_under_a_prefix(
+        self, project_dir: Path, prefix: str, expected: list[tuple[str, int]]
+    ) -> None:
+        db = self._db(project_dir)
+        counts = db.get_tag_counts(prefix)
+        db.close()
+        assert counts == expected
+
+    def test_tag_counts_skip_tags_of_removed_files(self, project_dir: Path) -> None:
+        db = self._db(project_dir)
+        db.remove_file(project_dir / "reports" / "monthly" / "b.sql")
+        counts = dict(db.get_tag_counts())
+        db.close()
+        assert "audit" not in counts
+        assert counts["finance"] == 2
+
+    def test_count_favorites(self, project_dir: Path) -> None:
+        db = self._db(project_dir)
+        assert db.count_favorites() == 0
+        db.toggle_favorite("top.sql")
+        db.toggle_favorite("reports/a.sql")
+        assert db.count_favorites() == 2
+        # A favorite whose file left the index is not counted.
+        db.remove_file(project_dir / "top.sql")
+        assert db.count_favorites() == 1
+        db.close()
+
+    def test_count_recent_matches_get_recently_viewed(self, project_dir: Path) -> None:
+        db = self._db(project_dir)
+        for rel_path in ("top.sql", "reports/a.sql", "reports/monthly/b.sql"):
+            db.add_recently_viewed(rel_path)
+        for prefix in ("", "reports/", "reports/monthly/", "reports_old/"):
+            assert db.count_recent(prefix=prefix) == len(
+                db.get_recently_viewed(prefix=prefix)
+            )
+        assert db.count_recent() == 3
+        assert db.count_recent(prefix="reports/") == 2
+        assert db.count_recent(limit=1) == 1
+        db.close()
+
+    def test_recently_viewed_under_a_prefix(self, project_dir: Path) -> None:
+        db = self._db(project_dir)
+        for rel_path in ("reports/a.sql", "top.sql", "reports/monthly/b.sql"):
+            db.add_recently_viewed(rel_path)
+        results = db.get_recently_viewed(prefix="reports/")
+        db.close()
+        assert [r.rel_path for r in results] == [
+            "reports/monthly/b.sql",
+            "reports/a.sql",
+        ]

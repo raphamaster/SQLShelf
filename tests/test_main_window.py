@@ -170,3 +170,42 @@ def test_flash_replaces_the_counts_then_restores_them(
     status.flash("Saved: sales.sql", timeout=50)
     assert status._counts.text() == "Saved: sales.sql"
     _wait_until(lambda: status._counts.text().startswith("2 queries"))
+
+
+def _sidebar_count(win: MainWindow, kind: str, value: object) -> object:
+    item = win._sidebar._items.get((kind, value))
+    return None if item is None else item.data(0, Qt.ItemDataRole.UserRole + 2)
+
+
+def test_sidebar_shows_the_folder_tree_with_counts(
+    window: MainWindow, library: Path
+) -> None:
+    _load(window, library)
+    _wait_until(lambda: _sidebar_count(window, "folder", library / "reports") == 1)
+    assert _sidebar_count(window, "view", "all") == 2
+    assert _sidebar_count(window, "folder", library) == 2
+    assert _sidebar_count(window, "tag", "bi") == 1
+
+
+def test_a_subfolder_narrows_the_list_and_the_tags(
+    window: MainWindow, library: Path
+) -> None:
+    _load(window, library)
+    _wait_until(lambda: _sidebar_count(window, "folder", library / "reports") == 1)
+
+    window._sidebar.folder_selected.emit(library / "reports")
+    assert window._nav.current == NavState("folder", library / "reports")
+    _wait_until(lambda: window._query_list.count() == 1)
+    assert len(window._known_dbs) == 1  # a subfolder is not a new library
+    # Tags follow the folder in view; "bi" only tags a file outside it.
+    _wait_until(lambda: _sidebar_count(window, "tag", "bi") is None)
+    assert _sidebar_count(window, "view", "all") == 2
+
+
+def test_opening_a_query_updates_the_recent_count(
+    window: MainWindow, library: Path
+) -> None:
+    _load(window, library)
+    _wait_until(lambda: _sidebar_count(window, "view", "recent") == 0)
+    window._query_list.select_by_rel_path("sales.sql")
+    _wait_until(lambda: _sidebar_count(window, "view", "recent") == 1)

@@ -22,6 +22,10 @@ from .models import AccessStat, Query, SearchResult
 _WRITE_BATCH = 20
 _BATCH_BUDGET_MS = 40.0
 
+# Files of ``q`` under a rel_path prefix, bound twice. substr() rather than
+# LIKE, which treats % and _ in folder names as wildcards and ignores case.
+_UNDER_PREFIX = "substr(q.rel_path, 1, length(?)) = ?"
+
 
 @dataclass
 class IndexStats:
@@ -450,6 +454,35 @@ class IndexDB:
                 ).fetchall()
             ]
 
+    def get_rel_paths(self) -> list[str]:
+        """Every indexed file's path relative to the project root."""
+        with self._read_lock:
+            return [
+                r[0]
+                for r in self._read_conn.execute(
+                    "SELECT rel_path FROM queries"
+                ).fetchall()
+            ]
+
+    def get_tag_counts(self, prefix: str = "") -> list[tuple[str, int]]:
+        """(tag, queries using it) for files under *prefix*, most used first.
+
+        *prefix* is a ``rel_path`` prefix such as ``"reports/"``; "" counts
+        the whole project.
+        """
+        with self._read_lock:
+            rows = self._read_conn.execute(
+                "SELECT t.name, COUNT(*) AS cnt"
+                " FROM query_tags qt"
+                " JOIN tags t ON t.id = qt.tag_id"
+                " JOIN queries q ON q.id = qt.query_id"
+                f" WHERE {_UNDER_PREFIX}"
+                " GROUP BY t.name"
+                " ORDER BY cnt DESC, t.name",
+                (prefix, prefix),
+            ).fetchall()
+        return [(name, cnt) for name, cnt in rows]
+
     def get_stats(self) -> IndexStats:
         """Return aggregated statistics for this project index."""
         with self._read_lock:
@@ -564,6 +597,14 @@ class IndexDB:
             ).fetchall()
             return _rows_to_results_locked(self._read_conn, rows)
 
+    def count_favorites(self) -> int:
+        """Favorited queries that are still in the index."""
+        with self._read_lock:
+            return self._read_conn.execute(
+                "SELECT COUNT(*) FROM favorites f"
+                " JOIN queries q ON q.rel_path = f.rel_path"
+            ).fetchone()[0]
+
     # ------------------------------------------------------------------
     # Public API — recently viewed
     # ------------------------------------------------------------------
@@ -587,7 +628,10 @@ class IndexDB:
                 ")"
             )
 
-    def get_recently_viewed(self, limit: int = 20) -> list[SearchResult]:
+    def get_recently_viewed(
+        self, limit: int = 20, prefix: str = ""
+    ) -> list[SearchResult]:
+        """Recently viewed queries under *prefix* ("" = the whole project)."""
         from .search import _IS_FAV_SUBQ, _TABLES_SUBQ
 
         with self._read_lock:
@@ -596,11 +640,25 @@ class IndexDB:
                 f" q.updated_at, {_TABLES_SUBQ}, {_IS_FAV_SUBQ}, q.file_mtime"
                 " FROM queries q"
                 " JOIN recently_viewed rv ON rv.rel_path = q.rel_path"
+                f" WHERE {_UNDER_PREFIX}"
                 " ORDER BY rv.viewed_at DESC, rv.rowid DESC"
                 " LIMIT ?",
-                (limit,),
+                (prefix, prefix, limit),
             ).fetchall()
             return _rows_to_results_locked(self._read_conn, rows)
+
+    def count_recent(self, limit: int = 20, prefix: str = "") -> int:
+        """How many queries :meth:`get_recently_viewed` would return."""
+        with self._read_lock:
+            return self._read_conn.execute(
+                "SELECT COUNT(*) FROM ("
+                "  SELECT 1 FROM queries q"
+                "  JOIN recently_viewed rv ON rv.rel_path = q.rel_path"
+                f"  WHERE {_UNDER_PREFIX}"
+                "  LIMIT ?"
+                ")",
+                (prefix, prefix, limit),
+            ).fetchone()[0]
 
     # ------------------------------------------------------------------
     # Public API — access log / reports

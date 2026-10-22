@@ -148,9 +148,6 @@ def app_stylesheet(palette: Mapping[str, str]) -> str:
         QDialog {{
             background-color: {c["panel"]};
         }}
-        QWidget#BrowseWidget, QWidget#TitleRow {{
-            background-color: transparent;
-        }}
         QSplitter::handle {{
             background-color: {c["border"]};
             width: 1px;
@@ -394,39 +391,14 @@ def app_stylesheet(palette: Mapping[str, str]) -> str:
             max-height: 24px;
         }}
 
-        QPushButton#NavButton {{
+        QTreeWidget#SidebarTree {{
             background: transparent;
             border: none;
-            border-radius: {r}px;
-            text-align: left;
-            padding: 6px 8px 6px 12px;
-            color: {c["text2"]};
+            outline: none;
         }}
-        QPushButton#NavButton:hover {{
-            background-color: {c["hover"]};
-            color: {c["text"]};
-        }}
-        QPushButton#NavButton[active="true"] {{
-            background-color: {c["sel_soft"]};
-            color: {c["text"]};
-            font-weight: 600;
-        }}
-        QToolButton#SectionHeader {{
+        QTreeWidget#SidebarTree::item, QTreeWidget#SidebarTree::branch {{
             background: transparent;
             border: none;
-            color: {c["text3"]};
-            font-size: {_tk.FONT_PX_SMALL}px;
-            text-align: left;
-            padding: 4px 4px 2px 0px;
-        }}
-        QToolButton#SectionHeader:hover {{
-            color: {c["text2"]};
-            background-color: {c["hover"]};
-            border-radius: {r_sm}px;
-        }}
-        QLabel#SectionLabel {{
-            color: {c["text3"]};
-            font-size: {_tk.FONT_PX_SMALL}px;
         }}
         QPushButton#OpenFolderBtn {{
             padding: 6px 10px;

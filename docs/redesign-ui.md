@@ -259,7 +259,7 @@ Uma por vez. Cada fatia termina com:
 - **Testes:** `NavHistory` (voltar, avançar, acima, descartar o "futuro" ao navegar); atalhos funcionando com a QMenuBar oculta.
 
 ### F3 — Sidebar
-- [ ] **Entrega:** árvore, subpastas, contagens, tags com cor.
+- [x] **Entrega:** árvore, subpastas, contagens, tags com cor.
 - **Testes:** montagem da árvore de subpastas; consultas de contagem no `index_db`.
 
 ### F4 — Lista
