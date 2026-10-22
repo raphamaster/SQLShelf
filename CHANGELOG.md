@@ -1,5 +1,19 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+- **New theme, without qt-material** — the interface now uses Qt's Fusion style with a palette and stylesheet generated from design tokens (`sqlshelf/ui/tokens.py` → `sqlshelf/ui/theme.py`). Buttons are no longer upper case or outlined in green; green is kept for selection, focus and the primary action. This is the first slice (F1) of the redesign in `docs/redesign-ui.md`
+- **Sentence-case labels** — sidebar and details-panel section titles (Browse, Folders, Tags, Tables, …) are no longer written in capitals, in all three languages
+- **Editor colours and font** — new syntax colours for both themes, italic comments, and Cascadia Mono 13 px (falling back to Consolas, then the system monospace font)
+- **Theme switching reaches the tag chips** — the tag chips in the details panel kept the old theme's colours after a dark/light switch until another query was opened
+
+### Removed
+- `qt-material` dependency — one fewer package to install and bundle
+
+### Tests
+- Theme tokens: both themes define the same keys, tag colours are stable across runs, and every text colour has at least 4.5:1 contrast on every background; plus a live-switch check and a guard against all-caps UI strings — 218 tests
+
 ## [1.0.11] - 2026-09-17
 
 ### Changed

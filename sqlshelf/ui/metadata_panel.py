@@ -21,9 +21,9 @@ from PySide6.QtWidgets import (
 )
 
 from ..core.i18n import tr
+from . import tokens as _tk
 from .tag_widget import FlowLayout, TagDisplayWidget, TagInputWidget
-from .theme import tokens as _tk
-from .theme.tokens import (
+from .tokens import (
     ACCENT,
     STAR_ACTIVE,
     STAR_HOVER,
@@ -429,6 +429,8 @@ class MetadataPanel(QWidget):
         is_fav = self._star_btn.text() == "★"
         self.set_favorite(is_fav)
         self._rebuild_object_chips()
+        self._tags_display.refresh_theme()
+        self._tags_input.refresh_theme()
         # Refresh section labels
         from PySide6.QtWidgets import QLabel
 

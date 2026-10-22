@@ -137,7 +137,7 @@ The file stays 100% valid SQL. Open it in SSMS, run it, edit it — SQLShelf wil
 | Layer | Technology |
 |-------|-----------|
 | Language | Python 3.12 |
-| UI | PySide6 (Qt 6) + qt-material |
+| UI | PySide6 (Qt 6), Fusion style + QPalette + QSS generated from design tokens |
 | SQL Editor | `QPlainTextEdit` + `QSyntaxHighlighter` |
 | Search index | SQLite FTS5 (stdlib `sqlite3`) |
 | Metadata | YAML frontmatter via PyYAML |

@@ -4,7 +4,6 @@ import re
 
 from PySide6.QtCore import QRect, QRegularExpression, QSize, Qt, QTimer
 from PySide6.QtGui import (
-    QColor,
     QPainter,
     QSyntaxHighlighter,
     QTextCursor,
@@ -12,15 +11,8 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import QPlainTextEdit, QTextEdit, QWidget
 
-from .theme import tokens as _tk
-from .theme.tokens import (
-    EDITOR_LINE_HL,
-    EDITOR_OCCURRENCE_BG,
-    EDITOR_OCCURRENCE_FG,
-    GUTTER_BG,
-    GUTTER_NUM_CURRENT,
-    GUTTER_NUM_INACTIVE,
-)
+from . import tokens as _tk
+from .theme import qcolor
 
 
 class _LineNumberArea(QWidget):
@@ -42,12 +34,12 @@ class CodeEditor(QPlainTextEdit):
     and the active line is always highlighted.
     """
 
-    _GUTTER_BG = QColor(GUTTER_BG)
-    _NUM_INACTIVE = QColor(GUTTER_NUM_INACTIVE)
-    _NUM_CURRENT = QColor(GUTTER_NUM_CURRENT)
-    _LINE_HIGHLIGHT = QColor(EDITOR_LINE_HL)
-    _OCCURRENCE_BG = QColor(EDITOR_OCCURRENCE_BG)
-    _OCCURRENCE_FG = QColor(EDITOR_OCCURRENCE_FG)
+    _GUTTER_BG = qcolor(_tk.color("code"))
+    _NUM_INACTIVE = qcolor(_tk.color("line_no"))
+    _NUM_CURRENT = qcolor(_tk.color("text2"))
+    _LINE_HIGHLIGHT = qcolor(_tk.color("cur_line"))
+    _OCCURRENCE_BG = qcolor(_tk.color("mark"))
+    _OCCURRENCE_FG = qcolor(_tk.color("text"))
 
     # Minimum token length to trigger occurrence highlighting.
     _MIN_OCCURRENCE_LEN = 2
@@ -189,12 +181,12 @@ class CodeEditor(QPlainTextEdit):
     # ------------------------------------------------------------------
 
     def refresh_theme(self) -> None:
-        CodeEditor._GUTTER_BG = QColor(_tk.GUTTER_BG)
-        CodeEditor._NUM_INACTIVE = QColor(_tk.GUTTER_NUM_INACTIVE)
-        CodeEditor._NUM_CURRENT = QColor(_tk.GUTTER_NUM_CURRENT)
-        CodeEditor._LINE_HIGHLIGHT = QColor(_tk.EDITOR_LINE_HL)
-        CodeEditor._OCCURRENCE_BG = QColor(_tk.EDITOR_OCCURRENCE_BG)
-        CodeEditor._OCCURRENCE_FG = QColor(_tk.EDITOR_OCCURRENCE_FG)
+        CodeEditor._GUTTER_BG = qcolor(_tk.color("code"))
+        CodeEditor._NUM_INACTIVE = qcolor(_tk.color("line_no"))
+        CodeEditor._NUM_CURRENT = qcolor(_tk.color("text2"))
+        CodeEditor._LINE_HIGHLIGHT = qcolor(_tk.color("cur_line"))
+        CodeEditor._OCCURRENCE_BG = qcolor(_tk.color("mark"))
+        CodeEditor._OCCURRENCE_FG = qcolor(_tk.color("text"))
         if self._syntax_highlighter is not None and not self._large_document:
             self._syntax_highlighter.setDocument(self.document())
         self._recompute_occurrences()

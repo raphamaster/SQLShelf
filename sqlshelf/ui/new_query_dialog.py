@@ -23,8 +23,8 @@ from PySide6.QtWidgets import (
 
 from ..core.frontmatter import write_sql_file
 from ..core.i18n import tr
+from . import tokens as _tk
 from .tag_widget import TagInputWidget
-from .theme import tokens as _tk
 
 
 def _safe_filename(title: str) -> str:

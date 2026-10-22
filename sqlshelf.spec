@@ -3,7 +3,6 @@
 # Run: pyinstaller sqlshelf.spec
 
 from pathlib import Path
-from PyInstaller.utils.hooks import collect_data_files
 
 block_cipher = None
 
@@ -12,7 +11,6 @@ datas = [
     ("images", "images"),
     ("locales", "locales"),
 ]
-datas += collect_data_files("qt_material")
 
 a = Analysis(
     ["main.py"],
@@ -27,7 +25,6 @@ a = Analysis(
         "yaml",
         "watchdog.observers",
         "watchdog.observers.polling",
-        "qt_material",
     ],
     hookspath=[],
     hooksconfig={},

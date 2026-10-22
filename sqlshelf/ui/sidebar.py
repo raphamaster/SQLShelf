@@ -19,8 +19,8 @@ from PySide6.QtWidgets import (
 )
 
 from ..core.i18n import tr
-from .theme import tokens as _tk
-from .theme.tokens import TEXT_TERTIARY
+from . import tokens as _tk
+from .tokens import TEXT_TERTIARY
 
 _ROLE_PATH = Qt.ItemDataRole.UserRole
 _IMAGES = Path(__file__).parent.parent.parent / "images"

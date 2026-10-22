@@ -10,12 +10,14 @@ SQLShelf é um gerenciador desktop open-source de consultas SQL: organiza, descr
 
 Já existe um **esqueleto funcional validado** com: janela PySide6, sidebar, lista de queries, editor com highlight SQL via `QSyntaxHighlighter`, e scanner de pasta que lê frontmatter YAML (`sqlshelf/core/models.py`, `frontmatter.py`, `scanner.py`, `sqlshelf/ui/highlighter.py`, `main_window.py`, `main.py`). Isso é o item 1 do backlog da Fase 1 — **já entregue**. Comece pelo item 2.
 
+**Redesenho de UI:** trilha aprovada e separada do backlog, especificada em `docs/redesign-ui.md` (tokens, tema, fatias F1…). Consulte-o antes de mexer em qualquer coisa visual — cores, fontes e raios vêm de `ui/tokens.py`, nunca de valores soltos no widget.
+
 ## Stack
 
 | Camada | Tecnologia |
 |---|---|
 | Linguagem | Python 3.12 |
-| UI | PySide6 (Qt 6) + `qt-material` |
+| UI | PySide6 (Qt 6), estilo Fusion + `QPalette` + QSS gerado a partir de tokens (`ui/tokens.py` → `ui/theme.py`) |
 | Editor SQL | `QPlainTextEdit` + `QSyntaxHighlighter` |
 | Índice | SQLite + FTS5 via `sqlite3` (stdlib) |
 | Frontmatter | `PyYAML` |
@@ -48,6 +50,8 @@ sqlshelf/
     config.py                # ~/.sqlshelf/config.json
     schema.sql               # DDL do índice
   ui/
+    tokens.py              # design tokens (cores, fontes, raios) — sem Qt
+    theme.py               # Fusion + QPalette + QSS a partir dos tokens
     main_window.py
     highlighter.py
     sidebar.py

@@ -1,0 +1,476 @@
+"""Qt side of the theme: Fusion style, QPalette, fonts and the global QSS.
+
+Everything here is generated from the design tokens in ``tokens.py``;
+``apply_theme`` is the single entry point, at startup and on a live switch.
+"""
+
+from __future__ import annotations
+
+import re
+import sys
+from collections.abc import Mapping
+
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor, QFont, QFontDatabase, QPalette
+from PySide6.QtWidgets import QApplication
+
+from . import tokens as _tk
+
+_RGBA_RE = re.compile(
+    r"rgba\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*([\d.]+)\s*\)"
+)
+
+
+def _rgba(value: str) -> tuple[int, int, int, int] | None:
+    m = _RGBA_RE.fullmatch(value.strip())
+    if m is None:
+        return None
+    alpha = round(float(m.group(4)) * 255)
+    return int(m.group(1)), int(m.group(2)), int(m.group(3)), alpha
+
+
+def qss_color(value: str) -> str:
+    """Return token *value* as QSS expects it: rgba() alpha in 0–255, not 0–1."""
+    rgba = _rgba(value)
+    if rgba is None:
+        return value
+    r, g, b, a = rgba
+    return f"rgba({r}, {g}, {b}, {a})"
+
+
+def qcolor(value: str) -> QColor:
+    """Build a QColor from token *value*; QColor cannot parse CSS rgba()."""
+    rgba = _rgba(value)
+    if rgba is None:
+        return QColor(value)
+    r, g, b, a = rgba
+    return QColor(r, g, b, a)
+
+
+def qss(key: str) -> str:
+    """Active token *key*, ready to interpolate into a widget's stylesheet."""
+    return qss_color(_tk.color(key))
+
+
+# ---------------------------------------------------------------------------
+# Fonts
+# ---------------------------------------------------------------------------
+
+
+def ui_font() -> QFont:
+    """Application font: Segoe UI Variable or Segoe UI on Windows, else the system font."""
+    font = QFontDatabase.systemFont(QFontDatabase.SystemFont.GeneralFont)
+    if sys.platform == "win32":
+        installed = set(QFontDatabase.families())
+        for family in _tk.UI_FONT_FAMILIES_WINDOWS:
+            if family in installed:
+                font.setFamily(family)
+                break
+    font.setPixelSize(_tk.FONT_PX_BASE)
+    return font
+
+
+def mono_font(pixel_size: int = _tk.FONT_PX_CODE) -> QFont:
+    """Code font: Cascadia Mono, then Consolas, then the system fixed-width font."""
+    installed = set(QFontDatabase.families())
+    for family in _tk.MONO_FONT_FAMILIES:
+        if family in installed:
+            font = QFont(family)
+            break
+    else:
+        font = QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont)
+    font.setStyleHint(QFont.StyleHint.Monospace)
+    font.setPixelSize(pixel_size)
+    return font
+
+
+# ---------------------------------------------------------------------------
+# Palette
+# ---------------------------------------------------------------------------
+
+_ROLE = QPalette.ColorRole
+
+_PALETTE_ROLES: dict[QPalette.ColorRole, str] = {
+    _ROLE.Window: "chrome",
+    _ROLE.WindowText: "text",
+    _ROLE.Base: "bg",
+    _ROLE.AlternateBase: "panel",
+    _ROLE.Text: "text",
+    _ROLE.PlaceholderText: "text3",
+    _ROLE.Button: "field",
+    _ROLE.ButtonText: "text",
+    _ROLE.BrightText: "text",
+    _ROLE.Light: "border_strong",
+    _ROLE.Midlight: "border",
+    _ROLE.Mid: "border_strong",
+    _ROLE.Dark: "border",
+    _ROLE.Shadow: "chrome",
+    _ROLE.Highlight: "sel",
+    _ROLE.HighlightedText: "text",
+    _ROLE.Link: "accent_text",
+    _ROLE.LinkVisited: "accent_text",
+    _ROLE.ToolTipBase: "panel",
+    _ROLE.ToolTipText: "text",
+    _ROLE.Accent: "accent",
+}
+
+
+def build_palette(palette: Mapping[str, str]) -> QPalette:
+    """QPalette for Fusion, so unstyled widgets already match the tokens."""
+    pal = QPalette()
+    for role, key in _PALETTE_ROLES.items():
+        pal.setColor(role, qcolor(palette[key]))
+    disabled = QPalette.ColorGroup.Disabled
+    for role in (_ROLE.WindowText, _ROLE.Text, _ROLE.ButtonText):
+        pal.setColor(disabled, role, qcolor(palette["text3"]))
+    return pal
+
+
+# ---------------------------------------------------------------------------
+# Global QSS
+# ---------------------------------------------------------------------------
+
+
+def app_stylesheet(palette: Mapping[str, str]) -> str:
+    """Global QSS for *palette*, scoped by widget class and objectName.
+
+    Visual rules from docs/redesign-ui.md: no upper-case text, secondary buttons
+    are outline (``border_strong``) or ghost, green only for selection, focus and
+    the primary action (``primary="true"``), and focus is an ``accent`` border
+    because QSS has no box-shadow.
+    """
+    c = {key: qss_color(value) for key, value in palette.items()}
+    r, r_sm = _tk.RADIUS, _tk.RADIUS_SM
+    return f"""
+        QMainWindow, QSplitter, QWidget#SidebarWidget {{
+            background-color: {c["chrome"]};
+        }}
+        QDialog {{
+            background-color: {c["panel"]};
+        }}
+        QWidget#BrowseWidget, QWidget#TitleRow {{
+            background-color: transparent;
+        }}
+        QSplitter::handle {{
+            background-color: {c["border"]};
+            width: 1px;
+            height: 1px;
+        }}
+        QToolTip {{
+            background-color: {c["panel"]};
+            color: {c["text"]};
+            border: 1px solid {c["border_strong"]};
+            border-radius: {r_sm}px;
+            padding: 4px 6px;
+        }}
+
+        QPushButton {{
+            background-color: transparent;
+            color: {c["text"]};
+            border: 1px solid {c["border_strong"]};
+            border-radius: {r}px;
+            padding: 5px 14px;
+        }}
+        QPushButton:hover {{
+            background-color: {c["hover"]};
+        }}
+        QPushButton:pressed, QPushButton:checked {{
+            background-color: {c["sel_soft"]};
+        }}
+        QPushButton:disabled {{
+            color: {c["text3"]};
+            border-color: {c["border"]};
+        }}
+        QPushButton[primary="true"] {{
+            background-color: {c["accent"]};
+            color: {c["accent_ink"]};
+            border-color: {c["accent"]};
+            font-weight: 600;
+        }}
+        QToolButton {{
+            background-color: transparent;
+            color: {c["text"]};
+            border: none;
+            border-radius: {r}px;
+        }}
+        QToolButton:hover {{
+            background-color: {c["hover"]};
+        }}
+        QToolButton:pressed, QToolButton:checked {{
+            background-color: {c["sel_soft"]};
+        }}
+
+        QLineEdit, QAbstractSpinBox {{
+            background-color: {c["field"]};
+            color: {c["text"]};
+            border: 1px solid {c["border_strong"]};
+            border-radius: {r}px;
+            padding: 5px 8px;
+            selection-background-color: {c["mark"]};
+            selection-color: {c["text"]};
+        }}
+        QPlainTextEdit, QTextEdit {{
+            background-color: {c["field"]};
+            color: {c["text"]};
+            border: 1px solid {c["border_strong"]};
+            border-radius: {r}px;
+            selection-background-color: {c["mark"]};
+            selection-color: {c["text"]};
+        }}
+        QLineEdit:focus, QAbstractSpinBox:focus,
+        QPlainTextEdit:focus, QTextEdit:focus {{
+            border-color: {c["accent"]};
+        }}
+        QLineEdit:disabled, QAbstractSpinBox:disabled {{
+            color: {c["text3"]};
+        }}
+        CodeEditor {{
+            background-color: {c["code"]};
+            border: none;
+            border-radius: 0px;
+        }}
+
+        QComboBox {{
+            background-color: {c["field"]};
+            color: {c["text"]};
+            border: 1px solid {c["border_strong"]};
+            border-radius: {r}px;
+            padding: 4px 8px;
+            min-height: 22px;
+        }}
+        QComboBox:focus, QComboBox:on {{
+            border-color: {c["accent"]};
+        }}
+        QComboBox::drop-down {{
+            subcontrol-origin: padding;
+            subcontrol-position: center right;
+            width: 22px;
+            border: none;
+        }}
+        QComboBox QAbstractItemView {{
+            background-color: {c["panel"]};
+            color: {c["text"]};
+            border: 1px solid {c["border_strong"]};
+            selection-background-color: {c["sel"]};
+            selection-color: {c["text"]};
+            outline: none;
+        }}
+        QComboBox QAbstractItemView::item {{
+            min-height: 24px;
+            padding: 4px 8px;
+        }}
+        QComboBox QAbstractItemView::item:hover {{
+            background-color: {c["sel_soft"]};
+        }}
+        QComboBox QAbstractItemView::item:selected {{
+            background-color: {c["sel"]};
+        }}
+
+        QMenuBar {{
+            background-color: {c["chrome"]};
+            color: {c["text"]};
+            border-bottom: 1px solid {c["border"]};
+        }}
+        QMenuBar::item {{
+            background: transparent;
+            padding: 4px 8px;
+            border-radius: {r_sm}px;
+        }}
+        QMenuBar::item:selected {{
+            background-color: {c["hover"]};
+        }}
+        QMenuBar::item:pressed {{
+            background-color: {c["sel_soft"]};
+        }}
+        QMenu {{
+            background-color: {c["panel"]};
+            color: {c["text"]};
+            border: 1px solid {c["border_strong"]};
+            padding: 4px;
+        }}
+        QMenu::item {{
+            padding: 6px 24px 6px 28px;
+            border-radius: {r_sm}px;
+        }}
+        QMenu::item:selected {{
+            background-color: {c["sel_soft"]};
+        }}
+        QMenu::item:disabled {{
+            color: {c["text3"]};
+        }}
+        QMenu::indicator {{
+            left: 8px;
+            width: 14px;
+            height: 14px;
+        }}
+        QMenu::separator {{
+            height: 1px;
+            background-color: {c["border"]};
+            margin: 4px 8px;
+        }}
+
+        QListWidget {{
+            background-color: {c["bg"]};
+            border: 1px solid {c["border"]};
+            outline: none;
+        }}
+        QListWidget::item {{
+            color: {c["text"]};
+            padding: 6px 8px;
+            border-radius: {r}px;
+        }}
+        QListWidget::item:hover {{
+            background-color: {c["hover"]};
+        }}
+        QListWidget::item:selected {{
+            background-color: {c["sel"]};
+            color: {c["text"]};
+        }}
+        QHeaderView::section {{
+            background-color: {c["bg"]};
+            color: {c["text3"]};
+            border: none;
+            border-bottom: 1px solid {c["border"]};
+            padding: 4px 8px;
+        }}
+        QTableView, QTreeView {{
+            gridline-color: {c["border"]};
+        }}
+
+        QScrollBar:vertical {{
+            background: transparent;
+            width: 10px;
+            margin: 0px;
+        }}
+        QScrollBar:horizontal {{
+            background: transparent;
+            height: 10px;
+            margin: 0px;
+        }}
+        QScrollBar::handle {{
+            background-color: {c["border_strong"]};
+            border-radius: {r_sm}px;
+            margin: 2px;
+        }}
+        QScrollBar::handle:vertical {{
+            min-height: 24px;
+        }}
+        QScrollBar::handle:horizontal {{
+            min-width: 24px;
+        }}
+        QScrollBar::handle:hover {{
+            background-color: {c["text3"]};
+        }}
+        QScrollBar::add-line, QScrollBar::sub-line {{
+            width: 0px;
+            height: 0px;
+        }}
+        QScrollBar::add-page, QScrollBar::sub-page {{
+            background: transparent;
+        }}
+
+        QProgressBar {{
+            background-color: {c["field"]};
+            color: {c["text"]};
+            border: 1px solid {c["border"]};
+            border-radius: {r_sm}px;
+            text-align: center;
+        }}
+        QProgressBar::chunk {{
+            background-color: {c["accent"]};
+            border-radius: {r_sm - 1}px;
+        }}
+
+        QWidget#EditorTopSection, QWidget#MetadataPanel {{
+            background-color: {c["panel"]};
+            border-bottom: 1px solid {c["border"]};
+        }}
+        QWidget#EditorToolBar {{
+            background-color: {c["panel"]};
+        }}
+        QWidget#EditorToolBar QPushButton {{
+            padding: 2px 12px;
+            font-size: {_tk.FONT_PX_SMALL}px;
+            max-height: 24px;
+        }}
+
+        QPushButton#NavButton {{
+            background: transparent;
+            border: none;
+            border-radius: {r}px;
+            text-align: left;
+            padding: 6px 8px 6px 12px;
+            color: {c["text2"]};
+        }}
+        QPushButton#NavButton:hover {{
+            background-color: {c["hover"]};
+            color: {c["text"]};
+        }}
+        QPushButton#NavButton[active="true"] {{
+            background-color: {c["sel_soft"]};
+            color: {c["text"]};
+            font-weight: 600;
+        }}
+        QToolButton#SectionHeader {{
+            background: transparent;
+            border: none;
+            color: {c["text3"]};
+            font-size: {_tk.FONT_PX_SMALL}px;
+            text-align: left;
+            padding: 4px 4px 2px 0px;
+        }}
+        QToolButton#SectionHeader:hover {{
+            color: {c["text2"]};
+            background-color: {c["hover"]};
+            border-radius: {r_sm}px;
+        }}
+        QLabel#SectionLabel {{
+            color: {c["text3"]};
+            font-size: {_tk.FONT_PX_SMALL}px;
+        }}
+        QPushButton#OpenFolderBtn {{
+            padding: 6px 10px;
+        }}
+        QPushButton#SearchHelpBtn {{
+            color: {c["text3"]};
+            background: transparent;
+            border: none;
+            border-radius: {r_sm}px;
+            padding: 2px 4px;
+        }}
+        QPushButton#SearchHelpBtn:hover {{
+            color: {c["text"]};
+            background-color: {c["hover"]};
+        }}
+    """
+
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
+
+
+def apply_theme(app: QApplication, name: str) -> None:
+    """Apply theme *name* to the whole application.
+
+    Safe to call again for a live switch; widgets that build their own
+    stylesheets still need their ``refresh_theme()`` afterwards.
+    """
+    _tk.set_active_palette(name)
+    palette = _tk.THEMES[_tk.ACTIVE_THEME]
+
+    # Qt 6.8+: lets the native title bar follow the app theme, not the OS one.
+    hints = app.styleHints()
+    if hasattr(hints, "setColorScheme"):
+        hints.setColorScheme(
+            Qt.ColorScheme.Light if _tk.ACTIVE_THEME == "light" else Qt.ColorScheme.Dark
+        )
+
+    # Once a stylesheet is set, style() is Qt's QStyleSheetStyle wrapper with an
+    # empty name() and Fusion already underneath; setting it again would only
+    # repolish every widget on each live switch.
+    if app.style().name().lower() not in ("fusion", ""):
+        app.setStyle("Fusion")
+    app.setPalette(build_palette(palette))
+    app.setFont(ui_font())
+    app.setStyleSheet(app_stylesheet(palette))

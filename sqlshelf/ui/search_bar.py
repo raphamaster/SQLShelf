@@ -5,8 +5,8 @@ from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QHBoxLayout, QLineEdit, QWidget
 
 from ..core.i18n import tr
-from .theme import tokens as _tk
-from .theme.tokens import (
+from . import tokens as _tk
+from .tokens import (
     ACCENT,
     ACCENT_BORDER,
     ACCENT_FILL,
@@ -16,7 +16,7 @@ from .theme.tokens import (
     TEXT_PRIMARY,
 )
 
-# Style is applied to the QLineEdit itself — reliable even with qt-material overrides.
+# Style is applied to the QLineEdit itself so it wins over the app stylesheet.
 _STYLESHEET = f"""
     QLineEdit#SearchInput {{
         background-color: {ACCENT_FILL};

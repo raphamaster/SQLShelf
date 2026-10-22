@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from datetime import datetime
 
 from PySide6.QtCore import (
@@ -12,7 +11,6 @@ from PySide6.QtCore import (
     Signal,
 )
 from PySide6.QtGui import (
-    QColor,
     QFont,
     QPainter,
     QPainterPath,
@@ -33,20 +31,9 @@ from PySide6.QtWidgets import (
 
 from ..core.i18n import tr
 from ..core.models import SearchResult
-from .theme import tokens as _tk
-from .theme.tokens import (
-    ACCENT,
-    BORDER,
-    CARD,
-    LIST_ITEM_HOVER_BG,
-    STAR_ACTIVE,
-    SURFACE,
-    TAG_BG,
-    TAG_RADIUS,
-    TAG_TEXT,
-    TEXT_PRIMARY,
-    TEXT_TERTIARY,
-)
+from . import tokens as _tk
+from .theme import qcolor
+from .tokens import BORDER, SURFACE, TAG_RADIUS
 
 # ── Sort keys ───────────────────────────────────────────────────────────────
 _SORT_NAME_ASC = "name_asc"
@@ -76,18 +63,6 @@ _STAR_W = 18
 _DATE_PAD = 6  # breathing room around the date column
 _COL_GAP = 8  # gap between the table-name and date columns
 
-# ── Color parsing ───────────────────────────────────────────────────────────
-_RGBA_RE = re.compile(r"rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)")
-
-
-def _qc(css: str) -> QColor:
-    m = _RGBA_RE.match(css.strip())
-    if m:
-        r, g, b = int(m.group(1)), int(m.group(2)), int(m.group(3))
-        a = round(float(m.group(4)) * 255)
-        return QColor(r, g, b, a)
-    return QColor(css)
-
 
 def _literal_datetime_epoch(ts: int) -> str:
     if not ts:
@@ -114,24 +89,17 @@ class QueryItemDelegate(QStyledItemDelegate):
         self._f_small = QFont()
         self._f_small.setPointSize(9)
 
-        self._c_sel_bg = _qc(CARD)
-        self._c_hov_bg = _qc(LIST_ITEM_HOVER_BG)
-        self._c_accent = _qc(ACCENT)
-        self._c_primary = _qc(TEXT_PRIMARY)
-        self._c_tertiary = _qc(TEXT_TERTIARY)
-        self._c_tag_bg = _qc(TAG_BG)
-        self._c_tag_txt = _qc(TAG_TEXT)
-        self._c_star = _qc(STAR_ACTIVE)
+        self.refresh_theme()
 
     def refresh_theme(self) -> None:
-        self._c_sel_bg = _qc(_tk.CARD)
-        self._c_hov_bg = _qc(_tk.LIST_ITEM_HOVER_BG)
-        self._c_accent = _qc(_tk.ACCENT)
-        self._c_primary = _qc(_tk.TEXT_PRIMARY)
-        self._c_tertiary = _qc(_tk.TEXT_TERTIARY)
-        self._c_tag_bg = _qc(_tk.TAG_BG)
-        self._c_tag_txt = _qc(_tk.TAG_TEXT)
-        self._c_star = _qc(_tk.STAR_ACTIVE)
+        self._c_sel_bg = qcolor(_tk.color("sel"))
+        self._c_hov_bg = qcolor(_tk.color("hover"))
+        self._c_accent = qcolor(_tk.color("accent"))
+        self._c_primary = qcolor(_tk.color("text"))
+        self._c_tertiary = qcolor(_tk.color("text3"))
+        self._c_tag_bg = qcolor(_tk.color("sel_soft"))
+        self._c_tag_txt = qcolor(_tk.color("text2"))
+        self._c_star = qcolor(_tk.color("star"))
 
     def sizeHint(self, option, index) -> QSize:
         return QSize(option.rect.width(), _ITEM_H)
@@ -188,9 +156,9 @@ class QueryItemDelegate(QStyledItemDelegate):
 
         # ── Title ───────────────────────────────────────────────────────────
         # Measure through the painter, never through QFontMetrics(self._f_*).
-        # These fonts leave the family unresolved, so the stylesheet's family
-        # (Roboto, from qt-material) wins at paint time while QFontMetrics would
-        # measure the default UI font instead — a narrower one. Right-aligned
+        # These fonts leave the family unresolved, so whatever family the
+        # stylesheet resolves for the view wins at paint time while QFontMetrics
+        # would measure the default UI font instead — possibly a narrower one. Right-aligned
         # text drawn from a too-small width then loses its first character:
         # "14/09/2026 18:56" rendered as "4/09/2026 18:56".
         painter.setFont(self._f_title)

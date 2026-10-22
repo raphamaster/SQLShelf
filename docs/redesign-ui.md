@@ -243,7 +243,7 @@ Uma por vez. Cada fatia termina com:
 - a caixa marcada aqui.
 
 ### F1 — Tema
-- [ ] **Entrega:** `ui/tokens.py`, `ui/theme.py` (Fusion + QPalette + QSS), remoção do qt-material, `CLAUDE.md` atualizado (stack e ponteiro para este documento).
+- [x] **Entrega:** `ui/tokens.py`, `ui/theme.py` (Fusion + QPalette + QSS), remoção do qt-material, `CLAUDE.md` atualizado (stack e ponteiro para este documento).
 - **Testes:**
   - Os dois temas têm as mesmas chaves.
   - `tag_color` é estável.

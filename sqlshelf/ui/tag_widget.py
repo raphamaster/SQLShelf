@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .theme import tokens as _tk
+from . import tokens as _tk
 
 # ---------------------------------------------------------------------------
 # Flow layout (wrapping horizontal layout)
@@ -120,8 +120,12 @@ class TagDisplayWidget(QWidget):
         super().__init__(parent)
         self._flow = FlowLayout(self, h_gap=4, v_gap=2)
         self.setLayout(self._flow)
+        self._tags: list[str] = []
+        self._accent = False
 
     def set_tags(self, tags: list[str], *, accent: bool = False) -> None:
+        self._tags = list(tags)
+        self._accent = accent
         self._clear()
         bg, fg = (_tk.ACCENT_FILL, _tk.ACCENT) if accent else (_tk.TAG_BG, _tk.TAG_TEXT)
         for tag in tags:
@@ -130,6 +134,10 @@ class TagDisplayWidget(QWidget):
             chip.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
             self._flow.addWidget(chip)
         self.updateGeometry()
+
+    def refresh_theme(self) -> None:
+        # Chip colours are baked into each chip's stylesheet.
+        self.set_tags(self._tags, accent=self._accent)
 
     def _clear(self) -> None:
         while self._flow.count():
@@ -198,6 +206,9 @@ class TagInputWidget(QWidget):
 
     def get_tags(self) -> list[str]:
         return list(self._tags)
+
+    def refresh_theme(self) -> None:
+        self._rebuild()
 
     def set_available_tags(self, tags: list[str]) -> None:
         """Provide the pool of known tags shown as autocomplete suggestions."""

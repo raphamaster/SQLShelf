@@ -14,7 +14,8 @@ from PySide6.QtWidgets import (
 
 from ..core.i18n import tr
 from ..core.models import SearchResult
-from .theme import tokens as _tk
+from . import tokens as _tk
+from .theme import qss
 
 
 class CommandPalette(QDialog):
@@ -57,7 +58,7 @@ class CommandPalette(QDialog):
                 padding: 5px 8px;
             }}
             QLineEdit:focus {{
-                border-color: {_tk.ACCENT_BORDER};
+                border-color: {qss("accent")};
             }}
             QListWidget {{
                 background-color: {_tk.SURFACE};
@@ -68,10 +69,10 @@ class CommandPalette(QDialog):
                 padding: 6px 8px;
             }}
             QListWidget::item:hover {{
-                background-color: {_tk.CARD};
+                background-color: {qss("hover")};
             }}
             QListWidget::item:selected {{
-                background-color: {_tk.CARD};
+                background-color: {qss("sel")};
                 color: {_tk.TEXT_PRIMARY};
             }}
         """)

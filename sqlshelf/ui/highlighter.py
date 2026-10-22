@@ -1,7 +1,7 @@
 from PySide6.QtCore import QRegularExpression
 from PySide6.QtGui import QColor, QFont, QSyntaxHighlighter, QTextCharFormat
 
-from .theme import tokens as _tk
+from . import tokens as _tk
 
 SQL_KEYWORDS = [
     "SELECT",
@@ -77,8 +77,8 @@ class SqlHighlighter(QSyntaxHighlighter):
         self._rules = []
 
         keyword_format = QTextCharFormat()
-        keyword_format.setForeground(QColor(_tk.SYN_KEYWORD))
-        keyword_format.setFontWeight(QFont.Weight.Bold)
+        keyword_format.setForeground(QColor(_tk.color("syn_keyword")))
+        keyword_format.setFontWeight(QFont.Weight.Medium)
         # One alternation instead of one QRegularExpression per keyword: highlightBlock()
         # runs per line, so 60+ separate regex scans per line made loading large files slow.
         keyword_alt = "|".join(SQL_KEYWORDS)
@@ -89,15 +89,16 @@ class SqlHighlighter(QSyntaxHighlighter):
         self._rules.append((keyword_pattern, keyword_format))
 
         string_format = QTextCharFormat()
-        string_format.setForeground(QColor(_tk.SYN_STRING))
+        string_format.setForeground(QColor(_tk.color("syn_string")))
         self._rules.append((QRegularExpression(r"'[^']*'"), string_format))
 
         number_format = QTextCharFormat()
-        number_format.setForeground(QColor(_tk.SYN_NUMBER))
+        number_format.setForeground(QColor(_tk.color("syn_number")))
         self._rules.append((QRegularExpression(r"\b\d+\b"), number_format))
 
         self._comment_format = QTextCharFormat()
-        self._comment_format.setForeground(QColor(_tk.SYN_COMMENT))
+        self._comment_format.setForeground(QColor(_tk.color("syn_comment")))
+        self._comment_format.setFontItalic(True)
         self._rules.append((QRegularExpression(r"--[^\n]*"), self._comment_format))
 
     def refresh_theme(self) -> None:

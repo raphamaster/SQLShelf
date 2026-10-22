@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 
 from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, QTimer, Signal
-from PySide6.QtGui import QAction, QActionGroup, QFont, QIcon, QKeySequence, QPixmap
+from PySide6.QtGui import QAction, QActionGroup, QIcon, QKeySequence, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -39,6 +39,7 @@ from ..core.models import SearchResult
 from ..core.scanner import scan_file, scan_folder
 from ..core.snippets import list_templates
 from ..core.watcher import FolderWatcher
+from . import tokens as _tk
 from .code_editor import CodeEditor
 from .command_palette import CommandPalette
 from .highlighter import SqlHighlighter
@@ -48,8 +49,8 @@ from .query_list import QueryListWidget
 from .search_bar import SearchBar
 from .sidebar import SidebarWidget
 from .template_dialog import TemplateDialog
-from .theme import tokens as _tk
-from .theme.tokens import (
+from .theme import apply_theme, mono_font
+from .tokens import (
     ACCENT,
     TEXT_SECONDARY,
     TEXT_TERTIARY,
@@ -1069,10 +1070,7 @@ class MainWindow(QMainWindow):
 
         self._editor = CodeEditor()
         self._editor.setReadOnly(True)
-        font = QFont("Cascadia Code")
-        font.setStyleHint(QFont.StyleHint.Monospace)
-        font.setPointSize(11)
-        self._editor.setFont(font)
+        self._editor.setFont(mono_font())
         self._highlighter = SqlHighlighter(self._editor.document())
         self._editor.set_syntax_highlighter(self._highlighter)
 
@@ -1819,7 +1817,7 @@ class MainWindow(QMainWindow):
         self._select_all_btn.setVisible(False)
         self._copy_query_btn.setVisible(False)
         self._editor_wrapper.setStyleSheet(
-            f"#EditorWrapper {{ border: 1px solid {_tk.ACCENT_BORDER}; border-radius: 4px; }}"
+            f"#EditorWrapper {{ border: 1px solid {_tk.color('accent')}; border-radius: 4px; }}"
         )
         self._edit_toggle_btn.setText(tr("editor.btn_editing"))
 
@@ -2166,8 +2164,7 @@ class MainWindow(QMainWindow):
         header.addStretch()
         layout.addLayout(header)
 
-        # Body text with clickable links — inline style is the only reliable
-        # way to set link color when qt-material overrides the QPalette.
+        # Body text with clickable links, in the accent colour.
         from sqlshelf import __version__
 
         version_line = f'<span style="color:{ACCENT};font-size:12px;">v{__version__}</span><br><br>'
@@ -2209,26 +2206,14 @@ class MainWindow(QMainWindow):
         self._apply_theme_live(name)
 
     def _apply_theme_live(self, name: str) -> None:
-        from .theme.tokens import QT_MATERIAL_THEMES, app_stylesheet, set_active_palette
-
-        set_active_palette(name)
-
         # instance() is typed as the QCoreApplication base, which knows nothing
         # about stylesheets; a headless run would genuinely have no QApplication.
         app = QApplication.instance()
         if not isinstance(app, QApplication):
+            _tk.set_active_palette(name)
             return
 
-        try:
-            import qt_material
-
-            qt_material.apply_stylesheet(
-                app, theme=QT_MATERIAL_THEMES.get(name, "dark_teal.xml")
-            )
-        except ImportError:
-            pass
-
-        app.setStyleSheet(app.styleSheet() + app_stylesheet())
+        apply_theme(app, name)
 
         # Refresh widgets that manage their own stylesheets
         self._search_bar.refresh_theme()
