@@ -400,6 +400,25 @@ def app_stylesheet(palette: Mapping[str, str]) -> str:
             background: transparent;
             border: none;
         }}
+        QTreeView#QueryList {{
+            background-color: {c["bg"]};
+            border: none;
+            outline: none;
+            selection-background-color: transparent;
+            show-decoration-selected: 0;
+        }}
+        QTreeView#QueryList::item, QTreeView#QueryList::branch,
+        QTreeView#QueryList::item:selected, QTreeView#QueryList::item:hover {{
+            background: transparent;
+            border: none;
+        }}
+        QHeaderView#QueryListHeader {{
+            background-color: {c["bg"]};
+            border: none;
+        }}
+        QWidget#QueryListEmpty {{
+            background-color: {c["bg"]};
+        }}
         QPushButton#OpenFolderBtn {{
             padding: 6px 10px;
         }}

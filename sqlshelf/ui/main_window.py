@@ -351,6 +351,27 @@ class _LoadQueryWorker(QRunnable):
         self.signals.finished.emit(payload, self._gen)
 
 
+class _ReadBodySignals(QObject):
+    done = Signal(str, str)  # (SQL body, rel_path)
+
+
+class _ReadBodyWorker(QRunnable):
+    """Read the SQL of a query, without its frontmatter, for the clipboard."""
+
+    def __init__(self, path: Path, rel_path: str) -> None:
+        super().__init__()
+        self.signals = _ReadBodySignals()
+        self._path = path
+        self._rel_path = rel_path
+
+    def run(self) -> None:
+        try:
+            _metadata, body, _has_frontmatter = read_sql_file(self._path)
+        except Exception:
+            return
+        self.signals.done.emit(body, self._rel_path)
+
+
 class _RecordAccessWorker(QRunnable):
     """Best-effort access logging that never waits on the GUI thread."""
 
@@ -787,7 +808,10 @@ class MainWindow(QMainWindow):
 
         # Async search state
         self._search_gen: int = 0  # incremented per dispatch; workers check this
-        self._pending_select: str | None = None  # rel_path to auto-select after search
+        # (rel_path, folder) to select once the next results arrive
+        self._pending_select: tuple[str, Path | None] | None = None
+        # (folder, rel_path) to open in edit mode once loaded: list menu > Edit
+        self._edit_after_load: tuple[Path | None, str] | None = None
 
         # Sidebar counts. Folder trees are only regathered when the library
         # changes; the flag survives a newer request that did not ask for them.
@@ -1097,13 +1121,17 @@ class MainWindow(QMainWindow):
         # Middle panel — the query list
         middle = QWidget()
         mid_layout = QVBoxLayout(middle)
-        mid_layout.setContentsMargins(8, 8, 8, 4)
+        mid_layout.setContentsMargins(0, 0, 0, 0)
         mid_layout.setSpacing(0)
 
         self._query_list = QueryListWidget()
         self._query_list.set_sort(cfg.get_sort_key())
+        self._query_list.set_group(cfg.get_group_mode())
+        self._query_list.set_view(cfg.get_view_mode())
         self._query_list.query_selected.connect(self._on_query_selected)
         self._query_list.context_action.connect(self._on_list_context_action)
+        self._query_list.favorite_toggled.connect(self._toggle_favorite_for)
+        self._query_list.sort_requested.connect(self._on_sort_requested)
         mid_layout.addWidget(self._query_list)
 
         # Right panel
@@ -1360,6 +1388,7 @@ class MainWindow(QMainWindow):
         self._sidebar.retranslate_ui()
         self._address_bar.retranslate_ui()
         self._command_bar.retranslate_ui()
+        self._query_list.retranslate_ui()
         self._metadata_panel.retranslate_ui()
         self._status_bar.retranslate_ui()
 
@@ -1573,11 +1602,11 @@ class MainWindow(QMainWindow):
     def _on_search_results(self, results: list, gen: int) -> None:
         if gen != self._search_gen:
             return  # stale result from a superseded search
-        self._query_list.set_results(results)
+        self._query_list.set_results(results, highlight=search_text(self._nav.current))
         if not results:
             self._reset_editor()
         if self._pending_select is not None:
-            self._query_list.select_by_rel_path(self._pending_select)
+            self._query_list.select_by_rel_path(*self._pending_select)
             self._pending_select = None
         self._status_bar.set_counts(
             len(results),
@@ -1685,10 +1714,12 @@ class MainWindow(QMainWindow):
         self._command_bar.set_sort(key)
 
     def _on_group_requested(self, mode: str) -> None:
+        self._query_list.set_group(mode)
         cfg.set_group_mode(mode)
         self._command_bar.set_group(mode)
 
     def _on_view_requested(self, mode: str) -> None:
+        self._query_list.set_view(mode)
         cfg.set_view_mode(mode)
         self._command_bar.set_view(mode)
 
@@ -1787,6 +1818,11 @@ class MainWindow(QMainWindow):
 
         self._metadata_panel.set_favorite(is_favorite)
 
+        edit_key, self._edit_after_load = self._edit_after_load, None
+        if edit_key == (result.folder, result.rel_path) and not self._edit_mode:
+            self._edit_toggle_btn.setChecked(True)
+            self._enter_edit_mode()
+
     # ------------------------------------------------------------------
     # Search / tag / sidebar filtering
     # ------------------------------------------------------------------
@@ -1835,28 +1871,71 @@ class MainWindow(QMainWindow):
 
     def _on_list_context_action(self, action: str, result: SearchResult) -> None:
         if action == "favorite":
-            self._query_list.select_by_rel_path(result.rel_path)
             self._toggle_favorite_for(result)
-        elif action == "duplicate":
-            self._query_list.select_by_rel_path(result.rel_path)
-            self.duplicate_current()
         elif action == "copy":
-            body = self._editor.toPlainText()
-            if (
-                self._current_result
-                and self._current_result.rel_path != result.rel_path
-            ):
-                # Load body from disk for the right-clicked item
-                if self._folder:
-                    try:
-                        _, body, _ = read_sql_file(self._folder / result.rel_path)
-                    except Exception:
-                        pass
-            QApplication.clipboard().setText(body)
-            self._status_bar.flash(tr("status.copied", path=result.rel_path))
-        elif action == "reveal":
-            self._query_list.select_by_rel_path(result.rel_path)
-            self.reveal_in_explorer()
+            self._copy_sql_of(result)
+        elif action == "copy_path":
+            path = self._path_of(result)
+            if path is not None:
+                QApplication.clipboard().setText(str(path))
+                self._status_bar.flash(tr("status.copied", path=str(path)))
+        else:
+            # The rest act on the current query: select the right-clicked one.
+            self._query_list.select_by_rel_path(result.rel_path, result.folder)
+            if action == "edit":
+                self._edit_from_list(result)
+            elif action == "ssms":
+                self.open_in_ssms()
+            elif action == "reveal":
+                self.reveal_in_explorer()
+            elif action == "duplicate":
+                self.duplicate_current()
+
+    def _path_of(self, result: SearchResult) -> Path | None:
+        folder = result.folder if result.folder is not None else self._folder
+        return folder / result.rel_path if folder is not None else None
+
+    def _is_loaded(self, result: SearchResult) -> bool:
+        """Whether *result* is the query in the editor, fully loaded."""
+        current = self._current_result
+        return (
+            current is not None
+            and current.rel_path == result.rel_path
+            and current.folder == result.folder
+            and self._edit_toggle_btn.isEnabled()
+        )
+
+    def _copy_sql_of(self, result: SearchResult) -> None:
+        """Copy the SQL of *result*, without its frontmatter.
+
+        The editor already holds it for the loaded query; any other file is
+        read off the UI thread.
+        """
+        if self._is_loaded(result):
+            self.copy_sql()
+            return
+        path = self._path_of(result)
+        if path is None:
+            return
+        worker = _ReadBodyWorker(path, result.rel_path)
+        worker.signals.done.connect(self._on_body_read)
+        QThreadPool.globalInstance().start(worker)
+
+    def _on_body_read(self, body: str, rel_path: str) -> None:
+        QApplication.clipboard().setText(body)
+        self._status_bar.flash(tr("status.copied", path=rel_path))
+
+    def _edit_from_list(self, result: SearchResult) -> None:
+        """Open the selected query in edit mode, once it has loaded."""
+        if not self._panel_visible:
+            self._set_panel_visible(True)
+        if self._edit_mode:
+            return
+        if self._is_loaded(result):
+            self._edit_toggle_btn.setChecked(True)
+            self._enter_edit_mode()
+        else:
+            self._edit_after_load = (result.folder, result.rel_path)
 
     # ------------------------------------------------------------------
     # Sidebar folder explorer handlers
@@ -1925,14 +2004,23 @@ class MainWindow(QMainWindow):
         self._toggle_favorite_for(self._current_result)
 
     def _toggle_favorite_for(self, result: SearchResult) -> None:
-        if self._db is None:
+        # A favorite lives in the index of the folder its query comes from.
+        db = self._db
+        if result.folder is not None:
+            db = self._known_dbs.get(result.folder, db)
+        if db is None:
             return
         try:
-            is_fav = self._db.toggle_favorite(result.rel_path)
+            is_fav = db.toggle_favorite(result.rel_path)
         except Exception:
             return
-        self._query_list.update_favorite(result.rel_path, is_fav)
-        if self._current_result and self._current_result.rel_path == result.rel_path:
+        self._query_list.update_favorite(result.rel_path, is_fav, result.folder)
+        current = self._current_result
+        if (
+            current is not None
+            and current.rel_path == result.rel_path
+            and current.folder == result.folder
+        ):
             self._metadata_panel.set_favorite(is_fav)
         key = "status.added_favorite" if is_fav else "status.removed_favorite"
         self._status_bar.flash(tr(key, path=result.rel_path))
@@ -1969,7 +2057,7 @@ class MainWindow(QMainWindow):
         palette.exec()
 
     def _on_palette_selected(self, result: SearchResult) -> None:
-        self._pending_select = result.rel_path
+        self._pending_select = (result.rel_path, result.folder)
         if result.folder is not None and result.folder in self._known_dbs:
             self._navigate(NavState("folder", result.folder))
         else:
@@ -2206,7 +2294,10 @@ class MainWindow(QMainWindow):
         updated = scan_file(path)
         if updated is not None:
             db.upsert_query(updated)
-        self._pending_select = path.relative_to(target_project).as_posix()
+        self._pending_select = (
+            path.relative_to(target_project).as_posix(),
+            target_project,
+        )
         self._summary_trees_pending = True  # the file may be in a new subfolder
         if self._nav.current.kind == "all":
             self._refresh_ui()

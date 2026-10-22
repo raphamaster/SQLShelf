@@ -73,6 +73,7 @@ ICONS: dict[str, str] = {
         '<path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>'
     ),
     "chevron_down": '<path d="m6 9 6 6 6-6"/>',
+    "chevron_up": '<path d="m6 15 6-6 6 6"/>',
     "chevron_right": '<path d="m9 6 6 6-6 6"/>',
     "close": '<path d="M6 6l12 12M18 6 6 18"/>',
     "table": '<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M3.5 10h17M9.5 10v9.5"/>',

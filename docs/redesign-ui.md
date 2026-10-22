@@ -263,7 +263,7 @@ Uma por vez. Cada fatia termina com:
 - **Testes:** montagem da árvore de subpastas; consultas de contagem no `index_db`.
 
 ### F4 — Lista
-- [ ] **Entrega:** Detalhes e Conteúdo, grupos, estrela em hover, destaque de termos, estado vazio, menu de contexto.
+- [x] **Entrega:** Detalhes e Conteúdo, grupos, estrela em hover, destaque de termos, estado vazio, menu de contexto.
 - **Testes:**
   - `date_bucket`: meia-noite, início da semana, virada de mês.
   - `match_spans`: acentos, maiúsculas, vários termos.
