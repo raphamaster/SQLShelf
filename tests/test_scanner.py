@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlshelf.core.scanner import scan_file, scan_folder
+from sqlshelf.core.scanner import display_fields, scan_file, scan_folder
 
 FRONTMATTER = """/* ---
 title: Faturamento mensal
@@ -78,3 +78,20 @@ class TestScanFolder:
         write(tmp_path, "a.sql")
         write(tmp_path, "sub/b.sql")
         assert {q.path.name for q in scan_folder(tmp_path)} == {"a.sql", "b.sql"}
+
+
+@pytest.mark.parametrize(
+    ("metadata", "expected"),
+    [
+        (
+            {"title": "Sales", "description": "  Per region \n", "tags": ["a", 2]},
+            ("Sales", "Per region", ["a", "2"]),
+        ),
+        ({}, ("vendas", "", [])),
+        ({"title": "", "description": None, "tags": None}, ("vendas", "", [])),
+        # Malformed fields are dropped, never raised.
+        ({"title": 42, "description": 7, "tags": "a, b"}, ("42", "7", [])),
+    ],
+)
+def test_display_fields(metadata: dict, expected: tuple) -> None:
+    assert display_fields(Path("q/vendas.sql"), metadata) == expected

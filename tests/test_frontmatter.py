@@ -2,7 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlshelf.core.frontmatter import read_sql_file, write_sql_file
+import pytest
+
+from sqlshelf.core.frontmatter import (
+    read_sql_file,
+    split_frontmatter,
+    write_sql_file,
+)
 
 
 def make_sql(path: Path, content: str) -> Path:
@@ -101,3 +107,36 @@ class TestWriteSqlFile:
         assert meta["title"] == "New"
         assert body == "SELECT 42"
         assert has_fm is True
+
+
+@pytest.mark.parametrize(
+    ("content", "metadata", "body", "has_frontmatter"),
+    [
+        (
+            "/* ---\ntitle: Sales\ntags: [bi]\n--- */\nSELECT 1\n",
+            {"title": "Sales", "tags": ["bi"]},
+            "SELECT 1",
+            True,
+        ),
+        ("SELECT 1\n", {}, "SELECT 1", False),
+        ("", {}, "", False),
+        # Bad YAML and a block that is not a mapping leave the text as SQL.
+        ("/* ---\ntitle: [\n--- */\nSELECT 1", {}, None, False),
+        ("/* ---\n- a\n- b\n--- */\nSELECT 1", {}, None, False),
+        # A frontmatter-like block below the first line is just a comment.
+        ("SELECT 1\n/* ---\ntitle: X\n--- */", {}, None, False),
+    ],
+)
+def test_split_frontmatter(
+    content: str, metadata: dict, body: str | None, has_frontmatter: bool
+) -> None:
+    result = split_frontmatter(content)
+    assert result[0] == metadata
+    assert result[1] == (content.strip() if body is None else body)
+    assert result[2] is has_frontmatter
+
+
+def test_read_sql_file_matches_split_frontmatter(tmp_path: Path) -> None:
+    content = "/* ---\ntitle: T\n--- */\n\nSELECT 1\n"
+    p = make_sql(tmp_path / "q.sql", content)
+    assert read_sql_file(p) == split_frontmatter(content)

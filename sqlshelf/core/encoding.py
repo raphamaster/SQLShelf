@@ -25,6 +25,20 @@ def detect_encoding(raw: bytes) -> tuple[str, bool]:
         return "cp1252", False
 
 
+_LABELS = {
+    "utf-8": "UTF-8",
+    "utf-8-sig": "UTF-8 BOM",
+    "utf-16-le": "UTF-16 LE",
+    "utf-16-be": "UTF-16 BE",
+    "cp1252": "Windows-1252",
+}
+
+
+def encoding_label(encoding: str) -> str:
+    """Display name for an encoding returned by detect_encoding, e.g. "UTF-8 BOM"."""
+    return _LABELS.get(encoding.lower(), encoding.upper())
+
+
 def read_text(path: Path) -> tuple[str, str, bool]:
     """Read *path* and return (text, original_encoding, had_bom)."""
     raw = path.read_bytes()

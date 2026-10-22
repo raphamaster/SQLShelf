@@ -209,3 +209,64 @@ def test_opening_a_query_updates_the_recent_count(
     _wait_until(lambda: _sidebar_count(window, "view", "recent") == 0)
     window._query_list.select_by_rel_path("sales.sql")
     _wait_until(lambda: _sidebar_count(window, "view", "recent") == 1)
+
+
+def _select(win: MainWindow, rel_path: str) -> None:
+    win._query_list.select_by_rel_path(rel_path)
+    _wait_until(lambda: win._query_loaded)
+
+
+def test_selecting_a_query_fills_the_strip_and_enables_the_actions(
+    window: MainWindow, library: Path
+) -> None:
+    _load(window, library)
+    panel = window._metadata_panel
+    _select(window, "sales.sql")
+    assert window._editor_strip.info_text() == "1 line · UTF-8 · T-SQL"
+    assert panel._title_label.full_text() == "Sales"
+    assert panel._file_name_label.full_text() == "sales.sql"
+    assert panel._copy_btn.isEnabled()
+    assert panel._edit_btn.isEnabled()
+
+
+def test_copy_sql_copies_the_body_without_frontmatter(
+    window: MainWindow, library: Path
+) -> None:
+    _load(window, library)
+    _select(window, "sales.sql")
+    window._metadata_panel._copy_btn.click()
+    assert QApplication.clipboard().text() == "SELECT * FROM sales"
+
+
+def test_ctrl_e_edits_only_a_loaded_query(window: MainWindow, library: Path) -> None:
+    _load(window, library)
+    window._on_edit_shortcut()
+    assert not window._edit_mode
+
+    _select(window, "sales.sql")
+    window._on_edit_shortcut()
+    assert window._edit_mode
+    assert not window._editor.isReadOnly()
+    window._on_edit_shortcut()
+    assert not window._edit_mode
+    assert window._editor.isReadOnly()
+
+
+def test_escape_outside_edit_mode_does_not_reload(
+    window: MainWindow, library: Path
+) -> None:
+    _load(window, library)
+    _select(window, "sales.sql")
+    window._cancel_edit_mode()
+    assert window._query_loaded
+    assert window._metadata_panel._copy_btn.isEnabled()
+
+
+def test_a_tag_pill_shows_the_queries_with_the_tag(
+    window: MainWindow, library: Path
+) -> None:
+    _load(window, library)
+    _select(window, "sales.sql")
+    window._metadata_panel._tags_area.chips()[0].click()
+    assert window._search_bar.text() == "tag:bi"
+    _wait_until(lambda: window._query_list.count() == 1)

@@ -20,6 +20,9 @@
 - **Query list rebuilt** — a Details view with Name, Tables, Tags and Modified columns (click Name or Modified to sort; the Sort menu follows) and a Content view with the description, table chips and every tag on taller rows. Queries are grouped by date (Today, Yesterday, This week, This month, Older), by folder or not at all, from the Group menu; groups fold with a click and stay folded when the list refreshes. The star shows on hover and on the selected row, and a click on it adds or removes the favorite without changing the selection. Search terms are marked in names and tables, ignoring accents and case the way the search does. Tables and Tags give way when the list gets narrow, and an empty list explains how to search. This is the fourth slice (F4) of the redesign
 - **Fuller row menu** — Copy SQL, Edit metadata, Add to favorites, Open in SSMS, Copy path, Reveal in Explorer and Duplicate. Copy SQL on a query that is not open reads it in the background, and Edit metadata opens the details panel in edit mode
 - **Theme switching reaches the tag chips** — the tag chips in the details panel kept the old theme's colours after a dark/light switch until another query was opened
+- **Details panel rebuilt** — a header with the file icon, the title (two lines at most, the rest in a tooltip), the file name and a star; then Copy SQL, Edit, Open in SSMS and a ⋯ menu (Select all, Copy path, Copy folder path, Reveal in Explorer). Below, the description — or a hint to write one — and a grid with the tags (click one to list its queries), the tables (click to find them in the SQL), the folder (click to reveal it) and when and by whom the file was last changed. Rows with nothing to show are hidden. A thin strip above the editor shows the line count, the file's encoding and the dialect. The old editor toolbar is gone: its actions live in the panel now. This is the fifth slice (F5) of the redesign
+- **Panel actions wait for the query** — Copy SQL, Edit and Open stay disabled until the SQL is in the editor, so they never act on the previous query
+- **Open externally outside Windows** — where SSMS does not exist, the button opens the file in its default application
 
 ### Removed
 - `qt-material` dependency — one fewer package to install and bundle
@@ -27,12 +30,15 @@
 ### Fixed
 - **Favorites from another folder** — starring a query listed from a different library folder (All queries, Favorites, a search across the library) now updates that folder's index instead of the one in view
 - **Removing a folder closes its index** — the index database used to stay open after the folder was removed from the sidebar
+- **Esc outside edit mode** — it no longer reloads the open query from disk
+- **Details after saving** — the panel shows the saved title, description and tags right away instead of the ones from before the edit
 
 ### Tests
 - Theme tokens: both themes define the same keys, tag colours are stable across runs, and every text colour has at least 4.5:1 contrast on every background; plus a live-switch check and a guard against all-caps UI strings
 - Navigation history (back, forward, up, dropping the forward stack on a new step), layout settings, and the main window offscreen: shortcuts with the menu bar hidden, Alt+P, Alt+arrows, search history and the status bar — 268 tests
 - Sidebar: folder trees and their counts, subfolder prefixes (no `LIKE` wildcards, case kept), tag and Recent counts per folder, the summary off the UI thread, and the sidebar widget itself (rows, active row, chevron and + clicks, folded tags); in the window, a subfolder narrows the list and the tags, and opening a query updates Recent — 334 tests
 - Query list: date buckets around midnight, the first day of the week and a month change; folder labels; term marking across accents, case and several terms; and the list widget offscreen — group order, selection kept when regrouping or sorting, header and star clicks, keyboard moving over group rows, folded groups surviving a refresh, Content view and narrow-width columns, and every cell painting — 405 tests
+- Details panel: modification text, line elision, the editor strip and the shared title/description/tags reading; the panel offscreen — hidden empty rows, action and chip signals, the ⋯ menu, the Open label per platform, Portuguese labels, and a chip replaced from its own click; in the window, the strip and actions after a query loads, Copy SQL without the frontmatter, Ctrl+E and Esc — 471 tests
 
 ## [1.0.11] - 2026-09-17
 

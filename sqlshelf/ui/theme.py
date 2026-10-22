@@ -378,17 +378,106 @@ def app_stylesheet(palette: Mapping[str, str]) -> str:
             border-radius: {r_sm - 1}px;
         }}
 
-        QWidget#EditorTopSection, QWidget#MetadataPanel {{
+        QWidget#MetadataPanel {{
             background-color: {c["panel"]};
+        }}
+        QLabel#PanelFileIcon {{
+            background-color: {c["sel"]};
+            border-radius: 8px;
+        }}
+        QLabel#PanelTitle {{
+            color: {c["text"]};
+            font-size: {_tk.FONT_PX_TITLE}px;
+            font-weight: 600;
+        }}
+        QLabel#PanelFileName, QLabel#PanelFieldLabel {{
+            color: {c["text3"]};
+        }}
+        QLabel#PanelDescription, QLabel#PanelFieldValue {{
+            color: {c["text2"]};
+        }}
+        QLabel#PanelDescription[empty="true"] {{
+            color: {c["text3"]};
+        }}
+        QFrame#PanelDivider {{
+            background-color: {c["border"]};
+            border: none;
+        }}
+        QPushButton#PanelButton {{
+            background-color: transparent;
+            color: {c["text"]};
+            border: 1px solid {c["border_strong"]};
+            border-radius: {r}px;
+            padding: 0px 12px;
+            font-size: {_tk.FONT_PX_BASE}px;
+            font-weight: 500;
+        }}
+        QPushButton#PanelButton:hover {{
+            background-color: {c["hover"]};
+        }}
+        QPushButton#PanelButton:pressed {{
+            background-color: {c["sel_soft"]};
+        }}
+        QPushButton#PanelButton:disabled {{
+            color: {c["text3"]};
+            border-color: {c["border"]};
+        }}
+        QPushButton#PanelButton[primary="true"] {{
+            background-color: {c["accent"]};
+            color: {c["accent_ink"]};
+            border-color: {c["accent"]};
+            font-weight: 600;
+        }}
+        QPushButton#PanelButton[primary="true"]:disabled {{
+            background-color: {c["sel"]};
+            color: {c["text3"]};
+            border-color: {c["sel"]};
+        }}
+        QPushButton#PanelButton::menu-indicator {{
+            image: none;
+            width: 0px;
+        }}
+        QToolButton#PanelStar {{
+            border-radius: {r}px;
+        }}
+        QPushButton#TagPill {{
+            background-color: {c["sel_soft"]};
+            color: {c["text"]};
+            border: none;
+            border-radius: 11px;
+            padding: 0px 10px 0px 8px;
+            font-size: {_tk.FONT_PX_SMALL}px;
+        }}
+        QPushButton#TagPill:hover {{
+            background-color: {c["border"]};
+        }}
+        QPushButton#TableChip {{
+            background-color: transparent;
+            color: {c["text"]};
+            border: 1px solid {c["border_strong"]};
+            border-radius: {r_sm}px;
+            padding: 0px 8px 0px 6px;
+        }}
+        QPushButton#TableChip:hover {{
+            background-color: {c["hover"]};
+        }}
+        QScrollArea#ChipArea, QWidget#ChipAreaContent {{
+            background: transparent;
+            border: none;
+        }}
+        QWidget#EditorStrip {{
+            background-color: {c["code"]};
+            border-top: 1px solid {c["border"]};
             border-bottom: 1px solid {c["border"]};
         }}
-        QWidget#EditorToolBar {{
-            background-color: {c["panel"]};
-        }}
-        QWidget#EditorToolBar QPushButton {{
-            padding: 2px 12px;
+        QLabel#EditorStripTitle {{
+            color: {c["text2"]};
             font-size: {_tk.FONT_PX_SMALL}px;
-            max-height: 24px;
+            font-weight: 600;
+        }}
+        QLabel#EditorStripInfo {{
+            color: {c["text3"]};
+            font-size: {_tk.FONT_PX_SMALL}px;
         }}
 
         QTreeWidget#SidebarTree {{

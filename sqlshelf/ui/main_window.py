@@ -4,10 +4,18 @@ import os
 import subprocess
 import sys
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, QTimer, Signal
-from PySide6.QtGui import QAction, QActionGroup, QIcon, QKeySequence, QPixmap
+from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, QTimer, QUrl, Signal
+from PySide6.QtGui import (
+    QAction,
+    QActionGroup,
+    QDesktopServices,
+    QIcon,
+    QKeySequence,
+    QPixmap,
+)
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -31,14 +39,15 @@ from PySide6.QtWidgets import (
 )
 
 from ..core import config as cfg
+from ..core.encoding import encoding_label, read_text
 from ..core.folder_tree import folder_prefix
-from ..core.frontmatter import read_sql_file, write_sql_file
+from ..core.frontmatter import read_sql_file, split_frontmatter, write_sql_file
 from ..core.i18n import available_languages, get_language, set_language, tr
 from ..core.index_db import IndexDB, IndexStats
 from ..core.library_summary import LibrarySummary, summarize_library
 from ..core.models import SearchResult
 from ..core.navigation import NavHistory, NavState, root_of, search_text, with_search
-from ..core.scanner import scan_file, scan_folder
+from ..core.scanner import display_fields, scan_file, scan_folder
 from ..core.snippets import list_templates
 from ..core.watcher import FolderWatcher
 from . import tokens as _tk
@@ -46,6 +55,7 @@ from .address_bar import AddressBar
 from .code_editor import CodeEditor
 from .command_bar import CommandBar
 from .command_palette import CommandPalette
+from .editor_strip import EditorStrip
 from .highlighter import SqlHighlighter
 from .metadata_panel import MetadataPanel
 from .new_query_dialog import NewQueryDialog
@@ -306,8 +316,36 @@ class _SummaryWorker(QRunnable):
 # ---------------------------------------------------------------------------
 
 
+@dataclass(frozen=True)
+class _LoadedQuery:
+    """What the details panel and the editor show for one query."""
+
+    path: Path
+    result: SearchResult
+    metadata: dict
+    body: str
+    objects: dict[str, list[str]]
+    is_favorite: bool
+    encoding: str  # display name, "" when the file could not be read
+    mtime: float | None
+
+
+def _read_query_file(path: Path) -> tuple[dict, str, str, float | None]:
+    """(metadata, body, encoding label, mtime) of *path*; never raises."""
+    try:
+        content, encoding, _bom = read_text(path)
+    except Exception:
+        return {}, "", "", None
+    metadata, body, _has_frontmatter = split_frontmatter(content)
+    try:
+        mtime: float | None = path.stat().st_mtime
+    except OSError:
+        mtime = None
+    return metadata, body, encoding_label(encoding), mtime
+
+
 class _LoadQueryWorkerSignals(QObject):
-    finished = Signal(object, int)  # (payload, generation)
+    finished = Signal(object, int)  # (_LoadedQuery, generation)
 
 
 class _LoadQueryWorker(QRunnable):
@@ -328,7 +366,7 @@ class _LoadQueryWorker(QRunnable):
         self._track_access = track_access
 
     def run(self) -> None:
-        metadata, body, _has_frontmatter = read_sql_file(self._path)
+        metadata, body, encoding, mtime = _read_query_file(self._path)
         objects: dict[str, list[str]] = {"table": [], "column": [], "alias": []}
         is_favorite = False
         try:
@@ -340,13 +378,15 @@ class _LoadQueryWorker(QRunnable):
                     self._db.record_access(self._result.rel_path, "open")
         except Exception:
             pass
-        payload = (
-            self._path,
-            self._result,
-            metadata,
-            body,
-            objects,
-            is_favorite,
+        payload = _LoadedQuery(
+            path=self._path,
+            result=self._result,
+            metadata=metadata,
+            body=body,
+            objects=objects,
+            is_favorite=is_favorite,
+            encoding=encoding,
+            mtime=mtime,
         )
         self.signals.finished.emit(payload, self._gen)
 
@@ -789,6 +829,9 @@ class MainWindow(QMainWindow):
         self._current_result: SearchResult | None = None
         self._current_metadata: dict = {}
         self._edit_mode = False
+        # True once the selected query's SQL is in the editor; the panel's
+        # actions and Ctrl+E wait for it.
+        self._query_loaded = False
         self._quitting = False
 
         # Multi-folder support
@@ -1137,56 +1180,26 @@ class MainWindow(QMainWindow):
         # Right panel
         right = QWidget()
         right_layout = QVBoxLayout(right)
-        right_layout.setContentsMargins(0, 0, 12, 0)
+        right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(0)
 
+        # Details panel: header with the actions, then the metadata grid.
         self._metadata_panel = MetadataPanel()
-        self._metadata_panel.navigate_requested.connect(self._on_navigate_requested)
-        self._metadata_panel.filter_requested.connect(self._on_filter_requested)
-        self._metadata_panel.favorite_toggled.connect(self._toggle_favorite)
-        self._metadata_panel.reveal_requested.connect(self.reveal_in_explorer)
-        self._metadata_panel.command_palette_requested.connect(
-            self.open_command_palette
-        )
+        panel = self._metadata_panel
+        panel.navigate_requested.connect(self._on_navigate_requested)
+        panel.filter_requested.connect(self._on_filter_requested)
+        panel.tag_requested.connect(self._on_tag_selected)
+        panel.favorite_toggled.connect(self._toggle_favorite)
+        panel.copy_requested.connect(self.copy_sql)
+        panel.edit_requested.connect(self._toggle_edit_mode)
+        panel.open_requested.connect(self.open_in_ssms)
+        panel.select_all_requested.connect(self._editor_select_all)
+        panel.reveal_requested.connect(self.reveal_in_explorer)
+        panel.path_copied.connect(self._on_path_copied)
+        panel.save_requested.connect(self.save_current)
+        panel.cancel_requested.connect(self._cancel_edit)
 
-        # Editor toolbar
-        self._toolbar = QWidget()
-        self._toolbar.setObjectName("EditorToolBar")
-        self._toolbar.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        tb_layout = QHBoxLayout(self._toolbar)
-        tb_layout.setContentsMargins(10, 6, 8, 6)
-        tb_layout.setSpacing(6)
-
-        self._edit_toggle_btn = QPushButton(tr("editor.btn_edit"))
-        self._edit_toggle_btn.setCheckable(True)
-        self._edit_toggle_btn.setToolTip(tr("editor.tooltip_edit"))
-        self._edit_toggle_btn.clicked.connect(self._toggle_edit_mode)
-
-        self._save_btn = QPushButton(tr("editor.btn_save"))
-        self._save_btn.setToolTip(tr("editor.tooltip_save"))
-        self._save_btn.clicked.connect(self.save_current)
-
-        self._cancel_btn = QPushButton(tr("editor.btn_cancel"))
-        self._cancel_btn.clicked.connect(self._cancel_edit)
-
-        self._select_all_btn = QPushButton(tr("editor.btn_select_all"))
-        self._select_all_btn.setToolTip(tr("editor.tooltip_select_all"))
-        self._select_all_btn.clicked.connect(self._editor_select_all)
-
-        self._copy_query_btn = QPushButton(tr("editor.btn_copy"))
-        self._copy_query_btn.setToolTip(tr("editor.tooltip_copy"))
-        self._copy_query_btn.clicked.connect(self._editor_copy_query)
-
-        tb_layout.addWidget(self._edit_toggle_btn)
-        tb_layout.addWidget(self._save_btn)
-        tb_layout.addWidget(self._cancel_btn)
-        tb_layout.addStretch()
-        tb_layout.addWidget(self._select_all_btn)
-        tb_layout.addWidget(self._copy_query_btn)
-        self._save_btn.setVisible(False)
-        self._cancel_btn.setVisible(False)
-        self._select_all_btn.setVisible(False)
-        self._copy_query_btn.setVisible(False)
+        self._editor_strip = EditorStrip()
 
         self._editor = CodeEditor()
         self._editor.setReadOnly(True)
@@ -1194,34 +1207,18 @@ class MainWindow(QMainWindow):
         self._highlighter = SqlHighlighter(self._editor.document())
         self._editor.set_syntax_highlighter(self._highlighter)
 
-        # Top section — metadata + toolbar share a dark card background
-        top_section = QWidget()
-        top_section.setObjectName("EditorTopSection")
-        top_section.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        ts_layout = QVBoxLayout(top_section)
-        ts_layout.setContentsMargins(0, 0, 0, 0)
-        ts_layout.setSpacing(0)
-        ts_layout.addWidget(self._metadata_panel)
-        ts_layout.addWidget(self._toolbar)
-
-        # Editor wrapper — top/bottom breathing room (right margin comes from right_layout)
+        # The wrapper carries the accent border while the query is edited.
         self._editor_wrapper = QWidget()
         self._editor_wrapper.setObjectName("EditorWrapper")
-        ew_layout = QVBoxLayout(self._editor_wrapper)
-        ew_layout.setContentsMargins(0, 4, 0, 6)
-        ew_layout.setSpacing(0)
-        ew_layout.addWidget(self._editor)
+        self._editor_wrapper.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self._editor_wrapper_layout = QVBoxLayout(self._editor_wrapper)
+        self._editor_wrapper_layout.setContentsMargins(0, 0, 0, 0)
+        self._editor_wrapper_layout.setSpacing(0)
+        self._editor_wrapper_layout.addWidget(self._editor)
 
-        # Outer wrapper gives the editor the same 10 px left indent as the
-        # metadata panel content, so the border and buttons align visually.
-        editor_outer = QWidget()
-        eo_layout = QVBoxLayout(editor_outer)
-        eo_layout.setContentsMargins(10, 0, 0, 0)
-        eo_layout.setSpacing(0)
-        eo_layout.addWidget(self._editor_wrapper)
-
-        right_layout.addWidget(top_section)
-        right_layout.addWidget(editor_outer, stretch=1)
+        right_layout.addWidget(self._metadata_panel)
+        right_layout.addWidget(self._editor_strip)
+        right_layout.addWidget(self._editor_wrapper, stretch=1)
 
         # ── Empty / onboarding state ─────────────────────────────────────────
         self._onboarding = QWidget()
@@ -1307,7 +1304,7 @@ class MainWindow(QMainWindow):
         )
         QShortcut(QKeySequence("Ctrl+S"), self).activated.connect(self.save_current)
         QShortcut(QKeySequence("Ctrl+E"), self).activated.connect(
-            lambda: self._edit_toggle_btn.click()
+            self._on_edit_shortcut
         )
         QShortcut(QKeySequence("Ctrl+P"), self).activated.connect(
             self.open_command_palette
@@ -1367,19 +1364,7 @@ class MainWindow(QMainWindow):
             act.setText(tr(label_key))
         # Rebuild the recent menu "(none)" label if needed
         self._rebuild_recent_menu()
-        # Toolbar buttons
-        if not self._edit_mode:
-            self._edit_toggle_btn.setText(tr("editor.btn_edit"))
-        else:
-            self._edit_toggle_btn.setText(tr("editor.btn_editing"))
-        self._edit_toggle_btn.setToolTip(tr("editor.tooltip_edit"))
-        self._save_btn.setText(tr("editor.btn_save"))
-        self._save_btn.setToolTip(tr("editor.tooltip_save"))
-        self._cancel_btn.setText(tr("editor.btn_cancel"))
-        self._select_all_btn.setText(tr("editor.btn_select_all"))
-        self._select_all_btn.setToolTip(tr("editor.tooltip_select_all"))
-        self._copy_query_btn.setText(tr("editor.btn_copy"))
-        self._copy_query_btn.setToolTip(tr("editor.tooltip_copy"))
+        self._editor_strip.retranslate_ui()
         # Onboarding
         self._ob_title.setText(tr("onboarding.no_folder"))
         self._ob_sub.setText(tr("onboarding.subtitle"))
@@ -1521,16 +1506,11 @@ class MainWindow(QMainWindow):
         self._load_gen += 1
         self._load_timer.stop()
         self._pending_load = None
-        self._edit_mode = False
-        self._editor.setReadOnly(True)
+        self._leave_edit_mode()
+        self._query_loaded = False
         self._editor.clear()
-        self._edit_toggle_btn.setEnabled(False)
+        self._editor_strip.clear()
         self._metadata_panel.clear()
-        self._save_btn.setVisible(False)
-        self._cancel_btn.setVisible(False)
-        self._editor_wrapper.setStyleSheet("")
-        self._edit_toggle_btn.setChecked(False)
-        self._edit_toggle_btn.setText(tr("editor.btn_edit"))
         self._current_result = None
         self._current_metadata = {}
         self._status_bar.set_selected(0)
@@ -1730,14 +1710,7 @@ class MainWindow(QMainWindow):
     def _on_query_selected(self, result: SearchResult) -> None:
         # Discard any unsaved edits without reloading (we're about to load new query)
         if self._edit_mode:
-            self._edit_mode = False
-            self._editor.setReadOnly(True)
-            self._metadata_panel.set_edit_mode(False)
-            self._save_btn.setVisible(False)
-            self._cancel_btn.setVisible(False)
-            self._editor_wrapper.setStyleSheet("")
-            self._edit_toggle_btn.setChecked(False)
-            self._edit_toggle_btn.setText(tr("editor.btn_edit"))
+            self._leave_edit_mode()
 
         # Resolve the folder this result comes from (important in multi-folder mode)
         if result.folder is not None and result.folder.is_dir():
@@ -1753,19 +1726,20 @@ class MainWindow(QMainWindow):
         self._load_timer.start()
 
         # Do not expose actions for the previous document while this selection
-        # is being loaded in the background.
+        # is being loaded in the background. Until then the panel shows what
+        # the index knows, without touching the disk.
         self._current_metadata = {}
+        self._query_loaded = False
         self._editor.clear()
-        self._edit_toggle_btn.setEnabled(False)
-        self._select_all_btn.setVisible(False)
-        self._copy_query_btn.setVisible(False)
+        self._editor_strip.clear()
+        self._metadata_panel.set_actions_enabled(False)
         self._metadata_panel.set_query(
             title=result.title,
             description=result.description,
             tags=result.tags,
-            tables=[],
+            tables=result.tables,
         )
-        self._metadata_panel.set_path(path)
+        self._metadata_panel.set_path(path, result.file_mtime or None)
         self._status_bar.set_selected(1)
 
     def _record_access(self, action: str) -> None:
@@ -1797,30 +1771,35 @@ class MainWindow(QMainWindow):
     def _on_access_tracked(self, _payload: object, _gen: int) -> None:
         self._refresh_sidebar()
 
-    def _on_query_loaded(self, payload: tuple, gen: int) -> None:
+    def _on_query_loaded(self, loaded: _LoadedQuery, gen: int) -> None:
         if gen != self._load_gen:
             return
-        path, result, metadata, body, objects, is_favorite = payload
-        self._current_metadata = metadata
-        self._editor.setPlainText(body)
+        result = loaded.result
+        self._current_metadata = loaded.metadata
+        self._editor.setPlainText(loaded.body)
+        # The file is fresher than the index: after a save the list keeps its
+        # selection without announcing it, so this is what shows the new values.
+        title, description, tags = display_fields(loaded.path, loaded.metadata)
         self._metadata_panel.set_query(
-            title=result.title,
-            description=result.description,
-            tags=result.tags,
-            tables=objects.get("table", []),
+            title=title,
+            description=description,
+            tags=tags,
+            tables=loaded.objects.get("table", []),
         )
-        self._metadata_panel.set_path(path)
+        self._metadata_panel.set_path(
+            loaded.path,
+            loaded.mtime or result.file_mtime or None,
+            str(loaded.metadata.get("author") or ""),
+        )
+        self._metadata_panel.set_favorite(loaded.is_favorite)
+        lines = self._editor.blockCount() if loaded.body else 0
+        self._editor_strip.set_info(lines, loaded.encoding)
 
-        if not self._edit_mode:
-            self._edit_toggle_btn.setEnabled(True)
-            self._select_all_btn.setVisible(True)
-            self._copy_query_btn.setVisible(True)
-
-        self._metadata_panel.set_favorite(is_favorite)
+        self._query_loaded = True
+        self._metadata_panel.set_actions_enabled(True)
 
         edit_key, self._edit_after_load = self._edit_after_load, None
         if edit_key == (result.folder, result.rel_path) and not self._edit_mode:
-            self._edit_toggle_btn.setChecked(True)
             self._enter_edit_mode()
 
     # ------------------------------------------------------------------
@@ -1902,7 +1881,7 @@ class MainWindow(QMainWindow):
             current is not None
             and current.rel_path == result.rel_path
             and current.folder == result.folder
-            and self._edit_toggle_btn.isEnabled()
+            and self._query_loaded
         )
 
     def _copy_sql_of(self, result: SearchResult) -> None:
@@ -1932,7 +1911,6 @@ class MainWindow(QMainWindow):
         if self._edit_mode:
             return
         if self._is_loaded(result):
-            self._edit_toggle_btn.setChecked(True)
             self._enter_edit_mode()
         else:
             self._edit_after_load = (result.folder, result.rel_path)
@@ -2067,6 +2045,11 @@ class MainWindow(QMainWindow):
     # Edit / Save
     # ------------------------------------------------------------------
 
+    def _on_edit_shortcut(self) -> None:
+        """Ctrl+E: edit the loaded query, or leave edit mode."""
+        if self._edit_mode or self._query_loaded:
+            self._toggle_edit_mode()
+
     def _toggle_edit_mode(self) -> None:
         if self._edit_mode:
             self._cancel_edit_mode()
@@ -2074,48 +2057,55 @@ class MainWindow(QMainWindow):
             self._enter_edit_mode()
 
     def _enter_edit_mode(self) -> None:
-        if self._current_result is None:
-            self._edit_toggle_btn.setChecked(False)
+        if self._current_result is None or not self._query_loaded:
             return
         self._edit_mode = True
         self._editor.setReadOnly(False)
         if self._db is not None:
             self._metadata_panel.set_available_tags(self._db.get_all_tags())
         self._metadata_panel.set_edit_mode(True)
-        self._save_btn.setVisible(True)
-        self._cancel_btn.setVisible(True)
-        self._select_all_btn.setVisible(False)
-        self._copy_query_btn.setVisible(False)
-        self._editor_wrapper.setStyleSheet(
-            f"#EditorWrapper {{ border: 1px solid {_tk.color('accent')}; border-radius: 4px; }}"
-        )
-        self._edit_toggle_btn.setText(tr("editor.btn_editing"))
+        self._show_editing_frame(True)
 
-    def _cancel_edit_mode(self) -> None:
-        """Exit edit mode, discarding unsaved changes by reloading from disk."""
+    def _leave_edit_mode(self) -> None:
+        """Back to read mode, keeping whatever is in the editor."""
         self._edit_mode = False
         self._editor.setReadOnly(True)
         self._metadata_panel.set_edit_mode(False)
-        self._save_btn.setVisible(False)
-        self._cancel_btn.setVisible(False)
-        has_query = self._current_result is not None
-        self._select_all_btn.setVisible(has_query)
-        self._copy_query_btn.setVisible(has_query)
-        self._editor_wrapper.setStyleSheet("")
-        self._edit_toggle_btn.setChecked(False)
-        self._edit_toggle_btn.setText(tr("editor.btn_edit"))
-        # Reload from disk to discard unsaved changes
-        if self._current_result is not None and self._folder is not None:
-            path = self._folder / self._current_result.rel_path
-            self._load_gen += 1
-            self._pending_load = (
-                self._db,
-                path,
-                self._current_result,
-                self._load_gen,
-                False,
-            )
-            self._load_timer.start()
+        self._show_editing_frame(False)
+
+    def _show_editing_frame(self, editing: bool) -> None:
+        """Outline the editor in the accent colour while the query is edited."""
+        inset = 1 if editing else 0
+        self._editor_wrapper_layout.setContentsMargins(inset, inset, inset, inset)
+        self._editor_wrapper.setStyleSheet(
+            f"#EditorWrapper {{ border: 1px solid {_tk.color('accent')}; }}"
+            if editing
+            else ""
+        )
+
+    def _cancel_edit_mode(self) -> None:
+        """Exit edit mode, discarding unsaved changes by reloading from disk."""
+        if not self._edit_mode:
+            return
+        self._leave_edit_mode()
+        self._reload_current()
+
+    def _reload_current(self) -> None:
+        """Load the current query from disk again, without counting an access."""
+        if self._current_result is None or self._folder is None:
+            return
+        path = self._folder / self._current_result.rel_path
+        self._query_loaded = False
+        self._metadata_panel.set_actions_enabled(False)
+        self._load_gen += 1
+        self._pending_load = (
+            self._db,
+            path,
+            self._current_result,
+            self._load_gen,
+            False,
+        )
+        self._load_timer.start()
 
     def _cancel_edit(self) -> None:
         self._cancel_edit_mode()
@@ -2123,12 +2113,6 @@ class MainWindow(QMainWindow):
     def _editor_select_all(self) -> None:
         self._editor.selectAll()
         self._editor.setFocus()
-
-    def _editor_copy_query(self) -> None:
-        from PySide6.QtGui import QGuiApplication
-
-        QGuiApplication.clipboard().setText(self._editor.toPlainText())
-        self._record_access("copy")
 
     def save_current(self) -> None:
         if not self._edit_mode or self._current_result is None or self._folder is None:
@@ -2157,15 +2141,11 @@ class MainWindow(QMainWindow):
             if updated is not None:
                 self._db.upsert_query(updated)
 
-        self._edit_mode = False
-        self._editor.setReadOnly(True)
-        self._metadata_panel.set_edit_mode(False)
-        self._save_btn.setVisible(False)
-        self._cancel_btn.setVisible(False)
-        self._editor_wrapper.setStyleSheet("")
-        self._edit_toggle_btn.setChecked(False)
-        self._edit_toggle_btn.setText(tr("editor.btn_edit"))
+        self._leave_edit_mode()
         self._refresh_ui(library_changed=True)
+        # The list keeps the row selected without announcing it again, so the
+        # panel reads the saved file itself (new title, tags and mtime).
+        self._reload_current()
         self._status_bar.flash(tr("status.saved", path=self._current_result.rel_path))
 
     # ------------------------------------------------------------------
@@ -2327,6 +2307,9 @@ class MainWindow(QMainWindow):
     # System actions
     # ------------------------------------------------------------------
 
+    def _on_path_copied(self, path: str) -> None:
+        self._status_bar.flash(tr("status.copied", path=path))
+
     def reveal_in_explorer(self) -> None:
         if self._current_result is None or self._folder is None:
             return
@@ -2348,10 +2331,9 @@ class MainWindow(QMainWindow):
                 self._record_access("open_in_ssms")
             except Exception as exc:
                 QMessageBox.warning(self, tr("msg.open_ssms.title"), str(exc))
-        else:
-            QMessageBox.information(
-                self, tr("msg.open_ssms.title"), tr("msg.open_ssms.windows_only")
-            )
+        elif QDesktopServices.openUrl(QUrl.fromLocalFile(str(path))):
+            # No SSMS here: the panel offers "Open externally" instead.
+            self._record_access("open_in_ssms")
 
     def copy_sql(self) -> None:
         body = self._editor.toPlainText()
@@ -2605,7 +2587,7 @@ class MainWindow(QMainWindow):
 
         btn_row = QHBoxLayout()
         btn_row.addStretch()
-        cancel_btn = QPushButton(tr("editor.btn_cancel"))
+        cancel_btn = QPushButton(tr("common.cancel"))
         cancel_btn.setFixedWidth(80)
         cancel_btn.clicked.connect(dlg.reject)
         ok_btn = QPushButton("OK")

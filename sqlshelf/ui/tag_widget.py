@@ -3,7 +3,6 @@ from __future__ import annotations
 from PySide6.QtCore import QPoint, QRect, QSize, QStringListModel, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
     QCompleter,
-    QLabel,
     QLayout,
     QLayoutItem,
     QLineEdit,
@@ -93,59 +92,12 @@ class FlowLayout(QLayout):
 # ---------------------------------------------------------------------------
 
 
-def _display_chip_style(bg: str, fg: str) -> str:
-    return (
-        f"background-color: {bg}; color: {fg}; "
-        f"border-radius: {_tk.TAG_RADIUS}px; padding: 2px 9px; font-size: 11px;"
-    )
-
-
 def _input_chip_style(bg: str, fg: str) -> str:
     return (
         f"QPushButton {{ background-color: {bg}; color: {fg}; border: none; "
         f"border-radius: {_tk.TAG_RADIUS - 1}px; padding: 1px 6px; font-size: 11px; text-align: left; max-height: 20px; }} "
         f"QPushButton:hover {{ background-color: {_tk.CHIP_DELETE_BG}; color: {_tk.CHIP_DELETE_FG}; }}"
     )
-
-
-# ---------------------------------------------------------------------------
-# TagDisplayWidget — read-only chips
-# ---------------------------------------------------------------------------
-
-
-class TagDisplayWidget(QWidget):
-    """Displays tags as colored chips with rounded corners (read-only)."""
-
-    def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self._flow = FlowLayout(self, h_gap=4, v_gap=2)
-        self.setLayout(self._flow)
-        self._tags: list[str] = []
-        self._accent = False
-
-    def set_tags(self, tags: list[str], *, accent: bool = False) -> None:
-        self._tags = list(tags)
-        self._accent = accent
-        self._clear()
-        bg, fg = (_tk.ACCENT_FILL, _tk.ACCENT) if accent else (_tk.TAG_BG, _tk.TAG_TEXT)
-        for tag in tags:
-            chip = QLabel(f"#{tag}")
-            chip.setStyleSheet(_display_chip_style(bg, fg))
-            chip.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-            self._flow.addWidget(chip)
-        self.updateGeometry()
-
-    def refresh_theme(self) -> None:
-        # Chip colours are baked into each chip's stylesheet.
-        self.set_tags(self._tags, accent=self._accent)
-
-    def _clear(self) -> None:
-        while self._flow.count():
-            item = self._flow.takeAt(0)
-            widget = item.widget() if item else None
-            if widget is not None:
-                widget.hide()
-                widget.deleteLater()
 
 
 # ---------------------------------------------------------------------------

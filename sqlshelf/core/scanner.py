@@ -6,6 +6,20 @@ from .frontmatter import read_sql_file
 from .models import Query
 
 
+def display_fields(path: Path, metadata: dict) -> tuple[str, str, list[str]]:
+    """Title, description and tags of a query as the index stores them.
+
+    The title falls back to the file stem; a missing or malformed field
+    becomes empty rather than raising.
+    """
+    title = metadata.get("title") or path.stem
+    description = metadata.get("description") or ""
+    tags = metadata.get("tags") or []
+    if not isinstance(tags, list):
+        tags = []
+    return str(title), str(description).strip(), [str(t) for t in tags]
+
+
 def scan_file(path: Path) -> Query | None:
     """Parse a single .sql file into a Query, or None if it is not indexable.
 
@@ -18,21 +32,16 @@ def scan_file(path: Path) -> Query | None:
         return None
 
     metadata, body, has_frontmatter = read_sql_file(path)
-
-    title = metadata.get("title") or path.stem
-    description = (metadata.get("description") or "").strip()
-    tags = metadata.get("tags") or []
-    if not isinstance(tags, list):
-        tags = []
+    title, description, tags = display_fields(path, metadata)
 
     created_raw = metadata.get("created")
     updated_raw = metadata.get("updated")
 
     return Query(
         path=path,
-        title=str(title),
-        description=str(description),
-        tags=[str(t) for t in tags],
+        title=title,
+        description=description,
+        tags=tags,
         body=body,
         has_frontmatter=has_frontmatter,
         created_at=str(created_raw) if created_raw is not None else None,

@@ -2,7 +2,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlshelf.core.encoding import detect_encoding, read_text, write_text
+import pytest
+
+from sqlshelf.core.encoding import (
+    detect_encoding,
+    encoding_label,
+    read_text,
+    write_text,
+)
 
 
 class TestDetectEncoding:
@@ -107,3 +114,32 @@ class TestWriteText:
         result = p.read_bytes()
         assert result.startswith(b"\xef\xbb\xbf")
         assert result[3:].decode("utf-8") == "SELECT relatório"
+
+
+@pytest.mark.parametrize(
+    ("encoding", "label"),
+    [
+        ("utf-8", "UTF-8"),
+        ("utf-8-sig", "UTF-8 BOM"),
+        ("utf-16-le", "UTF-16 LE"),
+        ("utf-16-be", "UTF-16 BE"),
+        ("cp1252", "Windows-1252"),
+        ("latin-1", "LATIN-1"),
+    ],
+)
+def test_encoding_label(encoding: str, label: str) -> None:
+    assert encoding_label(encoding) == label
+
+
+@pytest.mark.parametrize(
+    ("raw", "label"),
+    [
+        (b"SELECT 1", "UTF-8"),
+        (b"\xef\xbb\xbfSELECT 1", "UTF-8 BOM"),
+        (b"\xff\xfe" + "SELECT".encode("utf-16-le"), "UTF-16 LE"),
+        ("relat\xf3rio".encode("cp1252"), "Windows-1252"),
+    ],
+)
+def test_every_detected_encoding_has_a_label(raw: bytes, label: str) -> None:
+    encoding, _had_bom = detect_encoding(raw)
+    assert encoding_label(encoding) == label

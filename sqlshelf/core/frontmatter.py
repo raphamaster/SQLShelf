@@ -23,7 +23,15 @@ def read_sql_file(path: Path) -> tuple[dict, str, bool]:
         content, _enc, _bom = read_text(path)
     except Exception:
         return {}, "", False
+    return split_frontmatter(content)
 
+
+def split_frontmatter(content: str) -> tuple[dict, str, bool]:
+    """Separate the YAML frontmatter block at the top of *content* from the SQL.
+
+    Returns (metadata, body, has_frontmatter), with the same tolerance as
+    read_sql_file: bad YAML leaves the whole text as the body. Never raises.
+    """
     match = FRONTMATTER_PATTERN.match(content)
     if not match:
         return {}, content.strip(), False

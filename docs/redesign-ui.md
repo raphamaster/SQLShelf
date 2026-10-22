@@ -270,7 +270,8 @@ Uma por vez. Cada fatia termina com:
   - Seleção preservada ao reagrupar.
 
 ### F5 — Painel de detalhes, leitura
-- [ ] Cabeçalho, ações, grade de metadados, faixa do editor.
+- [x] Cabeçalho, ações, grade de metadados, faixa do editor.
+- **Testes:** `modified_text`, `elide_lines`, `strip_info`, `display_fields`; painel offscreen (linhas vazias ocultas, sinais das ações e dos chips, menu ⋯, rótulo do botão Abrir por plataforma); na janela, faixa preenchida e ações liberadas só após carregar, Copiar SQL sem frontmatter, Ctrl+E e Esc.
 
 ### F6 — Painel de detalhes, edição
 - [ ] Faixa Editando, formulário, Esc / Ctrl+S.
