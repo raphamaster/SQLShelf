@@ -24,7 +24,6 @@ from PySide6.QtWidgets import (
     QPushButton,
     QSplitter,
     QStackedWidget,
-    QStatusBar,
     QStyle,
     QSystemTrayIcon,
     QVBoxLayout,
@@ -33,14 +32,17 @@ from PySide6.QtWidgets import (
 
 from ..core import config as cfg
 from ..core.frontmatter import read_sql_file, write_sql_file
-from ..core.i18n import available_languages, get_language, ntr, set_language, tr
+from ..core.i18n import available_languages, get_language, set_language, tr
 from ..core.index_db import IndexDB, IndexStats
 from ..core.models import SearchResult
+from ..core.navigation import NavHistory, NavState, root_of, search_text, with_search
 from ..core.scanner import scan_file, scan_folder
 from ..core.snippets import list_templates
 from ..core.watcher import FolderWatcher
 from . import tokens as _tk
+from .address_bar import AddressBar
 from .code_editor import CodeEditor
+from .command_bar import CommandBar
 from .command_palette import CommandPalette
 from .highlighter import SqlHighlighter
 from .metadata_panel import MetadataPanel
@@ -48,6 +50,7 @@ from .new_query_dialog import NewQueryDialog
 from .query_list import QueryListWidget
 from .search_bar import SearchBar
 from .sidebar import SidebarWidget
+from .status_bar import StatusBar
 from .template_dialog import TemplateDialog
 from .theme import apply_theme, mono_font
 from .tokens import (
@@ -79,6 +82,7 @@ _PROGRESS_INTERVAL_MS = 60
 
 
 class _IndexWorkerSignals(QObject):
+    started = Signal(object)  # the folder; jobs queue on a one-thread pool
     finished = Signal(int)
     error = Signal(str)
     progress = Signal(int, int)  # (current, total)
@@ -108,6 +112,7 @@ class _IndexWorker(QRunnable):
         self._folder = folder
 
     def run(self) -> None:
+        self.signals.started.emit(self._folder)
         try:
             queries = scan_folder(self._folder)
             total = len(queries)
@@ -163,6 +168,7 @@ class _ForceReindexWorker(QRunnable):
         self._folder = folder
 
     def run(self) -> None:
+        self.signals.started.emit(self._folder)
         try:
             queries = scan_folder(self._folder)
             total = len(queries)
@@ -495,55 +501,6 @@ class _UpdateDialog(QDialog):
 
 
 # ---------------------------------------------------------------------------
-# Progress dialog shown while indexing a new folder
-# ---------------------------------------------------------------------------
-
-
-class _IndexProgressDialog(QDialog):
-    def __init__(
-        self, folder_name: str, parent=None, title_key: str = "progress.importing"
-    ) -> None:
-        super().__init__(
-            parent,
-            Qt.WindowType.WindowTitleHint | Qt.WindowType.CustomizeWindowHint,
-        )
-        self.setWindowTitle(tr("progress.title"))
-        self.setModal(True)
-        self.setMinimumWidth(420)
-        self.setFixedHeight(140)
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 20, 24, 20)
-        layout.setSpacing(10)
-
-        self._title_label = QLabel(tr(title_key, name=folder_name))
-        layout.addWidget(self._title_label)
-
-        self._detail_label = QLabel(tr("progress.scanning"))
-        layout.addWidget(self._detail_label)
-
-        self._bar = QProgressBar()
-        self._bar.setRange(0, 0)  # indeterminate until total is known
-        layout.addWidget(self._bar)
-
-        self._pct_label = QLabel("")
-        self._pct_label.setAlignment(Qt.AlignmentFlag.AlignRight)
-        layout.addWidget(self._pct_label)
-
-    def on_progress(self, current: int, total: int) -> None:
-        if total <= 0:
-            return
-        if self._bar.maximum() == 0:
-            self._bar.setRange(0, total)
-        self._bar.setValue(current)
-        pct = int(current / total * 100)
-        self._detail_label.setText(
-            tr("progress.indexing_files", current=current, total=total)
-        )
-        self._pct_label.setText(f"{pct}%")
-
-
-# ---------------------------------------------------------------------------
 # Statistics dialog
 # ---------------------------------------------------------------------------
 
@@ -738,42 +695,65 @@ class _ReportsDialog(QDialog):
 
 
 class _WatcherBridge(QObject):
-    files_changed = Signal(object, object)
+    """Carries one folder's watchdog callbacks onto the GUI thread.
+
+    The callback runs on the observer thread; emitting a signal from there
+    queues the slot on the GUI thread, tagged with the folder it came from.
+    """
+
+    files_changed = Signal(object, object, object)  # (folder, modified, deleted)
+
+    def __init__(self, folder: Path) -> None:
+        super().__init__()
+        self._folder = folder
 
     def on_changed(self, modified: set[Path], deleted: set[Path]) -> None:
-        self.files_changed.emit(modified, deleted)
+        self.files_changed.emit(self._folder, modified, deleted)
 
 
 # ---------------------------------------------------------------------------
 # Main window
 # ---------------------------------------------------------------------------
 
+# Sidebar | list | details panel, until the user drags the splitter.
+_DEFAULT_SPLITTER_SIZES = (236, 644, 520)
+_SIDEBAR_MIN_WIDTH = 200
+_LIST_MIN_WIDTH = 360
+_PANEL_MIN_WIDTH = 420
+
 
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("SQLShelf")
+        self.setMinimumSize(1100, 700)
         self.resize(1400, 860)
 
+        # The library folder of the query in view, and its index.
         self._folder: Path | None = None
         self._db: IndexDB | None = None
-        self._watcher: FolderWatcher | None = None
-        self._watcher_bridge = _WatcherBridge()
-        self._watcher_bridge.files_changed.connect(self._handle_files_changed)
+        # One watcher per library folder, so every index stays current.
+        self._watchers: dict[Path, tuple[FolderWatcher, _WatcherBridge]] = {}
 
         self._current_result: SearchResult | None = None
         self._current_metadata: dict = {}
         self._edit_mode = False
-        self._progress_dialog: _IndexProgressDialog | None = None
         self._quitting = False
 
         # Multi-folder support
         self._known_dbs: dict[Path, IndexDB] = {}
-        self._browse_folder: Path | None = None  # None = show all known folders
 
-        # Sidebar navigation state — used to compose status bar messages
-        self._sidebar_mode: str = "all"  # "all" | "tag" | "favorites" | "recent"
-        self._active_tag: str = ""
+        # Where the user is (folder, tag, search…), with back/forward history.
+        self._nav = NavHistory()
+
+        # Indexing jobs queued or running, for the status bar progress.
+        self._index_jobs = 0
+        self._indexing_name = ""
+
+        # Details panel: the user's choice, and its width while hidden.
+        self._panel_visible = cfg.get_panel_visible()
+        saved_sizes = cfg.get_splitter_sizes()
+        self._panel_width = (saved_sizes or _DEFAULT_SPLITTER_SIZES)[2]
 
         # Async search state
         self._search_gen: int = 0  # incremented per dispatch; workers check this
@@ -798,7 +778,7 @@ class MainWindow(QMainWindow):
         self._search_timer = QTimer(self)
         self._search_timer.setSingleShot(True)
         self._search_timer.setInterval(200)  # ms to wait after last keystroke
-        self._search_timer.timeout.connect(self._do_search)
+        self._search_timer.timeout.connect(self._on_search_timeout)
 
         # Pre-open DBs for known folders so global view works on startup
         for folder, _ in cfg.get_known_folders():
@@ -807,11 +787,8 @@ class MainWindow(QMainWindow):
                     self._known_dbs[folder] = IndexDB(folder)
                 except Exception:
                     pass
-        if self._known_dbs:
-            self._refresh_ui()
-        else:
-            self._update_content_view()
-        self._refresh_status_bar()
+        self._sync_watchers()
+        self._apply_nav()
 
         # Silent startup update check — runs after 5 s to avoid slowing launch
         self._startup_update_timer = QTimer(self)
@@ -969,6 +946,70 @@ class MainWindow(QMainWindow):
         self._copy_act.triggered.connect(self.copy_sql)
         self._view_menu.addAction(self._copy_act)
 
+        self._view_menu.addSeparator()
+
+        self._back_act = QAction(tr("menu.go_back"), self)
+        self._back_act.setShortcut(QKeySequence("Alt+Left"))
+        self._back_act.triggered.connect(self.go_back)
+        self._view_menu.addAction(self._back_act)
+
+        self._forward_act = QAction(tr("menu.go_forward"), self)
+        self._forward_act.setShortcut(QKeySequence("Alt+Right"))
+        self._forward_act.triggered.connect(self.go_forward)
+        self._view_menu.addAction(self._forward_act)
+
+        self._up_act = QAction(tr("menu.go_up"), self)
+        self._up_act.setShortcut(QKeySequence("Alt+Up"))
+        self._up_act.triggered.connect(self.go_up)
+        self._view_menu.addAction(self._up_act)
+
+        self._view_menu.addSeparator()
+
+        self._panel_act = QAction(tr("menu.toggle_panel"), self)
+        self._panel_act.setShortcut(QKeySequence("Alt+P"))
+        self._panel_act.setCheckable(True)
+        self._panel_act.setChecked(self._panel_visible)
+        self._panel_act.toggled.connect(self._set_panel_visible)
+        self._view_menu.addAction(self._panel_act)
+
+        self._menu_bar_act = QAction(tr("menu.show_menu_bar"), self)
+        self._menu_bar_act.setCheckable(True)
+        self._menu_bar_act.setChecked(cfg.get_show_menu_bar())
+        self._menu_bar_act.toggled.connect(self._set_menu_bar_visible)
+        self._view_menu.addAction(self._menu_bar_act)
+
+        # The ⋯ button in the command bar holds the same menus, so the menu
+        # bar can stay hidden without losing anything.
+        self._more_menu = QMenu(self)
+        for menu in (
+            self._file_menu,
+            self._edit_menu,
+            self._view_menu,
+            self._settings_menu,
+            self._help_menu,
+        ):
+            self._more_menu.addMenu(menu)
+            self._register_shortcuts(menu)
+
+        mb.setVisible(cfg.get_show_menu_bar())
+
+    def _register_shortcuts(self, menu: QMenu) -> None:
+        """Add *menu*'s shortcut actions to the window itself.
+
+        An action reachable only through a hidden menu bar never fires its
+        shortcut; one added to the window works whatever menu shows it.
+        """
+        for act in menu.actions():
+            submenu = act.menu()
+            if isinstance(submenu, QMenu):
+                self._register_shortcuts(submenu)
+            elif not act.shortcut().isEmpty():
+                self.addAction(act)
+
+    def _set_menu_bar_visible(self, visible: bool) -> None:
+        self.menuBar().setVisible(visible)
+        cfg.set_show_menu_bar(visible)
+
     def _rebuild_language_menu(self) -> None:
         self._language_menu.clear()
         current = get_language()
@@ -997,21 +1038,37 @@ class MainWindow(QMainWindow):
         self._sidebar.recent_selected.connect(self._on_recent_selected)
         self._sidebar.set_folders(cfg.get_known_folders(), None)
 
-        # Middle panel — minimum width so it never shrinks, but can grow if user drags the splitter
-        middle = QWidget()
-        middle.setMinimumWidth(360)
-        mid_layout = QVBoxLayout(middle)
-        mid_layout.setContentsMargins(8, 10, 8, 4)
-        mid_layout.setSpacing(8)
-
+        # Address and command bars span the window above the three panels.
         self._search_bar = SearchBar()
         self._search_bar.search_changed.connect(self._on_search_changed)
 
+        self._address_bar = AddressBar(self._search_bar)
+        self._address_bar.navigate_requested.connect(self._navigate)
+        self._address_bar.back_requested.connect(self.go_back)
+        self._address_bar.forward_requested.connect(self.go_forward)
+        self._address_bar.up_requested.connect(self.go_up)
+        self._address_bar.reindex_requested.connect(self.force_reindex)
+
+        self._command_bar = CommandBar(self._more_menu)
+        self._command_bar.new_query_requested.connect(self.new_query)
+        self._command_bar.open_folder_requested.connect(self.open_folder)
+        self._command_bar.quick_search_requested.connect(self.open_command_palette)
+        self._command_bar.sort_requested.connect(self._on_sort_requested)
+        self._command_bar.group_requested.connect(self._on_group_requested)
+        self._command_bar.view_requested.connect(self._on_view_requested)
+        self._command_bar.panel_toggled.connect(self._set_panel_visible)
+        self._command_bar.set_panel_visible(self._panel_visible)
+
+        # Middle panel — the query list
+        middle = QWidget()
+        mid_layout = QVBoxLayout(middle)
+        mid_layout.setContentsMargins(8, 8, 8, 4)
+        mid_layout.setSpacing(0)
+
         self._query_list = QueryListWidget()
+        self._query_list.set_sort(cfg.get_sort_key())
         self._query_list.query_selected.connect(self._on_query_selected)
         self._query_list.context_action.connect(self._on_list_context_action)
-
-        mid_layout.addWidget(self._search_bar)
         mid_layout.addWidget(self._query_list)
 
         # Right panel
@@ -1138,34 +1195,44 @@ class MainWindow(QMainWindow):
         ob_layout.addSpacing(12)
         ob_layout.addWidget(self._ob_open_btn, alignment=Qt.AlignmentFlag.AlignCenter)
 
-        # ── Content stack: normal (middle + right) OR onboarding ─────────────
-        self._inner_splitter = QSplitter(Qt.Orientation.Horizontal)
-        self._inner_splitter.addWidget(middle)
-        self._inner_splitter.addWidget(right)
-        self._inner_splitter.setSizes([360, 900])
-        # Middle column keeps its user-set width; right panel absorbs all excess.
-        self._inner_splitter.setStretchFactor(0, 0)
-        self._inner_splitter.setStretchFactor(1, 1)
-        self._inner_splitter.setCollapsible(0, False)
-        self._inner_splitter.setCollapsible(1, False)
-        middle.setMinimumWidth(360)
+        # ── List stack: the query list, or onboarding while the library is empty
+        self._list_stack = QStackedWidget()
+        self._list_stack.setMinimumWidth(_LIST_MIN_WIDTH)
+        self._list_stack.addWidget(middle)  # index 0 — query list
+        self._list_stack.addWidget(self._onboarding)  # index 1 — onboarding
 
-        self._content_stack = QStackedWidget()
-        self._content_stack.addWidget(self._inner_splitter)  # index 0 — normal view
-        self._content_stack.addWidget(self._onboarding)  # index 1 — onboarding
+        # ── Three panels: sidebar | list | details ──────────────────────────
+        self._sidebar.setMinimumWidth(_SIDEBAR_MIN_WIDTH)
+        self._panel = right
+        self._panel.setMinimumWidth(_PANEL_MIN_WIDTH)
 
-        # ── Outer splitter: sidebar | content ────────────────────────────────
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        splitter.addWidget(self._sidebar)
-        splitter.addWidget(self._content_stack)
-        splitter.setSizes([220, 1180])
-        splitter.setStretchFactor(0, 0)
-        splitter.setStretchFactor(1, 1)
-        splitter.setCollapsible(0, False)
-        splitter.setCollapsible(1, False)
-        self.setCentralWidget(splitter)
+        self._splitter = QSplitter(Qt.Orientation.Horizontal)
+        self._splitter.addWidget(self._sidebar)
+        self._splitter.addWidget(self._list_stack)
+        self._splitter.addWidget(self._panel)
+        # The list absorbs window resizes; sidebar and panel keep their width.
+        for index, stretch in enumerate((0, 1, 0)):
+            self._splitter.setStretchFactor(index, stretch)
+            self._splitter.setCollapsible(index, False)
+        self._splitter.setSizes(
+            list(cfg.get_splitter_sizes() or _DEFAULT_SPLITTER_SIZES)
+        )
+        self._splitter_save_timer = QTimer(self)
+        self._splitter_save_timer.setSingleShot(True)
+        self._splitter_save_timer.setInterval(500)
+        self._splitter_save_timer.timeout.connect(self._save_splitter_sizes)
+        self._splitter.splitterMoved.connect(self._on_splitter_moved)
 
-        self._status_bar = QStatusBar()
+        central = QWidget()
+        central_layout = QVBoxLayout(central)
+        central_layout.setContentsMargins(0, 0, 0, 0)
+        central_layout.setSpacing(0)
+        central_layout.addWidget(self._address_bar)
+        central_layout.addWidget(self._command_bar)
+        central_layout.addWidget(self._splitter, 1)
+        self.setCentralWidget(central)
+
+        self._status_bar = StatusBar()
         self.setStatusBar(self._status_bar)
 
     def _build_shortcuts(self) -> None:
@@ -1219,6 +1286,11 @@ class MainWindow(QMainWindow):
         self._reveal_act.setText(tr("menu.reveal_in_explorer"))
 
         self._copy_act.setText(tr("menu.copy_sql"))
+        self._back_act.setText(tr("menu.go_back"))
+        self._forward_act.setText(tr("menu.go_forward"))
+        self._up_act.setText(tr("menu.go_up"))
+        self._panel_act.setText(tr("menu.toggle_panel"))
+        self._menu_bar_act.setText(tr("menu.show_menu_bar"))
         self._help_act.setText(tr("menu.help_action"))
         self._stats_act.setText(tr("menu.statistics"))
         self._reports_act.setText(tr("menu.reports"))
@@ -1249,12 +1321,12 @@ class MainWindow(QMainWindow):
         self._ob_title.setText(tr("onboarding.no_folder"))
         self._ob_sub.setText(tr("onboarding.subtitle"))
         self._ob_open_btn.setText(tr("onboarding.open_btn"))
-        # Child widgets
+        # Child widgets; the address bar retranslates the search field too.
         self._sidebar.retranslate_ui()
-        self._search_bar.retranslate_ui()
+        self._address_bar.retranslate_ui()
+        self._command_bar.retranslate_ui()
         self._metadata_panel.retranslate_ui()
-        # Status bar
-        self._refresh_status_bar()
+        self._status_bar.retranslate_ui()
 
     # ------------------------------------------------------------------
     # Folder / indexing
@@ -1266,114 +1338,105 @@ class MainWindow(QMainWindow):
             self.load_folder(Path(folder))
 
     def load_folder(self, folder: Path) -> None:
-        """Open *folder*, index it (incremental), and start watching it."""
+        """Add *folder* to the library, index it (incremental) and show it.
+
+        Indexing runs in the background with its progress in the status bar,
+        so the window stays usable meanwhile.
+        """
         if not folder.is_dir():
             return
-        self._stop_watcher()
-
-        self._folder = folder
-        self._browse_folder = folder
         db = self._get_or_open_db(folder)
-        self._db = db
         cfg.add_recent_project(folder)
         cfg.add_known_folder(folder)
         self._rebuild_recent_menu()
         self._sidebar.set_folders(cfg.get_known_folders(), folder)
-
-        self.setWindowTitle(f"SQLShelf — {folder.name}")
-        self._status_bar.showMessage(tr("status.indexing"))
         self._reset_editor()
+        self._start_index_job(_IndexWorker(db, folder), folder)
+        self._sync_watchers()
+        self._navigate(NavState("folder", folder))
 
-        self._progress_dialog = _IndexProgressDialog(folder.name, self)
+    def _sync_watchers(self) -> None:
+        """Watch every library folder, and stop watching removed ones."""
+        wanted = {folder for folder in self._known_dbs if folder.is_dir()}
+        for folder in [f for f in self._watchers if f not in wanted]:
+            watcher, _bridge = self._watchers.pop(folder)
+            watcher.stop()
+        for folder in wanted - self._watchers.keys():
+            bridge = _WatcherBridge(folder)
+            bridge.files_changed.connect(self._handle_files_changed)
+            try:
+                watcher = FolderWatcher(folder, bridge.on_changed)
+                watcher.start()
+            except Exception:
+                continue  # an unwatchable folder is still browsable
+            self._watchers[folder] = (watcher, bridge)
+        self._status_bar.set_watching(len(self._watchers))
 
-        worker = _IndexWorker(db, folder)
-        worker.signals.progress.connect(self._progress_dialog.on_progress)
-        worker.signals.progress.connect(self._on_index_progress)
-        worker.signals.finished.connect(self._on_index_finished)
-        worker.signals.error.connect(self._on_index_error)
-        _INDEX_POOL.start(worker)
-
-        self._progress_dialog.show()
-
-        self._start_watcher(folder)
-
-    def _start_watcher(self, folder: Path) -> None:
-        """Watch *folder*, replacing any watcher on a previous folder.
-
-        Switching folders used to leave the watcher on the old one, so its
-        events were applied against the new folder's index — where they matched
-        nothing, and only cost a wasted UI refresh.
-        """
-        self._stop_watcher()
-        self._watcher_bridge = _WatcherBridge()
-        self._watcher_bridge.files_changed.connect(self._handle_files_changed)
-        self._watcher = FolderWatcher(folder, self._watcher_bridge.on_changed)
-        self._watcher.start()
+    def _stop_watchers(self) -> None:
+        for watcher, _bridge in self._watchers.values():
+            try:
+                watcher.stop()
+            except Exception:
+                pass
+        self._watchers.clear()
 
     def _on_sidebar_folder_selected(self, folder: Path) -> None:
-        """Switch the query list to *folder* without a full reindex."""
+        """Show *folder* without a full reindex."""
         if not folder.is_dir():
             return
-        if folder != self._folder:
-            self._start_watcher(folder)
-        self._folder = folder
-        self._browse_folder = folder
-        self._sidebar_mode = "all"
-        self._active_tag = ""
-        self._db = self._get_or_open_db(folder)
-        self._search_bar.blockSignals(True)
-        self._search_bar.clear()
-        self._search_bar.blockSignals(False)
-        self._sidebar.set_folders(cfg.get_known_folders(), folder)
-        self._refresh_ui()
+        if folder not in self._known_dbs:
+            self._get_or_open_db(folder)
+            self._sync_watchers()
+        self._navigate(NavState("folder", folder))
 
     def _get_or_open_db(self, folder: Path) -> IndexDB:
         if folder not in self._known_dbs:
             self._known_dbs[folder] = IndexDB(folder)
         return self._known_dbs[folder]
 
-    def _on_index_progress(self, current: int, total: int) -> None:
-        if total > 0:
-            pct = int(current / total * 100)
-            self._status_bar.showMessage(
-                tr("status.indexing_pct", pct=pct, current=current, total=total)
-            )
-
-    def _on_index_finished(self, count: int) -> None:
-        if self._progress_dialog is not None:
-            self._progress_dialog.accept()
-            self._progress_dialog = None
-        self._status_bar.showMessage(tr("status.indexed", count=count))
-        self._refresh_ui()
-
-    def _on_index_error(self, msg: str) -> None:
-        if self._progress_dialog is not None:
-            self._progress_dialog.reject()
-            self._progress_dialog = None
-        self._status_bar.showMessage(tr("status.index_error", msg=msg))
-
-    def force_reindex(self) -> None:
-        if self._db is None or self._folder is None:
-            return
-        self._status_bar.showMessage(tr("status.full_reindex"))
-
-        self._progress_dialog = _IndexProgressDialog(
-            self._folder.name, self, title_key="progress.reindexing"
-        )
-
-        worker = _ForceReindexWorker(self._db, self._folder)
-        worker.signals.progress.connect(self._progress_dialog.on_progress)
+    def _start_index_job(
+        self, worker: _IndexWorker | _ForceReindexWorker, folder: Path
+    ) -> None:
+        """Queue *worker*; the status bar shows progress until all jobs end."""
+        if not self._index_jobs:
+            self._indexing_name = folder.name
+            self._status_bar.set_indexing(folder.name)
+        self._index_jobs += 1
+        worker.signals.started.connect(self._on_index_started)
         worker.signals.progress.connect(self._on_index_progress)
         worker.signals.finished.connect(self._on_index_finished)
         worker.signals.error.connect(self._on_index_error)
         _INDEX_POOL.start(worker)
 
-        self._progress_dialog.show()
+    def _on_index_started(self, folder: Path) -> None:
+        self._indexing_name = folder.name
+        self._status_bar.set_indexing(folder.name)
 
-    def _stop_watcher(self) -> None:
-        if self._watcher is not None:
-            self._watcher.stop()
-            self._watcher = None
+    def _on_index_progress(self, current: int, total: int) -> None:
+        self._status_bar.set_indexing(self._indexing_name, current, total)
+
+    def _on_index_finished(self, _count: int) -> None:
+        self._end_index_job()
+        self._refresh_ui()
+
+    def _on_index_error(self, msg: str) -> None:
+        self._end_index_job()
+        self._status_bar.flash(tr("status.index_error", msg=msg))
+
+    def _end_index_job(self) -> None:
+        self._index_jobs = max(0, self._index_jobs - 1)
+        if not self._index_jobs:
+            self._status_bar.set_index_ready()
+
+    def force_reindex(self) -> None:
+        """Rebuild the index of the folder in view, or of the whole library."""
+        folder = self._nav.current.folder
+        root = root_of(folder, self._known_dbs) if folder is not None else None
+        targets = [root] if root is not None else list(self._known_dbs)
+        for target in targets:
+            if target.is_dir():
+                worker = _ForceReindexWorker(self._known_dbs[target], target)
+                self._start_index_job(worker, target)
 
     def _rebuild_recent_menu(self) -> None:
         self._recent_menu.clear()
@@ -1403,54 +1466,38 @@ class MainWindow(QMainWindow):
         self._edit_toggle_btn.setText(tr("editor.btn_edit"))
         self._current_result = None
         self._current_metadata = {}
+        self._status_bar.set_selected(0)
 
     # ------------------------------------------------------------------
     # UI refresh
     # ------------------------------------------------------------------
 
     def _update_content_view(self) -> None:
-        """Switch between the normal split view and the onboarding empty state."""
-        if self._known_dbs:
-            self._content_stack.setCurrentIndex(0)
-        else:
-            self._content_stack.setCurrentIndex(1)
-
-    def _refresh_status_bar(self) -> None:
-        """Update the status bar to reflect the current index state."""
-        if self._known_dbs:
-            total = sum(db.count() for db in self._known_dbs.values())
-            n = len(self._known_dbs)
-            q_word = ntr("word.query", "word.queries", total)
-            f_word = ntr("word.folder", "word.folders", n)
-            self._status_bar.showMessage(
-                tr(
-                    "status.folders_loaded",
-                    total=total,
-                    query=q_word,
-                    n=n,
-                    folder=f_word,
-                )
-            )
-        else:
-            self._status_bar.showMessage(tr("status.no_folder"))
+        """Show the query list, or onboarding while the library is empty."""
+        has_library = bool(self._known_dbs)
+        self._list_stack.setCurrentIndex(0 if has_library else 1)
+        self._apply_panel_visibility()
+        if not has_library:
+            self._status_bar.set_no_library()
 
     def _refresh_ui(self) -> None:
         self._update_content_view()
-        if not self._known_dbs:
-            return
-        self._do_search()
+        if self._known_dbs:
+            self._do_search()
 
     def _do_search(self) -> None:
-        """Dispatch a search to the thread pool; discard result if superseded."""
+        """Dispatch the current state's search; discard results if superseded."""
         self._search_timer.stop()  # cancel any still-pending debounce
         if not self._known_dbs:
             return
+        state = self._nav.current
+        mode = state.kind if state.kind in ("favorites", "recent") else "search"
         self._search_gen += 1
         worker = _SearchWorker(
             dict(self._known_dbs),
-            self._search_bar.text(),
-            self._browse_folder,
-            self._sidebar_mode,
+            search_text(state),
+            state.folder,
+            mode,
             self._search_gen,
         )
         worker.signals.results_ready.connect(self._on_search_results)
@@ -1460,57 +1507,126 @@ class MainWindow(QMainWindow):
         if gen != self._search_gen:
             return  # stale result from a superseded search
         self._sidebar.set_tags(tags)
+        # The tag list was just rebuilt; highlight the current tag again.
+        self._sidebar.show_state(self._nav.current)
         self._query_list.set_results(results)
         if not results:
             self._reset_editor()
         if self._pending_select is not None:
             self._query_list.select_by_rel_path(self._pending_select)
             self._pending_select = None
-        self._update_results_status(results)
+        self._status_bar.set_counts(
+            len(results),
+            searching=self._nav.current.kind == "search",
+            selected=1 if self._current_result is not None else 0,
+        )
 
-    def _update_results_status(self, results: list) -> None:
-        """Update status bar with the count of currently displayed results."""
-        count = len(results)
-        q_word = ntr("word.query", "word.queries", count)
-        search_text = self._search_bar.text().strip()
+    # ------------------------------------------------------------------
+    # Navigation
+    # ------------------------------------------------------------------
 
-        if self._sidebar_mode == "favorites":
-            self._status_bar.showMessage(
-                tr("status.favorites_count", count=count, query=q_word)
-            )
-        elif self._sidebar_mode == "recent":
-            self._status_bar.showMessage(
-                tr("status.recent_count", count=count, query=q_word)
-            )
-        elif self._sidebar_mode == "tag" and self._active_tag:
-            self._status_bar.showMessage(
-                tr("status.tag_count", tag=self._active_tag, count=count, query=q_word)
-            )
-        elif self._browse_folder is not None:
-            self._status_bar.showMessage(
-                tr(
-                    "status.folder_count",
-                    name=self._browse_folder.name,
-                    count=count,
-                    query=q_word,
-                )
-            )
-        elif search_text:
-            self._status_bar.showMessage(
-                tr("status.search_count", count=count, query=q_word, filter=search_text)
-            )
+    def _navigate(self, state: NavState) -> None:
+        """Go to *state*, recording it in the back/forward history."""
+        self._nav.navigate(state)
+        self._apply_nav()
+
+    def go_back(self) -> None:
+        if self._nav.back() is not None:
+            self._apply_nav()
+
+    def go_forward(self) -> None:
+        if self._nav.forward() is not None:
+            self._apply_nav()
+
+    def go_up(self) -> None:
+        if self._nav.up(self._known_dbs) is not None:
+            self._apply_nav()
+
+    def _apply_nav(self) -> None:
+        """Bring the whole window in line with the current navigation state."""
+        state = self._nav.current
+        roots = list(self._known_dbs)
+        root = root_of(state.folder, roots) if state.folder is not None else None
+        if root is not None:
+            self._folder = root
+            self._db = self._known_dbs[root]
+        self.setWindowTitle(f"SQLShelf — {root.name}" if root else "SQLShelf")
+        # Leave the field alone while it already says this, trailing spaces
+        # included, or typing would lose the space before the next word.
+        if self._search_bar.text().strip() != search_text(state):
+            self._search_bar.set_text_silently(search_text(state))
+        self._sidebar.show_state(state)
+        self._address_bar.set_state(
+            state,
+            roots,
+            can_back=self._nav.can_back,
+            can_forward=self._nav.can_forward,
+        )
+        self._back_act.setEnabled(self._nav.can_back)
+        self._forward_act.setEnabled(self._nav.can_forward)
+        self._up_act.setEnabled(state.kind != "all")
+        self._refresh_ui()
+
+    # ------------------------------------------------------------------
+    # Panels
+    # ------------------------------------------------------------------
+
+    def _set_panel_visible(self, visible: bool) -> None:
+        """Show or hide the details panel (Alt+P or the command bar)."""
+        self._panel_visible = visible
+        cfg.set_panel_visible(visible)
+        self._command_bar.set_panel_visible(visible)
+        self._panel_act.blockSignals(True)
+        self._panel_act.setChecked(visible)
+        self._panel_act.blockSignals(False)
+        self._apply_panel_visibility()
+
+    def _apply_panel_visibility(self) -> None:
+        """The panel shows when the user wants it and there is a library."""
+        show = self._panel_visible and bool(self._known_dbs)
+        if show == (not self._panel.isHidden()):
+            return
+        if show:
+            sizes = self._splitter.sizes()
+            self._panel.show()
+            # Give the panel its old width back, taken from the list.
+            sizes[1] = max(_LIST_MIN_WIDTH, sizes[1] - self._panel_width)
+            sizes[2] = self._panel_width
+            self._splitter.setSizes(sizes)
         else:
-            n = len(self._known_dbs)
-            f_word = ntr("word.folder", "word.folders", n)
-            self._status_bar.showMessage(
-                tr(
-                    "status.folders_loaded",
-                    total=count,
-                    query=q_word,
-                    n=n,
-                    folder=f_word,
-                )
-            )
+            # Before the window is first shown the sizes are not real yet.
+            if self.isVisible() and self._splitter.sizes()[2] > 0:
+                self._panel_width = self._splitter.sizes()[2]
+            self._panel.hide()
+
+    def _on_splitter_moved(self, _pos: int, _index: int) -> None:
+        self._splitter_save_timer.start()
+
+    def _save_splitter_sizes(self) -> None:
+        sizes = self._splitter.sizes()
+        if self._panel.isHidden():
+            sizes[2] = self._panel_width
+        elif sizes[2] > 0:
+            self._panel_width = sizes[2]
+        if sizes[0] > 0 and sizes[1] > 0:
+            cfg.set_splitter_sizes(sizes)
+
+    # ------------------------------------------------------------------
+    # Command bar
+    # ------------------------------------------------------------------
+
+    def _on_sort_requested(self, key: str) -> None:
+        self._query_list.set_sort(key)
+        cfg.set_sort_key(key)
+        self._command_bar.set_sort(key)
+
+    def _on_group_requested(self, mode: str) -> None:
+        cfg.set_group_mode(mode)
+        self._command_bar.set_group(mode)
+
+    def _on_view_requested(self, mode: str) -> None:
+        cfg.set_view_mode(mode)
+        self._command_bar.set_view(mode)
 
     # ------------------------------------------------------------------
     # Query selection
@@ -1555,6 +1671,7 @@ class MainWindow(QMainWindow):
             tables=[],
         )
         self._metadata_panel.set_path(path)
+        self._status_bar.set_selected(1)
 
     def _record_access(self, action: str) -> None:
         """Log an access event (open/copy/open_in_ssms) for the current query."""
@@ -1607,47 +1724,40 @@ class MainWindow(QMainWindow):
     def _on_search_changed(self, _text: str) -> None:
         self._search_timer.start()  # reset countdown on each keystroke
 
+    def _on_search_timeout(self) -> None:
+        """Turn the typed text into a navigation state once typing pauses."""
+        current = self._nav.current
+        state = with_search(current, self._search_bar.text())
+        if state == current:
+            return
+        if current.kind == "search" and state.kind == "search":
+            # Refining a search replaces it, so Back does not replay keystrokes.
+            self._nav.replace(state)
+            self._apply_nav()
+        else:
+            self._navigate(state)
+
     def _on_tag_selected(self, tag: str) -> None:
         if not tag:
-            # "All queries" clicked — switch to global multi-folder mode
-            self._browse_folder = None
-            self._sidebar.set_folders(cfg.get_known_folders(), None)
-            self._sidebar_mode = "all"
-            self._active_tag = ""
+            # "All queries" — every folder in the library
+            self._navigate(NavState("all"))
         else:
-            self._sidebar_mode = "tag"
-            self._active_tag = tag
-        self._search_bar.blockSignals(True)
-        self._search_bar._edit.setText(f"tag:{tag}" if tag else "")
-        self._search_bar.blockSignals(False)
-        self._refresh_ui()
+            self._navigate(NavState("tag", self._nav.current.folder, tag))
 
     def _on_favorites_selected(self) -> None:
-        self._search_timer.stop()
-        self._sidebar_mode = "favorites"
-        self._search_bar.blockSignals(True)
-        self._search_bar.clear()
-        self._search_bar.blockSignals(False)
-        self._do_search()
+        self._navigate(NavState("favorites"))
 
     def _on_recent_selected(self) -> None:
-        self._search_timer.stop()
-        self._sidebar_mode = "recent"
-        self._search_bar.blockSignals(True)
-        self._search_bar.clear()
-        self._search_bar.blockSignals(False)
-        self._do_search()
+        self._navigate(NavState("recent", self._nav.current.folder))
 
     def _on_navigate_requested(self, token: str) -> None:
         """Jump to the first occurrence of *token* in the current SQL editor."""
         self._editor.navigate_to_token(token)
 
     def _on_filter_requested(self, kind: str, value: str) -> None:
-        """Reverse search: right-click chip → fill search bar with table/col filter."""
-        self._search_bar.blockSignals(True)
-        self._search_bar._edit.setText(f"{kind}:{value}")
-        self._search_bar.blockSignals(False)
-        self._do_search()
+        """Reverse search: right-click chip → search the scope for table/col."""
+        folder = self._nav.current.folder
+        self._navigate(NavState("search", folder, f"{kind}:{value}"))
 
     # ------------------------------------------------------------------
     # Context menu actions from QueryListWidget
@@ -1673,7 +1783,7 @@ class MainWindow(QMainWindow):
                     except Exception:
                         pass
             QApplication.clipboard().setText(body)
-            self._status_bar.showMessage(tr("status.copied", path=result.rel_path))
+            self._status_bar.flash(tr("status.copied", path=result.rel_path))
         elif action == "reveal":
             self._query_list.select_by_rel_path(result.rel_path)
             self.reveal_in_explorer()
@@ -1683,9 +1793,7 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _on_folder_remove_requested(self, folder: Path) -> None:
-        cfg.remove_known_folder(folder)
-        self._sidebar.set_folders(cfg.get_known_folders(), self._folder)
-        self._refresh_status_bar()
+        self._forget_folder(folder)
 
     def _on_folder_deindex_requested(self, folder: Path) -> None:
         reply = QMessageBox.question(
@@ -1697,13 +1805,19 @@ class MainWindow(QMainWindow):
         )
         if reply != QMessageBox.StandardButton.Yes:
             return
+        self._forget_folder(folder, delete_index=True)
 
+    def _forget_folder(self, folder: Path, *, delete_index: bool = False) -> None:
+        """Take *folder* out of the library, closing its index and watcher."""
+        cfg.remove_known_folder(folder)
         db = self._known_dbs.pop(folder, None)
+        self._sync_watchers()
         if db is not None:
             try:
                 db.close()
             except Exception:
                 pass
+        if delete_index:
             db_path = folder / ".sqlshelf" / "index.db"
             try:
                 if db_path.exists():
@@ -1711,20 +1825,20 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
 
-        cfg.remove_known_folder(folder)
         self._rebuild_recent_menu()
-        self._sidebar.set_folders(cfg.get_known_folders(), self._folder)
-
-        # If the active folder was deindexed, reset the view
-        if self._folder is not None and self._folder.resolve() == folder.resolve():
+        self._sidebar.set_folders(cfg.get_known_folders(), None)
+        if self._folder == folder:
             self._folder = None
             self._db = None
-            self._browse_folder = None
             self._reset_editor()
+        if not self._known_dbs:
             self._query_list.set_results([])
 
-        self._refresh_ui()
-        self._refresh_status_bar()
+        current = self._nav.current.folder
+        if current is not None and root_of(current, [folder]) is not None:
+            self._navigate(NavState("all"))
+        else:
+            self._apply_nav()
 
     def _on_folder_favorite_toggled(self, folder: Path) -> None:
         cfg.toggle_folder_favorite(folder)
@@ -1750,7 +1864,7 @@ class MainWindow(QMainWindow):
         if self._current_result and self._current_result.rel_path == result.rel_path:
             self._metadata_panel.set_favorite(is_fav)
         key = "status.added_favorite" if is_fav else "status.removed_favorite"
-        self._status_bar.showMessage(tr(key, path=result.rel_path))
+        self._status_bar.flash(tr(key, path=result.rel_path))
 
     # ------------------------------------------------------------------
     # Command palette (Ctrl+K)
@@ -1760,12 +1874,12 @@ class MainWindow(QMainWindow):
         if not self._known_dbs:
             return
         results: list[SearchResult] = []
-        if self._browse_folder is not None:
-            db = self._known_dbs.get(self._browse_folder)
-            if db:
-                results = db.search("")
-                for r in results:
-                    r.folder = self._browse_folder
+        scope = self._nav.current.folder
+        root = root_of(scope, self._known_dbs) if scope is not None else None
+        if root is not None:
+            results = self._known_dbs[root].search("")
+            for r in results:
+                r.folder = root
         else:
             for folder, db in self._known_dbs.items():
                 try:
@@ -1783,15 +1897,11 @@ class MainWindow(QMainWindow):
         palette.exec()
 
     def _on_palette_selected(self, result: SearchResult) -> None:
-        if result.folder is not None and result.folder in self._known_dbs:
-            self._browse_folder = result.folder
-            self._db = self._known_dbs[result.folder]
-            self._sidebar.set_folders(cfg.get_known_folders(), result.folder)
-        self._search_bar.blockSignals(True)
-        self._search_bar.clear()
-        self._search_bar.blockSignals(False)
         self._pending_select = result.rel_path
-        self._do_search()
+        if result.folder is not None and result.folder in self._known_dbs:
+            self._navigate(NavState("folder", result.folder))
+        else:
+            self._do_search()
 
     # ------------------------------------------------------------------
     # Edit / Save
@@ -1896,30 +2006,33 @@ class MainWindow(QMainWindow):
         self._edit_toggle_btn.setChecked(False)
         self._edit_toggle_btn.setText(tr("editor.btn_edit"))
         self._refresh_ui()
-        self._status_bar.showMessage(
-            tr("status.saved", path=self._current_result.rel_path)
-        )
+        self._status_bar.flash(tr("status.saved", path=self._current_result.rel_path))
 
     # ------------------------------------------------------------------
     # New query / duplicate / templates
     # ------------------------------------------------------------------
 
     def new_query(self) -> None:
-        if self._folder is None:
+        # In the library view, new queries go to the first folder.
+        folder = self._folder or next(iter(self._known_dbs), None)
+        if folder is None:
             QMessageBox.information(
                 self, tr("msg.no_folder.title"), tr("msg.no_folder.text")
             )
             return
         all_projects = [p for p, _ in cfg.get_known_folders()]
         if not all_projects:
-            all_projects = [self._folder]
-        available_tags = self._db.get_all_tags() if self._db is not None else []
-        dlg = NewQueryDialog(self._folder, all_projects, self, available_tags)
+            all_projects = [folder]
+        db = self._known_dbs.get(folder)
+        available_tags = db.get_all_tags() if db is not None else []
+        dlg = NewQueryDialog(folder, all_projects, self, available_tags)
         if dlg.exec() == dlg.DialogCode.Accepted and dlg.created_path is not None:
             self._post_create(dlg.created_path)
 
     def new_from_template(self) -> None:
-        if self._folder is None:
+        # In the library view, new queries go to the first folder.
+        folder = self._folder or next(iter(self._known_dbs), None)
+        if folder is None:
             QMessageBox.information(
                 self, tr("msg.no_folder.title"), tr("msg.no_folder.text")
             )
@@ -1936,8 +2049,8 @@ class MainWindow(QMainWindow):
             return
         all_projects = [p for p, _ in cfg.get_known_folders()]
         if not all_projects:
-            all_projects = [self._folder]
-        dlg = TemplateDialog(self._folder, all_projects, self)
+            all_projects = [folder]
+        dlg = TemplateDialog(folder, all_projects, self)
         if dlg.exec() == dlg.DialogCode.Accepted and dlg.created_path is not None:
             self._post_create(dlg.created_path)
 
@@ -2014,42 +2127,37 @@ class MainWindow(QMainWindow):
                 continue
 
         if target_project is None:
-            self._status_bar.showMessage(tr("status.created", name=path.name))
+            self._status_bar.flash(tr("status.created", name=path.name))
             return
 
-        # Switch to the target project if different from the current one
-        if target_project != self._folder:
-            self._on_sidebar_folder_selected(target_project)
-
-        if self._folder is None:
-            return
+        db = self._get_or_open_db(target_project)
         updated = scan_file(path)
-        if updated is not None and self._db is not None:
-            self._db.upsert_query(updated)
-        try:
-            self._pending_select = path.relative_to(self._folder).as_posix()
-        except ValueError:
-            pass
-        self._refresh_ui()
-        self._status_bar.showMessage(tr("status.created", name=path.name))
+        if updated is not None:
+            db.upsert_query(updated)
+        self._pending_select = path.relative_to(target_project).as_posix()
+        if self._nav.current.kind == "all":
+            self._refresh_ui()
+        else:
+            self._navigate(NavState("folder", target_project))
+        self._status_bar.flash(tr("status.created", name=path.name))
 
     # ------------------------------------------------------------------
     # Watcher handler
     # ------------------------------------------------------------------
 
-    def _handle_files_changed(self, modified: set[Path], deleted: set[Path]) -> None:
-        """Reindex what the watcher reported, without touching the GUI thread."""
-        if self._db is None or self._folder is None:
+    def _handle_files_changed(
+        self, folder: Path, modified: set[Path], deleted: set[Path]
+    ) -> None:
+        """Reindex what a folder's watcher reported, off the GUI thread."""
+        db = self._known_dbs.get(folder)
+        if db is None or (not modified and not deleted):
             return
-        if not modified and not deleted:
-            return
-        worker = _WatchSyncWorker(self._db, set(modified), set(deleted))
+        worker = _WatchSyncWorker(db, set(modified), set(deleted))
         worker.signals.finished.connect(self._on_watch_sync_finished)
         _INDEX_POOL.start(worker)
 
-    def _on_watch_sync_finished(self, count: int) -> None:
+    def _on_watch_sync_finished(self, _count: int) -> None:
         self._refresh_ui()
-        self._status_bar.showMessage(tr("status.indexed", count=count))
 
     # ------------------------------------------------------------------
     # System actions
@@ -2085,7 +2193,7 @@ class MainWindow(QMainWindow):
         body = self._editor.toPlainText()
         if body:
             QApplication.clipboard().setText(body)
-            self._status_bar.showMessage(tr("status.sql_copied"))
+            self._status_bar.flash(tr("status.sql_copied"))
             self._record_access("copy")
 
     def copy_frontmatter_template(self) -> None:
@@ -2103,7 +2211,7 @@ class MainWindow(QMainWindow):
             "--- */"
         )
         QApplication.clipboard().setText(block)
-        self._status_bar.showMessage(tr("status.frontmatter_template_copied"))
+        self._status_bar.flash(tr("status.frontmatter_template_copied"))
 
     # ------------------------------------------------------------------
     # Help / About
@@ -2136,7 +2244,7 @@ class MainWindow(QMainWindow):
     def _on_silent_update_result(self, info) -> None:
         if info.has_update:
             msg = tr("update.startup_notify", version=info.latest_version)
-            self._status_bar.showMessage(msg, 20000)
+            self._status_bar.flash(msg, 20000)
 
     def _show_about(self) -> None:
         dlg = QDialog(self)
@@ -2216,7 +2324,8 @@ class MainWindow(QMainWindow):
         apply_theme(app, name)
 
         # Refresh widgets that manage their own stylesheets
-        self._search_bar.refresh_theme()
+        self._address_bar.refresh_theme()  # and the search field
+        self._command_bar.refresh_theme()
         self._query_list.refresh_theme()
         self._sidebar.refresh_theme()
         self._metadata_panel.refresh_theme()
@@ -2239,7 +2348,8 @@ class MainWindow(QMainWindow):
             event.ignore()
             self.hide()
             return
-        self._stop_watcher()
+        self._save_splitter_sizes()
+        self._stop_watchers()
         # Let running workers finish before the connections they hold go away.
         # Bounded, so a wedged worker can never block the app from exiting.
         _INDEX_POOL.waitForDone(3000)

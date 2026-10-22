@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..core.i18n import tr
+from ..core.navigation import NavState
 from . import tokens as _tk
 from .tokens import TEXT_TERTIARY
 
@@ -363,6 +364,31 @@ class SidebarWidget(QWidget):
         """Programmatically switch the nav selection back to 'All queries'."""
         self._set_active_btn(self._btn_all)
         self._tag_list.clearSelection()
+
+    def show_state(self, state: NavState) -> None:
+        """Highlight the entry for *state* without emitting any signal.
+
+        Called after every navigation, including back/forward, so the sidebar
+        always agrees with the address bar.
+        """
+        if state.kind == "favorites":
+            self._set_active_btn(self._btn_fav)
+        elif state.kind == "recent":
+            self._set_active_btn(self._btn_recent)
+        elif state.folder is None:
+            self._set_active_btn(self._btn_all)
+        else:
+            self._deactivate_nav_btn()
+        self.set_active_folder(state.folder)
+
+        self._tag_list.blockSignals(True)
+        self._tag_list.clearSelection()
+        if state.kind == "tag":
+            for i in range(self._tag_list.count()):
+                if self._tag_list.item(i).text() == state.value:
+                    self._tag_list.setCurrentRow(i)
+                    break
+        self._tag_list.blockSignals(False)
 
     # ------------------------------------------------------------------
     # Nav — internal

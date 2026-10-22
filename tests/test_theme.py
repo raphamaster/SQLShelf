@@ -171,6 +171,9 @@ def _app() -> QApplication:
 
 def test_apply_theme_switches_live() -> None:
     app = _app()
+    # Clear any stylesheet left by other tests, or style() would be the
+    # stylesheet wrapper and hide the non-Fusion base style.
+    app.setStyleSheet("")
     app.setStyle("Windows")
     try:
         apply_theme(app, "light")

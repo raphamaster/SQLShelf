@@ -251,7 +251,7 @@ Uma por vez. Cada fatia termina com:
 - **Aceite:** troca de tema ao vivo funciona; nenhum texto em caixa alta.
 
 ### F2 — Estrutura da janela
-- [ ] **Entrega:**
+- [x] **Entrega:**
   - Splitter de 3 painéis.
   - Barra de endereço, barra de comandos e menu ⋯.
   - Barra de status com progresso.

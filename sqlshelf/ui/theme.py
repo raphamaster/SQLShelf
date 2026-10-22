@@ -442,6 +442,138 @@ def app_stylesheet(palette: Mapping[str, str]) -> str:
             color: {c["text"]};
             background-color: {c["hover"]};
         }}
+
+        QWidget#AddressBar {{
+            background-color: {c["chrome"]};
+        }}
+        QWidget#CommandBar {{
+            background-color: {c["bg"]};
+            border-bottom: 1px solid {c["border"]};
+        }}
+        QFrame#Breadcrumb {{
+            background-color: {c["field"]};
+            border: 1px solid {c["border"]};
+            border-radius: {r}px;
+        }}
+        QFrame#Breadcrumb QLabel {{
+            background: transparent;
+        }}
+        QToolButton#Crumb {{
+            background: transparent;
+            color: {c["text2"]};
+            padding: 2px 6px;
+            border-radius: {r_sm}px;
+        }}
+        QToolButton#Crumb:hover {{
+            background-color: {c["hover"]};
+            color: {c["text"]};
+        }}
+        QToolButton#Crumb[current="true"] {{
+            color: {c["text"]};
+            font-weight: 600;
+        }}
+        QLabel#CrumbPrefix {{
+            color: {c["text2"]};
+            padding-left: 4px;
+        }}
+        QToolButton#IconButton {{
+            background: transparent;
+            border: none;
+            border-radius: {r}px;
+        }}
+        QToolButton#IconButton:hover {{
+            background-color: {c["hover"]};
+        }}
+        QToolButton#IconButton:pressed, QToolButton#IconButton:checked {{
+            background-color: {c["sel_soft"]};
+        }}
+        QToolButton#IconButton::menu-indicator {{
+            image: none;
+            width: 0px;
+        }}
+        QPushButton#BarButton {{
+            background: transparent;
+            border: none;
+            border-radius: {r}px;
+            padding: 0px;
+        }}
+        QPushButton#BarButton:hover {{
+            background-color: {c["hover"]};
+        }}
+        QPushButton#BarButton:pressed {{
+            background-color: {c["sel_soft"]};
+        }}
+        QPushButton#BarButton::menu-indicator {{
+            image: none;
+            width: 0px;
+        }}
+        QPushButton#BarButton QLabel {{
+            background: transparent;
+            color: {c["text"]};
+        }}
+        QPushButton#BarButton QLabel#BarButtonValue {{
+            color: {c["text3"]};
+        }}
+        QPushButton#BarButton:disabled QLabel {{
+            color: {c["text3"]};
+        }}
+        QPushButton#BarButton[primary="true"] {{
+            background-color: {c["accent"]};
+        }}
+        QPushButton#BarButton[primary="true"] QLabel {{
+            color: {c["accent_ink"]};
+            font-weight: 600;
+        }}
+        QLabel#Kbd {{
+            background: transparent;
+            color: {c["text3"]};
+            border: 1px solid {c["border_strong"]};
+            border-radius: {r_sm}px;
+            padding: 0px 4px;
+            font-size: {_tk.FONT_PX_KBD}px;
+        }}
+        QPushButton#BarButton QLabel#Kbd {{
+            color: {c["text3"]};
+            font-weight: 400;
+        }}
+        QFrame#BarSeparator {{
+            background-color: {c["border"]};
+            border: none;
+        }}
+        QLineEdit#SearchInput {{
+            padding: 0px 8px 0px 4px;
+        }}
+
+        QStatusBar#StatusBar {{
+            background-color: {c["chrome"]};
+            border-top: 1px solid {c["border"]};
+            color: {c["text2"]};
+            font-size: {_tk.FONT_PX_SMALL}px;
+        }}
+        QStatusBar#StatusBar::item {{
+            border: none;
+        }}
+        QStatusBar#StatusBar QLabel {{
+            background: transparent;
+            color: {c["text2"]};
+            font-size: {_tk.FONT_PX_SMALL}px;
+        }}
+        QStatusBar#StatusBar QLabel#StatusSeparator {{
+            color: {c["text3"]};
+        }}
+        QStatusBar#StatusBar QLabel#StatusDot {{
+            background-color: {c["accent"]};
+            border-radius: 4px;
+        }}
+        QProgressBar#StatusProgress {{
+            background-color: {c["border"]};
+            border: none;
+            border-radius: 2px;
+        }}
+        QProgressBar#StatusProgress::chunk {{
+            background-color: {c["accent"]};
+            border-radius: 2px;
+        }}
     """
 
 

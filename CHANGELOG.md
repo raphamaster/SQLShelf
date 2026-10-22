@@ -2,17 +2,30 @@
 
 ## [Unreleased]
 
+### Added
+- **Address bar with history** — Back, Forward and Up (Alt+←, Alt+→, Alt+↑) walk through what you looked at: library, folder, tag, favorites, recent or a search. Typing a search is one history step, not one per keystroke. The breadcrumb next to the arrows shows where you are and jumps back to any level; the search field says what it searches in
+- **Command bar** — New query, Open folder, Sort, Group and View, Quick search, a details-panel toggle (Alt+P) and a ⋯ menu that holds everything the menu bar had
+- **Status bar** — query and selection counts on the left; on the right, the index state, a progress bar while a folder is indexed, and how many folders are being watched
+- **Remembered layout** — panel widths, the details panel being shown or hidden, the sort order and the menu bar choice survive a restart
+
 ### Changed
 - **New theme, without qt-material** — the interface now uses Qt's Fusion style with a palette and stylesheet generated from design tokens (`sqlshelf/ui/tokens.py` → `sqlshelf/ui/theme.py`). Buttons are no longer upper case or outlined in green; green is kept for selection, focus and the primary action. This is the first slice (F1) of the redesign in `docs/redesign-ui.md`
 - **Sentence-case labels** — sidebar and details-panel section titles (Browse, Folders, Tags, Tables, …) are no longer written in capitals, in all three languages
 - **Editor colours and font** — new syntax colours for both themes, italic comments, and Cascadia Mono 13 px (falling back to Consolas, then the system monospace font)
+- **Three-panel window** — sidebar, query list and details panel in one resizable row; the menu bar is hidden by default (View → Show Menu Bar brings it back) and every shortcut keeps working without it. This is the second slice (F2) of the redesign
+- **Indexing no longer opens a dialog** — progress shows in the status bar and the window stays usable
+- **Every library folder is watched** — changes on disk are picked up in all open folders, not only the one in view
 - **Theme switching reaches the tag chips** — the tag chips in the details panel kept the old theme's colours after a dark/light switch until another query was opened
 
 ### Removed
 - `qt-material` dependency — one fewer package to install and bundle
 
+### Fixed
+- **Removing a folder closes its index** — the index database used to stay open after the folder was removed from the sidebar
+
 ### Tests
-- Theme tokens: both themes define the same keys, tag colours are stable across runs, and every text colour has at least 4.5:1 contrast on every background; plus a live-switch check and a guard against all-caps UI strings — 218 tests
+- Theme tokens: both themes define the same keys, tag colours are stable across runs, and every text colour has at least 4.5:1 contrast on every background; plus a live-switch check and a guard against all-caps UI strings
+- Navigation history (back, forward, up, dropping the forward stack on a new step), layout settings, and the main window offscreen: shortcuts with the menu bar hidden, Alt+P, Alt+arrows, search history and the status bar — 268 tests
 
 ## [1.0.11] - 2026-09-17
 

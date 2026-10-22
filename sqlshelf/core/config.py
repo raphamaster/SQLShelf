@@ -157,3 +157,91 @@ def set_minimize_to_tray(enabled: bool) -> None:
     data = _load()
     data["minimize_to_tray"] = enabled
     _save(data)
+
+
+# ---------------------------------------------------------------------------
+# Window layout (splitter, details panel, list view and grouping)
+# ---------------------------------------------------------------------------
+
+VIEW_MODES = ("details", "content")
+GROUP_MODES = ("date", "folder", "none")
+SORT_KEYS = ("name_asc", "name_desc", "mtime_desc", "mtime_asc")
+
+
+def _set_key(key: str, value: object) -> None:
+    data = _load()
+    data[key] = value
+    _save(data)
+
+
+def get_splitter_sizes() -> list[int] | None:
+    """Return the saved [sidebar, list, panel] widths, or None if never saved."""
+    sizes = _load().get("splitter_sizes")
+    if (
+        isinstance(sizes, list)
+        and len(sizes) == 3
+        and all(isinstance(s, int) and s >= 0 for s in sizes)
+    ):
+        return sizes
+    return None
+
+
+def set_splitter_sizes(sizes: list[int]) -> None:
+    """Persist the [sidebar, list, panel] widths."""
+    _set_key("splitter_sizes", [int(s) for s in sizes])
+
+
+def get_panel_visible() -> bool:
+    """Return whether the details panel is shown (default True)."""
+    return bool(_load().get("panel_visible", True))
+
+
+def set_panel_visible(visible: bool) -> None:
+    """Persist whether the details panel is shown."""
+    _set_key("panel_visible", bool(visible))
+
+
+def get_view_mode() -> str:
+    """Return the query-list view: 'details' (default) or 'content'."""
+    mode = _load().get("view_mode", "details")
+    return mode if mode in VIEW_MODES else "details"
+
+
+def set_view_mode(mode: str) -> None:
+    """Persist the query-list view; unknown values are ignored."""
+    if mode in VIEW_MODES:
+        _set_key("view_mode", mode)
+
+
+def get_group_mode() -> str:
+    """Return the query-list grouping: 'date' (default), 'folder' or 'none'."""
+    mode = _load().get("group_mode", "date")
+    return mode if mode in GROUP_MODES else "date"
+
+
+def set_group_mode(mode: str) -> None:
+    """Persist the query-list grouping; unknown values are ignored."""
+    if mode in GROUP_MODES:
+        _set_key("group_mode", mode)
+
+
+def get_sort_key() -> str:
+    """Return the query-list sort order (default: most recently modified first)."""
+    key = _load().get("sort_key", "mtime_desc")
+    return key if key in SORT_KEYS else "mtime_desc"
+
+
+def set_sort_key(key: str) -> None:
+    """Persist the query-list sort order; unknown values are ignored."""
+    if key in SORT_KEYS:
+        _set_key("sort_key", key)
+
+
+def get_show_menu_bar() -> bool:
+    """Return whether the classic menu bar is shown (default False)."""
+    return bool(_load().get("show_menu_bar", False))
+
+
+def set_show_menu_bar(visible: bool) -> None:
+    """Persist whether the classic menu bar is shown."""
+    _set_key("show_menu_bar", bool(visible))

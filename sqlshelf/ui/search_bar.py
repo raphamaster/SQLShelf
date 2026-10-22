@@ -1,110 +1,78 @@
 from __future__ import annotations
 
-from PySide6.QtCore import QPointF, QRectF, Qt, Signal
-from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap
+from PySide6.QtCore import QEvent, QObject, Qt, Signal
 from PySide6.QtWidgets import QHBoxLayout, QLineEdit, QWidget
 
 from ..core.i18n import tr
-from . import tokens as _tk
-from .tokens import (
-    ACCENT,
-    ACCENT_BORDER,
-    ACCENT_FILL,
-    ACCENT_FOCUS_BG,
-    RADIUS,
-    SELECTION_BG,
-    TEXT_PRIMARY,
-)
+from . import icons
+from .widgets import KbdHint
 
-# Style is applied to the QLineEdit itself so it wins over the app stylesheet.
-_STYLESHEET = f"""
-    QLineEdit#SearchInput {{
-        background-color: {ACCENT_FILL};
-        border: 1px solid {ACCENT_BORDER};
-        border-radius: {RADIUS}px;
-        color: {TEXT_PRIMARY};
-        font-size: 13px;
-        min-height: 44px;
-        selection-background-color: {SELECTION_BG};
-    }}
-    QLineEdit#SearchInput:focus {{
-        background-color: {ACCENT_FOCUS_BG};
-        border: 2px solid {ACCENT};
-    }}
-"""
-
-
-def _make_search_icon() -> QIcon:
-    """Draw a minimal magnifying glass icon in the accent colour."""
-    size = 16
-    pix = QPixmap(size, size)
-    pix.fill(Qt.GlobalColor.transparent)
-    p = QPainter(pix)
-    p.setRenderHint(QPainter.RenderHint.Antialiasing)
-    col = QColor(_tk.ACCENT)  # reads live value after set_active_palette()
-    col.setAlpha(160)
-    pen = QPen(col, 1.8)
-    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-    p.setPen(pen)
-    p.setBrush(Qt.BrushStyle.NoBrush)
-    p.drawEllipse(QRectF(1.5, 1.5, 9.0, 9.0))  # lens
-    p.drawLine(QPointF(9.5, 9.5), QPointF(14.0, 14.0))  # handle
-    p.end()
-    return QIcon(pix)
+WIDTH = 320
+ACTIVE_WIDTH = 520
+FIELD_HEIGHT = 34
 
 
 class SearchBar(QWidget):
-    """Search input that emits search_changed when the user types."""
+    """Search field of the address bar; emits search_changed as the user types.
+
+    It widens while a search is active and names the place it searches in its
+    placeholder. Colours come from ``QLineEdit#SearchInput`` in the global QSS.
+    """
 
     search_changed = Signal(str)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        self._location = ""
 
         self._edit = QLineEdit()
         self._edit.setObjectName("SearchInput")
-        self._edit.setPlaceholderText(tr("search.placeholder"))
-        self._edit.setToolTip(tr("search.help"))
+        self._edit.setFixedHeight(FIELD_HEIGHT)
         self._edit.setClearButtonEnabled(True)
-        self._edit.textChanged.connect(self.search_changed)
-        # Magnifying glass icon lives inside the QLineEdit (native Qt feature).
+        self._edit.textChanged.connect(self._on_text_changed)
+        self._edit.installEventFilter(self)
         self._icon_action = self._edit.addAction(
-            _make_search_icon(), QLineEdit.ActionPosition.LeadingPosition
+            icons.icon("search", "text3"), QLineEdit.ActionPosition.LeadingPosition
         )
+        self._kbd = KbdHint("Ctrl F", self._edit)
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(self._edit, stretch=1)
+        layout.addWidget(self._edit)
 
-        self.setStyleSheet(_STYLESHEET)
+        self.setFixedWidth(WIDTH)
+        self.retranslate_ui()
+        self._update_kbd()
+
+    # ------------------------------------------------------------------
 
     def retranslate_ui(self) -> None:
-        self._edit.setPlaceholderText(tr("search.placeholder"))
         self._edit.setToolTip(tr("search.help"))
+        self._update_placeholder()
 
     def refresh_theme(self) -> None:
-        self.setStyleSheet(f"""
-            QLineEdit#SearchInput {{
-                background-color: {_tk.ACCENT_FILL};
-                border: 1px solid {_tk.ACCENT_BORDER};
-                border-radius: {_tk.RADIUS}px;
-                color: {_tk.TEXT_PRIMARY};
-                font-size: 13px;
-                min-height: 44px;
-                selection-background-color: {_tk.SELECTION_BG};
-            }}
-            QLineEdit#SearchInput:focus {{
-                background-color: {_tk.ACCENT_FOCUS_BG};
-                border: 2px solid {_tk.ACCENT};
-            }}
-            """)
-        self._edit.removeAction(self._icon_action)
-        self._icon_action = self._edit.addAction(
-            _make_search_icon(), QLineEdit.ActionPosition.LeadingPosition
-        )
+        self._icon_action.setIcon(icons.icon("search", "text3"))
+
+    def set_location(self, location: str) -> None:
+        """Name the place a search would cover, shown in the placeholder."""
+        self._location = location
+        self._update_placeholder()
+
+    def set_active(self, active: bool) -> None:
+        """Widen the field while a search is active."""
+        self.setFixedWidth(ACTIVE_WIDTH if active else WIDTH)
 
     def text(self) -> str:
         return self._edit.text()
+
+    def set_text_silently(self, text: str) -> None:
+        """Show *text* without emitting search_changed."""
+        if text == self._edit.text():
+            return
+        self._edit.blockSignals(True)
+        self._edit.setText(text)
+        self._edit.blockSignals(False)
+        self._update_kbd()
 
     def clear(self) -> None:
         self._edit.clear()
@@ -112,3 +80,38 @@ class SearchBar(QWidget):
     def focus(self) -> None:
         self._edit.setFocus(Qt.FocusReason.ShortcutFocusReason)
         self._edit.selectAll()
+
+    # ------------------------------------------------------------------
+
+    def _update_placeholder(self) -> None:
+        if self._location:
+            self._edit.setPlaceholderText(
+                tr("search.placeholder_in", location=self._location)
+            )
+        else:
+            self._edit.setPlaceholderText(tr("search.placeholder_short"))
+
+    def _on_text_changed(self, text: str) -> None:
+        self._update_kbd()
+        self.search_changed.emit(text)
+
+    def _update_kbd(self) -> None:
+        """The hint sits where the clear button appears, so it yields to it."""
+        empty = not self._edit.text()
+        self._kbd.setVisible(empty)
+        right = self._kbd.sizeHint().width() + 10 if empty else 0
+        self._edit.setTextMargins(0, 0, right, 0)
+        self._place_kbd()
+
+    def _place_kbd(self) -> None:
+        hint = self._kbd.sizeHint()
+        self._kbd.resize(hint)
+        self._kbd.move(
+            self._edit.width() - hint.width() - 8,
+            (self._edit.height() - hint.height()) // 2,
+        )
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:
+        if watched is self._edit and event.type() == QEvent.Type.Resize:
+            self._place_kbd()
+        return super().eventFilter(watched, event)
