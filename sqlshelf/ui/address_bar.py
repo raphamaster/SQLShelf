@@ -1,4 +1,4 @@
-"""Address bar: back / forward / up, the breadcrumb and the search field."""
+"""Address bar: the search field, then back / forward / up and the breadcrumb."""
 
 from __future__ import annotations
 
@@ -22,6 +22,9 @@ from .widgets import IconButton
 
 BAR_HEIGHT = 52
 _CRUMB_MAX_WIDTH = 260
+# The search field gets 3 parts of the row, the navigation 2.
+_SEARCH_STRETCH = 3
+_NAV_STRETCH = 2
 
 
 def location_label(state: NavState) -> str:
@@ -89,16 +92,22 @@ class AddressBar(QWidget):
 
         self._search_bar = search_bar
 
+        nav = QWidget()
+        nav_layout = QHBoxLayout(nav)
+        nav_layout.setContentsMargins(0, 0, 0, 0)
+        nav_layout.setSpacing(4)
+        nav_layout.addWidget(self._back)
+        nav_layout.addWidget(self._forward)
+        nav_layout.addWidget(self._up)
+        nav_layout.addSpacing(8)
+        nav_layout.addWidget(self._crumb_frame, 1)
+
+        # The search field comes first and gets the larger share of the row.
         layout = QHBoxLayout(self)
         layout.setContentsMargins(12, 9, 12, 9)
-        layout.setSpacing(4)
-        layout.addWidget(self._back)
-        layout.addWidget(self._forward)
-        layout.addWidget(self._up)
-        layout.addSpacing(8)
-        layout.addWidget(self._crumb_frame, 1)
-        layout.addSpacing(8)
-        layout.addWidget(search_bar)
+        layout.setSpacing(16)
+        layout.addWidget(search_bar, _SEARCH_STRETCH)
+        layout.addWidget(nav, _NAV_STRETCH)
 
         self.retranslate_ui()
         self.refresh_theme()
@@ -119,7 +128,6 @@ class AddressBar(QWidget):
         self._back.setEnabled(can_back)
         self._forward.setEnabled(can_forward)
         self._up.setEnabled(state.kind != "all")
-        self._search_bar.set_active(state.kind in ("search", "tag"))
         self._search_bar.set_location(location_label(state.scope))
         self._rebuild_crumbs()
 

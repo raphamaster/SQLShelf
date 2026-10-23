@@ -74,7 +74,7 @@
 
   "toolbar.new_query": "Nueva consulta",
   "toolbar.new_query_tip": "Crear una nueva consulta (Ctrl+N)",
-  "toolbar.open_folder": "Abrir carpeta",
+  "toolbar.open_folder": "Importar carpeta",
   "toolbar.open_folder_tip": "Añadir una carpeta a la biblioteca (Ctrl+O)",
   "toolbar.sort": "Ordenar",
   "toolbar.group": "Agrupar",
@@ -84,6 +84,7 @@
   "toolbar.quick_search": "Búsqueda rápida",
   "toolbar.view_details": "Detalles",
   "toolbar.view_content": "Contenido",
+  "toolbar.view_grid": "Ver en cuadrícula",
   "toolbar.toggle_panel": "Mostrar u ocultar el panel de detalles (Alt+P)",
   "toolbar.more": "Más",
 

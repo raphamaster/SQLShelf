@@ -29,8 +29,7 @@ from ..core.search import join_tokens, split_tokens
 from . import icons
 from .widgets import KbdHint
 
-WIDTH = 320
-ACTIVE_WIDTH = 520
+MIN_WIDTH = 320
 FIELD_HEIGHT = 34
 CHIP_HEIGHT = 24
 CHIP_VALUE_MAX = 140
@@ -145,8 +144,8 @@ class _SearchInput(QLineEdit):
 class SearchBar(QWidget):
     """Search field of the address bar; emits search_changed as the user types.
 
-    It widens while a search is active and names the place it searches in its
-    placeholder. Colours come from ``QFrame#SearchField`` in the global QSS.
+    It takes the width its layout gives it and names the place it searches in
+    its placeholder. Colours come from ``QFrame#SearchField`` in the global QSS.
     """
 
     search_changed = Signal(str)
@@ -193,7 +192,8 @@ class SearchBar(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self._field)
 
-        self.setFixedWidth(WIDTH)
+        self.setMinimumWidth(MIN_WIDTH)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.refresh_theme()
         self.retranslate_ui()
         self._update_hints()
@@ -218,10 +218,6 @@ class SearchBar(QWidget):
         """Name the place a search would cover, shown in the placeholder."""
         self._location = location
         self._update_placeholder()
-
-    def set_active(self, active: bool) -> None:
-        """Widen the field while a search is active."""
-        self.setFixedWidth(ACTIVE_WIDTH if active else WIDTH)
 
     def text(self) -> str:
         """The search: the chips' tokens, then the free text as typed."""
