@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-22
+
 ### Added
 - **Address bar with history** — Back, Forward and Up (Alt+←, Alt+→, Alt+↑) walk through what you looked at: library, folder, tag, favorites, recent or a search. Typing a search is one history step, not one per keystroke. The breadcrumb next to the arrows shows where you are and jumps back to any level; the search field says what it searches in
 - **Command bar** — New query, Open folder, Sort, Group and View, Quick search, a details-panel toggle (Alt+P) and a ⋯ menu that holds everything the menu bar had
