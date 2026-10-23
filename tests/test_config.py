@@ -20,6 +20,7 @@ def test_layout_defaults() -> None:
     assert cfg.get_panel_visible() is True
     assert cfg.get_view_mode() == "details"
     assert cfg.get_group_mode() == "date"
+    assert cfg.get_search_group_mode() == "folder"
     assert cfg.get_sort_key() == "mtime_desc"
     assert cfg.get_show_menu_bar() is False
 
@@ -29,6 +30,7 @@ def test_layout_round_trip() -> None:
     cfg.set_panel_visible(False)
     cfg.set_view_mode("content")
     cfg.set_group_mode("folder")
+    cfg.set_search_group_mode("none")
     cfg.set_sort_key("name_asc")
     cfg.set_show_menu_bar(True)
 
@@ -36,6 +38,7 @@ def test_layout_round_trip() -> None:
     assert cfg.get_panel_visible() is False
     assert cfg.get_view_mode() == "content"
     assert cfg.get_group_mode() == "folder"
+    assert cfg.get_search_group_mode() == "none"
     assert cfg.get_sort_key() == "name_asc"
     assert cfg.get_show_menu_bar() is True
 
@@ -45,6 +48,7 @@ def test_layout_round_trip() -> None:
     [
         (cfg.set_view_mode, cfg.get_view_mode, "details"),
         (cfg.set_group_mode, cfg.get_group_mode, "date"),
+        (cfg.set_search_group_mode, cfg.get_search_group_mode, "folder"),
         (cfg.set_sort_key, cfg.get_sort_key, "mtime_desc"),
     ],
 )

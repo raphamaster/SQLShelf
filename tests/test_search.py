@@ -8,7 +8,13 @@ import pytest
 
 from sqlshelf.core.index_db import IndexDB
 from sqlshelf.core.models import Query
-from sqlshelf.core.search import _build_fts_query, _parse_date_filter, parse_query
+from sqlshelf.core.search import (
+    _build_fts_query,
+    _parse_date_filter,
+    join_tokens,
+    parse_query,
+    split_tokens,
+)
 
 
 def make_sql_file(folder: Path, name: str, content: str = "SELECT 1") -> Path:
@@ -82,6 +88,75 @@ class TestParseQuery:
         filters, free = parse_query("table:Orders table:Customers")
         assert "Orders" in filters["table"]
         assert "Customers" in filters["table"]
+
+
+class TestTokens:
+    @pytest.mark.parametrize(
+        ("text", "tokens", "free"),
+        [
+            ("", [], ""),
+            ("variação", [], "variação"),
+            ("table:Pedidos", [("table", "Pedidos")], ""),
+            (
+                "table:Pedidos tag:relatorio variação",
+                [("table", "Pedidos"), ("tag", "relatorio")],
+                "variação",
+            ),
+            ("a table:x b", [("table", "x")], "a b"),
+            ("tag:a tag:b", [("tag", "a"), ("tag", "b")], ""),
+            ("date:15/06/2026 col:Id", [("date", "15/06/2026"), ("col", "Id")], ""),
+            # A value runs to the next space, quotes and all.
+            ('table:"Order Details"', [("table", '"Order')], 'Details"'),
+            ('"exact phrase" tag:x', [("tag", "x")], '"exact phrase"'),
+            # Only the lower-case operators at the start of a word count.
+            ("TABLE:x", [], "TABLE:x"),
+            ("xtable:y", [], "xtable:y"),
+            ("schema:dbo", [], "schema:dbo"),
+            ("table:", [], "table:"),
+        ],
+    )
+    def test_split_tokens(
+        self, text: str, tokens: list[tuple[str, str]], free: str
+    ) -> None:
+        assert split_tokens(text) == (tokens, free)
+
+    @pytest.mark.parametrize(
+        ("tokens", "free", "text"),
+        [
+            ([], "", ""),
+            ([], "vendas", "vendas"),
+            ([("table", "Pedidos")], "", "table:Pedidos"),
+            ([("table", "Pedidos"), ("tag", "bi")], "mês", "table:Pedidos tag:bi mês"),
+            ([("tag", "bi")], "abc ", "tag:bi abc "),
+        ],
+    )
+    def test_join_tokens(
+        self, tokens: list[tuple[str, str]], free: str, text: str
+    ) -> None:
+        assert join_tokens(tokens, free) == text
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "table:Pedidos tag:relatorio variação",
+            "variação table:Pedidos",
+            'table:"Order Details" tag:x',
+            '"exact phrase" col:Id "it\'s"',
+            'table:"x',
+            "a  b   tag:c",
+            "TABLE:x tag:y",
+            "date:15/06/2026",
+        ],
+    )
+    def test_round_trip_keeps_the_meaning(self, text: str) -> None:
+        tokens, free = split_tokens(text)
+        joined = join_tokens(tokens, free)
+        assert split_tokens(joined) == (tokens, free)
+        assert parse_query(joined) == parse_query(text)
+
+    def test_join_then_split_returns_the_tokens(self) -> None:
+        tokens = [("table", "Pedidos"), ("tag", 'a"b'), ("col", "Id")]
+        assert split_tokens(join_tokens(tokens, '"x y"')) == (tokens, '"x y"')
 
 
 class TestSearch:

@@ -4,7 +4,7 @@ import os
 import subprocess
 import sys
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, QTimer, QUrl, Signal
@@ -65,6 +65,7 @@ from .highlighter import SqlHighlighter
 from .metadata_panel import MetadataPanel
 from .new_query_dialog import NewQueryDialog
 from .query_list import QueryListWidget
+from .scope_bar import ScopeBar
 from .search_bar import SearchBar
 from .sidebar import SidebarWidget
 from .status_bar import StatusBar
@@ -80,6 +81,11 @@ from .tokens import (
 def _icon(style_enum) -> QIcon:
     """Return a standard Qt style icon."""
     return QApplication.style().standardIcon(style_enum)
+
+
+def _is_search(state: NavState) -> bool:
+    """A search or a tag: results of a filter, shown with the scope bar."""
+    return state.kind in ("search", "tag")
 
 
 # ---------------------------------------------------------------------------
@@ -928,6 +934,9 @@ class MainWindow(QMainWindow):
         self._pending_select: tuple[str, Path | None] | None = None
         # (folder, rel_path) to open in edit mode once loaded: list menu > Edit
         self._edit_after_load: tuple[Path | None, str] | None = None
+        # The last folder browsed or searched: the scope bar offers it beside
+        # the whole library.
+        self._scope_folder: Path | None = None
 
         # Sidebar counts. Folder trees are only regathered when the library
         # changes; the flag survives a newer request that did not ask for them.
@@ -1240,6 +1249,13 @@ class MainWindow(QMainWindow):
         mid_layout.setContentsMargins(0, 0, 0, 0)
         mid_layout.setSpacing(0)
 
+        # While searching: where to search, how many results, "Clear search".
+        self._scope_bar = ScopeBar()
+        self._scope_bar.scope_selected.connect(self._on_scope_selected)
+        self._scope_bar.clear_requested.connect(self._on_clear_search)
+        self._scope_bar.hide()
+        mid_layout.addWidget(self._scope_bar)
+
         self._query_list = QueryListWidget()
         self._query_list.set_sort(cfg.get_sort_key())
         self._query_list.set_group(cfg.get_group_mode())
@@ -1440,6 +1456,7 @@ class MainWindow(QMainWindow):
         self._sidebar.retranslate_ui()
         self._address_bar.retranslate_ui()
         self._command_bar.retranslate_ui()
+        self._scope_bar.retranslate_ui()
         self._query_list.retranslate_ui()
         self._metadata_panel.retranslate_ui()
         self._status_bar.retranslate_ui()
@@ -1650,6 +1667,7 @@ class MainWindow(QMainWindow):
         if gen != self._search_gen:
             return  # stale result from a superseded search
         self._query_list.set_results(results, highlight=search_text(self._nav.current))
+        self._scope_bar.set_count(len(results))
         if not results:
             self._reset_editor()
         if self._pending_select is not None:
@@ -1657,7 +1675,7 @@ class MainWindow(QMainWindow):
             self._pending_select = None
         self._status_bar.set_counts(
             len(results),
-            searching=self._nav.current.kind == "search",
+            searching=_is_search(self._nav.current),
             selected=1 if self._current_result is not None else 0,
         )
 
@@ -1695,6 +1713,14 @@ class MainWindow(QMainWindow):
         # included, or typing would lose the space before the next word.
         if self._search_bar.text().strip() != search_text(state):
             self._search_bar.set_text_silently(search_text(state))
+        if state.folder is not None:
+            self._scope_folder = state.folder
+        searching = _is_search(state)
+        if searching:
+            self._scope_bar.set_scope(state.folder, self._scope_option())
+            self._scope_bar.set_count(None)
+        self._scope_bar.setVisible(searching)
+        self._apply_group()
         self._sidebar.show_state(state)
         self._address_bar.set_state(
             state,
@@ -1761,8 +1787,20 @@ class MainWindow(QMainWindow):
         self._command_bar.set_sort(key)
 
     def _on_group_requested(self, mode: str) -> None:
+        # A search remembers its own grouping, folder unless changed here.
+        if _is_search(self._nav.current):
+            cfg.set_search_group_mode(mode)
+        else:
+            cfg.set_group_mode(mode)
+        self._apply_group()
+
+    def _apply_group(self) -> None:
+        """Group the list as the user last chose for browsing, or for searching."""
+        if _is_search(self._nav.current):
+            mode = cfg.get_search_group_mode()
+        else:
+            mode = cfg.get_group_mode()
         self._query_list.set_group(mode)
-        cfg.set_group_mode(mode)
         self._command_bar.set_group(mode)
 
     def _on_view_requested(self, mode: str) -> None:
@@ -1888,6 +1926,25 @@ class MainWindow(QMainWindow):
             self._apply_nav()
         else:
             self._navigate(state)
+
+    def _scope_option(self) -> Path | None:
+        """The folder the scope bar offers, if it is still in the library."""
+        folder = self._scope_folder
+        if folder is None or root_of(folder, list(self._known_dbs)) is None:
+            return None
+        return folder
+
+    def _on_scope_selected(self, folder: Path | None) -> None:
+        """Search the same text in *folder*, or across the library for None."""
+        state = self._nav.current
+        if _is_search(state) and folder != state.folder:
+            self._navigate(replace(state, folder=folder))
+
+    def _on_clear_search(self) -> None:
+        """Leave the search for the place it was searching in."""
+        state = self._nav.current
+        if _is_search(state):
+            self._navigate(state.scope)
 
     def _on_tag_selected(self, tag: str) -> None:
         if not tag:

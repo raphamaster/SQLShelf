@@ -25,6 +25,10 @@
 - **Open externally outside Windows** — where SSMS does not exist, the button opens the file in its default application
 - **Edit mode rebuilt** — an Editing banner with Cancel and Save (Ctrl S) replaces the panel header, and the form has labelled fields for title, description (three lines tall), tags, author and the creation date. Tags are chips with a × to remove them; typing filters the library's tags with how many queries use each, the typed part marked, and Enter adds the picked one or creates a new tag (the popup says which). A comma or space ends a tag, Backspace in the empty field removes the last one, and Esc closes the suggestions before it cancels the edit. The strip above the editor shows "editable" and the cursor's line and column. The file is written in the background, every field the form does not show is kept, and a failed save stays in edit mode with nothing lost. This is the sixth slice (F6) of the redesign
 - **Author in the form** — the author can be set while editing; leaving it empty removes it from the file
+- **Search chips** — typing `table:`, `col:`, `tag:` or `date:` followed by a value and a space, Enter or Tab turns it into a chip inside the search field; × removes a chip and Backspace in the empty input removes the last one. The search itself is unchanged: chips and the remaining text are sent as before
+- **Scope bar while searching** — "Search in" switches between the whole library and the folder the search started from, next to the result count and "Clear search"
+- **Search results grouped by folder** — a search groups its results by folder by default and remembers its own grouping, apart from the one used when browsing
+- **Tag views count results** — the status bar says "N results" in a tag view, as it does in a search
 
 ### Removed
 - `qt-material` dependency — one fewer package to install and bundle
@@ -42,6 +46,7 @@
 - Query list: date buckets around midnight, the first day of the week and a month change; folder labels; term marking across accents, case and several terms; and the list widget offscreen — group order, selection kept when regrouping or sorting, header and star clicks, keyboard moving over group rows, folded groups surviving a refresh, Content view and narrow-width columns, and every cell painting — 405 tests
 - Details panel: modification text, line elision, the editor strip and the shared title/description/tags reading; the panel offscreen — hidden empty rows, action and chip signals, the ⋯ menu, the Open label per platform, Portuguese labels, and a chip replaced from its own click; in the window, the strip and actions after a query loads, Copy SQL without the frontmatter, Ctrl+E and Esc — 471 tests
 - Edit mode: keeping unknown frontmatter keys and dropping an empty author; tag normalizing, splitting and suggestion order (prefix first, then use, ignoring accents and case); match spans inside words; the creation date text; the tag field offscreen — Enter, comma and space, ×, Backspace, suggestions with counts, Up/Down and click, the Enter hint, Esc before the window's shortcut and focus; the form and banner; in the window, Ctrl+S writing the file and keeping its other fields, a failed save staying in edit mode, Esc closing the suggestions then the edit, and the cursor in the strip — 540 tests
+- Search: splitting and joining operator tokens (round trip, quotes, case, text around them); the search field offscreen — chips on space, Enter and Tab, the cursor kept, × and Backspace, clearing, silent updates, the placeholder, long values shortened, focus; the scope bar; and in the window, chips that still search, moving and clearing the scope, the search's own grouping and a tag shown as a chip — 597 tests
 
 ## [1.0.11] - 2026-09-17
 

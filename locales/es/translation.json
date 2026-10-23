@@ -58,6 +58,10 @@
   "search.help": "Operadores de búsqueda:\n  table:nombre   consultas que referencian una tabla\n  col:nombre     consultas que referencian una columna\n  tag:nombre     consultas con la etiqueta especificada\n  texto libre    búsqueda de texto completo en título y cuerpo\n\nConsejo: combine operadores, ej.:  table:pedidos  tag:reporte",
   "search.placeholder_in": "Buscar en {location}",
   "search.placeholder_short": "Buscar",
+  "search.scope_in": "Buscar en",
+  "search.scope_library": "Toda la biblioteca",
+  "search.clear": "Borrar búsqueda",
+  "search.remove_chip": "Quitar {token}",
 
   "nav.library": "Biblioteca",
   "nav.favorites": "Favoritas",

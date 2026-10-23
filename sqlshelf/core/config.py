@@ -225,6 +225,18 @@ def set_group_mode(mode: str) -> None:
         _set_key("group_mode", mode)
 
 
+def get_search_group_mode() -> str:
+    """Return the grouping while searching: 'folder' (default), 'date' or 'none'."""
+    mode = _load().get("search_group_mode", "folder")
+    return mode if mode in GROUP_MODES else "folder"
+
+
+def set_search_group_mode(mode: str) -> None:
+    """Persist the grouping used while searching; unknown values are ignored."""
+    if mode in GROUP_MODES:
+        _set_key("search_group_mode", mode)
+
+
 def get_sort_key() -> str:
     """Return the query-list sort order (default: most recently modified first)."""
     key = _load().get("sort_key", "mtime_desc")

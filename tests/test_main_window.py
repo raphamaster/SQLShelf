@@ -379,3 +379,80 @@ def test_the_strip_shows_the_cursor_while_editing(
     window._cancel_edit_mode()
     assert not strip.is_editing()
     assert strip.cursor_text() == ""
+
+
+# ── Search chips and scope (redesign F7) ───────────────────────────────────
+
+
+def _search(win: MainWindow, text: str) -> None:
+    win._search_bar._edit.setText(text)
+    win._on_search_timeout()
+
+
+def test_typed_tokens_become_chips_and_still_search(
+    window: MainWindow, library: Path
+) -> None:
+    _load(window, library)
+    window._search_bar.focus()
+    QTest.keyClicks(window._search_bar._edit, "table:sales ")
+    assert window._search_bar.tokens() == [("table", "sales")]
+    window._on_search_timeout()
+    assert window._nav.current == NavState("search", library, "table:sales")
+    _wait_until(lambda: window._query_list.count() == 1)
+
+
+def test_the_scope_bar_moves_and_clears_the_search(
+    window: MainWindow, library: Path
+) -> None:
+    _load(window, library)
+    scope = window._scope_bar
+    assert scope.isHidden()
+    _search(window, "sales")
+    assert not scope.isHidden()
+    _wait_until(lambda: scope.count_text() == "1 result")
+    whole, folder = scope.options()
+    assert folder.text() == "library" and folder.isChecked()
+
+    whole.click()
+    assert window._nav.current == NavState("search", None, "sales")
+    assert whole.isChecked() and not folder.isChecked()
+    assert window._search_bar.text() == "sales"
+
+    folder.click()
+    assert window._nav.current == NavState("search", library, "sales")
+
+    scope._clear_btn.click()
+    assert window._nav.current == NavState("folder", library)
+    assert scope.isHidden()
+    assert window._search_bar.text() == ""
+
+
+def test_a_search_groups_by_folder_and_keeps_its_own_grouping(
+    window: MainWindow, library: Path
+) -> None:
+    _load(window, library)
+    assert window._query_list.group_mode() == "date"
+    _search(window, "sales")
+    assert window._query_list.group_mode() == "folder"
+    assert window._command_bar._group == "folder"
+
+    window._on_group_requested("none")
+    assert cfg.get_search_group_mode() == "none"
+    assert cfg.get_group_mode() == "date"
+
+    window._on_clear_search()
+    assert window._query_list.group_mode() == "date"
+    assert window._command_bar._group == "date"
+
+
+def test_a_tag_is_a_chip_and_removing_it_leaves_the_tag(
+    window: MainWindow, library: Path
+) -> None:
+    _load(window, library)
+    window._on_tag_selected("bi")
+    assert window._search_bar.tokens() == [("tag", "bi")]
+    assert not window._scope_bar.isHidden()
+    window._search_bar.chips()[0].remove_btn.click()
+    window._on_search_timeout()
+    assert window._nav.current == NavState("folder", library)
+    assert window._scope_bar.isHidden()

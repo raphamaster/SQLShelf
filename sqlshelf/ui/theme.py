@@ -710,8 +710,77 @@ def app_stylesheet(palette: Mapping[str, str]) -> str:
             background-color: {c["border"]};
             border: none;
         }}
+        QFrame#SearchField {{
+            background-color: {c["field"]};
+            border: 1px solid {c["border_strong"]};
+            border-radius: {r}px;
+        }}
+        QFrame#SearchField[focused="true"] {{
+            border-color: {c["accent"]};
+        }}
+        QFrame#SearchField QLabel {{
+            background: transparent;
+        }}
         QLineEdit#SearchInput {{
-            padding: 0px 8px 0px 4px;
+            background: transparent;
+            border: none;
+            padding: 0px 2px;
+        }}
+        QWidget#SearchChip {{
+            background-color: {c["sel_soft"]};
+            border-radius: {r_sm}px;
+        }}
+        QLabel#SearchChipOp {{
+            color: {c["text2"]};
+            font-size: {_tk.FONT_PX_SMALL}px;
+        }}
+        QLabel#SearchChipValue {{
+            color: {c["text"]};
+            font-size: {_tk.FONT_PX_SMALL}px;
+            font-weight: 600;
+        }}
+        QToolButton#SearchChipRemove, QToolButton#SearchClear {{
+            background: transparent;
+            border: none;
+            border-radius: {r_sm}px;
+        }}
+        QToolButton#SearchChipRemove:hover, QToolButton#SearchClear:hover {{
+            background-color: {c["hover"]};
+        }}
+        QWidget#ScopeBar {{
+            background-color: {c["bg"]};
+            border-bottom: 1px solid {c["border"]};
+        }}
+        QWidget#ScopeBar QLabel {{
+            background: transparent;
+            color: {c["text2"]};
+        }}
+        QPushButton#ScopeOption {{
+            background: transparent;
+            color: {c["text2"]};
+            border: none;
+            border-radius: 13px;
+            padding: 0px 12px;
+        }}
+        QPushButton#ScopeOption:hover {{
+            background-color: {c["hover"]};
+            color: {c["text"]};
+        }}
+        QPushButton#ScopeOption:checked {{
+            background-color: {c["sel"]};
+            color: {c["text"]};
+            font-weight: 600;
+        }}
+        QPushButton#ScopeClear {{
+            background: transparent;
+            color: {c["accent_text"]};
+            border: none;
+            border-radius: {r_sm}px;
+            padding: 0px 6px;
+            font-weight: 600;
+        }}
+        QPushButton#ScopeClear:hover {{
+            background-color: {c["hover"]};
         }}
 
         QStatusBar#StatusBar {{

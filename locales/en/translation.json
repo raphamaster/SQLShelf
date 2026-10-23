@@ -58,6 +58,10 @@
   "search.help": "Search operators:\n  table:name        queries referencing a table\n  col:name          queries referencing a column\n  tag:name          queries tagged with name\n  date:DD/MM/YYYY   queries modified on that date\n  free text         full-text search across title & body\n\nTip: combine operators, e.g.  table:orders  tag:report  date:15/06/2026",
   "search.placeholder_in": "Search in {location}",
   "search.placeholder_short": "Search",
+  "search.scope_in": "Search in",
+  "search.scope_library": "Whole library",
+  "search.clear": "Clear search",
+  "search.remove_chip": "Remove {token}",
 
   "nav.library": "Library",
   "nav.favorites": "Favorites",

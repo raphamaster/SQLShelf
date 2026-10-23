@@ -119,7 +119,7 @@ class AddressBar(QWidget):
         self._back.setEnabled(can_back)
         self._forward.setEnabled(can_forward)
         self._up.setEnabled(state.kind != "all")
-        self._search_bar.set_active(state.kind == "search")
+        self._search_bar.set_active(state.kind in ("search", "tag"))
         self._search_bar.set_location(location_label(state.scope))
         self._rebuild_crumbs()
 

@@ -27,6 +27,32 @@ _IS_FAV_SUBQ = (
 )
 
 
+OPERATORS = ("table", "col", "tag", "date")
+
+
+def split_tokens(text: str) -> tuple[list[tuple[str, str]], str]:
+    """Split a search into its ``op:value`` tokens, in order, and the free text.
+
+    The search field shows each token as a chip. A token is exactly what
+    :func:`parse_query` filters on, so a value runs to the next whitespace —
+    quotes included — and ``Table:x`` or ``xtable:y`` stay free text.
+    """
+    tokens = [(m.group(1), m.group(2)) for m in _PREFIX_RE.finditer(text)]
+    return tokens, _PREFIX_RE.sub("", text).strip()
+
+
+def join_tokens(tokens: list[tuple[str, str]], free_text: str = "") -> str:
+    """The search string for *tokens* followed by *free_text*.
+
+    The inverse of :func:`split_tokens`: the result parses to the same filters
+    and free text. *free_text* is kept as typed, trailing space included.
+    """
+    parts = [f"{op}:{value}" for op, value in tokens]
+    if free_text:
+        parts.append(free_text)
+    return " ".join(parts)
+
+
 def parse_query(text: str) -> tuple[dict[str, list[str]], str]:
     """Split 'table:X col:Y date:DD/MM/YYYY free text' into (filters, free_text).
 
@@ -34,14 +60,10 @@ def parse_query(text: str) -> tuple[dict[str, list[str]], str]:
         filters: dict with keys 'table', 'col', 'tag', 'date', each a list of values.
         free_text: remaining text after stripping all prefix:value tokens.
     """
-    filters: dict[str, list[str]] = {"table": [], "col": [], "tag": [], "date": []}
-    remaining = text
-    for m in _PREFIX_RE.finditer(text):
-        key = m.group(1)
-        val = m.group(2)
-        if key in filters:
-            filters[key].append(val)
-    remaining = _PREFIX_RE.sub("", text).strip()
+    filters: dict[str, list[str]] = {op: [] for op in OPERATORS}
+    tokens, remaining = split_tokens(text)
+    for key, val in tokens:
+        filters[key].append(val)
     return filters, remaining
 
 

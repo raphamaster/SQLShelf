@@ -58,6 +58,10 @@
   "search.help": "Operadores de busca:\n  table:nome          consultas que referenciam uma tabela\n  col:nome            consultas que referenciam uma coluna\n  tag:nome            consultas com a tag especificada\n  date:DD/MM/AAAA     consultas modificadas nesta data\n  texto livre         busca em texto completo no título e corpo\n\nDica: combine operadores, ex.:  table:pedidos  tag:relatorio  date:15/06/2026",
   "search.placeholder_in": "Buscar em {location}",
   "search.placeholder_short": "Buscar",
+  "search.scope_in": "Buscar em",
+  "search.scope_library": "Toda a biblioteca",
+  "search.clear": "Limpar busca",
+  "search.remove_chip": "Remover {token}",
 
   "nav.library": "Biblioteca",
   "nav.favorites": "Favoritas",

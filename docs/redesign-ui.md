@@ -278,7 +278,8 @@ Uma por vez. Cada fatia termina com:
 - **Testes:** `apply_edits` (campos desconhecidos mantidos, autor vazio removido), `normalize_tag` / `split_tags` / `suggest_tags`, `find_span`, `created_text`; campo de tags offscreen (Enter, vírgula, espaço, ×, Backspace, sugestões com contagem, setas, clique, rodapé do Enter, Esc antes do atalho da janela); na janela, Ctrl+S grava e preserva o frontmatter, falha ao salvar mantém a edição, Esc fecha sugestões e depois cancela, cursor na faixa.
 
 ### F7 — Busca com chips e barra de escopo
-- [ ] **Testes:** `split_tokens` / `join_tokens` (ida e volta).
+- [x] Chips no campo de busca (espaço, Enter, Tab, ×, Backspace), barra de escopo com contagem e Limpar busca, agrupamento por Pasta na busca.
+- **Testes:** `split_tokens` / `join_tokens` (ida e volta, inclusive aspas); campo de busca offscreen (chips no espaço, Enter e Tab, cursor preservado, × e Backspace, limpar, `set_text_silently`, placeholder, valor longo abreviado, foco); barra de escopo (opções, marcação, sinal, contagem, Limpar); na janela, chips que ainda buscam, troca de escopo e limpar, agrupamento próprio da busca, tag como chip.
 
 ### F8 — Busca rápida
 - [ ] Reestilização, seção de ações, Ctrl+C.
