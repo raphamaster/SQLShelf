@@ -937,6 +937,8 @@ class MainWindow(QMainWindow):
         # The last folder browsed or searched: the scope bar offers it beside
         # the whole library.
         self._scope_folder: Path | None = None
+        self._palette: CommandPalette | None = None
+        self._palette_gen = 0
 
         # Sidebar counts. Folder trees are only regathered when the library
         # changes; the flag survives a newer request that did not ask for them.
@@ -1457,6 +1459,8 @@ class MainWindow(QMainWindow):
         self._address_bar.retranslate_ui()
         self._command_bar.retranslate_ui()
         self._scope_bar.retranslate_ui()
+        if self._palette is not None:
+            self._palette.retranslate_ui()
         self._query_list.retranslate_ui()
         self._metadata_panel.retranslate_ui()
         self._status_bar.retranslate_ui()
@@ -1568,7 +1572,13 @@ class MainWindow(QMainWindow):
         """Rebuild the index of the folder in view, or of the whole library."""
         folder = self._nav.current.folder
         root = root_of(folder, self._known_dbs) if folder is not None else None
-        targets = [root] if root is not None else list(self._known_dbs)
+        self._reindex([root] if root is not None else list(self._known_dbs))
+
+    def reindex_library(self) -> None:
+        """Rebuild the index of every library folder."""
+        self._reindex(list(self._known_dbs))
+
+    def _reindex(self, targets: list[Path]) -> None:
         for target in targets:
             if target.is_dir():
                 worker = _ForceReindexWorker(self._known_dbs[target], target)
@@ -2129,34 +2139,46 @@ class MainWindow(QMainWindow):
         self._refresh_sidebar()
 
     # ------------------------------------------------------------------
-    # Command palette (Ctrl+K)
+    # Quick search (Ctrl+P)
     # ------------------------------------------------------------------
 
     def open_command_palette(self) -> None:
+        """Open the quick search over the window; the library's queries load
+        in the background and fill it when they arrive."""
         if not self._known_dbs:
             return
-        results: list[SearchResult] = []
-        scope = self._nav.current.folder
-        root = root_of(scope, self._known_dbs) if scope is not None else None
-        if root is not None:
-            results = self._known_dbs[root].search("")
-            for r in results:
-                r.folder = root
-        else:
-            for folder, db in self._known_dbs.items():
-                try:
-                    folder_results = db.search("")
-                    for r in folder_results:
-                        r.folder = folder
-                    results.extend(folder_results)
-                except Exception:
-                    pass
-        palette = CommandPalette(results, self)
+        if self._palette is not None:
+            self._palette.focus()
+            return
+        palette = CommandPalette(self)
         palette.query_selected.connect(self._on_palette_selected)
-        geo = self.geometry()
-        pw, ph = palette.width(), palette.height()
-        palette.move(geo.center().x() - pw // 2, geo.center().y() - ph // 2)
-        palette.exec()
+        palette.copy_requested.connect(self._copy_sql_of)
+        palette.action_requested.connect(self._on_palette_action)
+        palette.closed.connect(self._on_palette_closed)
+        self._palette = palette
+        palette.open()
+
+        self._palette_gen += 1
+        worker = _SearchWorker(
+            dict(self._known_dbs), "", None, "search", self._palette_gen
+        )
+        worker.signals.results_ready.connect(self._on_palette_results)
+        QThreadPool.globalInstance().start(worker)
+
+    def _on_palette_results(self, results: list[SearchResult], gen: int) -> None:
+        if gen == self._palette_gen and self._palette is not None:
+            self._palette.set_results(results)
+
+    def _on_palette_closed(self) -> None:
+        self._palette = None
+
+    def _on_palette_action(self, action: str) -> None:
+        if action == "new_query":
+            self.new_query()
+        elif action == "open_folder":
+            self.open_folder()
+        elif action == "reindex":
+            self.reindex_library()
 
     def _on_palette_selected(self, result: SearchResult) -> None:
         self._pending_select = (result.rel_path, result.folder)
@@ -2641,6 +2663,8 @@ class MainWindow(QMainWindow):
         self._sidebar.refresh_theme()
         self._metadata_panel.refresh_theme()
         self._editor.refresh_theme()
+        if self._palette is not None:
+            self._palette.refresh_theme()
         self._highlighter.refresh_theme()
 
         # Refresh onboarding labels

@@ -782,6 +782,39 @@ def app_stylesheet(palette: Mapping[str, str]) -> str:
         QPushButton#ScopeClear:hover {{
             background-color: {c["hover"]};
         }}
+        QFrame#QuickSearch {{
+            background-color: {c["bg"]};
+            border: 1px solid {c["border_strong"]};
+            border-radius: {_tk.RADIUS_DIALOG}px;
+        }}
+        QFrame#QuickSearch QLabel {{
+            background: transparent;
+        }}
+        QLineEdit#QuickSearchInput {{
+            background: transparent;
+            border: none;
+            color: {c["text"]};
+            font-size: {_tk.FONT_PX_INPUT}px;
+            padding: 0px;
+        }}
+        QFrame#QuickSearchRule {{
+            background-color: {c["border"]};
+            border: none;
+        }}
+        QListWidget#QuickSearchList {{
+            background: transparent;
+            border: none;
+        }}
+        QWidget#QuickSearchFooter {{
+            background-color: {c["panel"]};
+            border-top: 1px solid {c["border"]};
+            border-bottom-left-radius: {_tk.RADIUS_DIALOG - 1}px;
+            border-bottom-right-radius: {_tk.RADIUS_DIALOG - 1}px;
+        }}
+        QLabel#QuickSearchHint {{
+            color: {c["text3"]};
+            font-size: {_tk.FONT_PX_SMALL}px;
+        }}
 
         QStatusBar#StatusBar {{
             background-color: {c["chrome"]};

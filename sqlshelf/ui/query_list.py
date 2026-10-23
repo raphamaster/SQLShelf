@@ -63,6 +63,7 @@ from ..core.models import SearchResult
 from ..core.text_match import highlight_terms, match_spans
 from . import icons
 from . import tokens as _tk
+from .paint import draw_marked_text
 from .theme import mono_font, qcolor, qss
 
 # ── Sort keys ───────────────────────────────────────────────────────────────
@@ -163,39 +164,10 @@ def _draw_text(
     color_key: str,
     terms: list[str] | None = None,
 ) -> int:
-    """Draw *text* on the painter's font, elided into *rect*, with the parts
-    that match *terms* on a ``mark`` background. Return the drawn width.
-
-    Everything is measured through the painter: the font the cell resolves at
-    paint time is the one that counts (1.0.10 cut the first digit of dates
-    measured with another font).
-    """
-    metrics = painter.fontMetrics()
-    shown = metrics.elidedText(text, Qt.TextElideMode.ElideRight, max(0, rect.width()))
-    if terms and shown:
-        visible = len(shown) if shown == text else len(shown) - 1  # minus "…"
-        spans = match_spans(text, terms)
-        if spans:
-            height = metrics.height()
-            top = rect.top() + (rect.height() - height) / 2
-            painter.save()
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(QBrush(qcolor(_tk.color("mark"))))
-            for start, end in spans:
-                end = min(end, visible)
-                if start >= end:
-                    continue
-                left = rect.left() + metrics.horizontalAdvance(shown[:start])
-                right = rect.left() + metrics.horizontalAdvance(shown[:end])
-                painter.drawRoundedRect(
-                    QRectF(left - 1, top, right - left + 2, height), 3, 3
-                )
-            painter.restore()
-    painter.setPen(qcolor(_tk.color(color_key)))
-    painter.drawText(
-        rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, shown
-    )
-    return metrics.horizontalAdvance(shown)
+    """Draw *text* elided into *rect*, the parts that match *terms* marked.
+    Return the drawn width."""
+    spans = match_spans(text, terms) if terms else None
+    return draw_marked_text(painter, rect, text, color_key, spans)
 
 
 def _paint_tags(

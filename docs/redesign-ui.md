@@ -42,6 +42,7 @@ O qt-material impõe botões em caixa alta e contornos verdes — exatamente o q
 | `accent_text` | links e ícones de destaque sobre fundo | `#2fe3a8` | `#04794f` |
 | `mark` | destaque de termo buscado | `rgba(10,222,153,.30)` | `rgba(10,222,153,.35)` |
 | `overlay` | fundo atrás da busca rápida | `rgba(5,6,8,.55)` | `rgba(20,24,28,.32)` |
+| `shadow` | sombra do cartão da busca rápida | `rgba(0,0,0,.50)` | `rgba(20,24,28,.24)` |
 | `line_no` | números de linha | `#848c95` | `#656d76` |
 | `cur_line` | linha atual do editor | `rgba(255,255,255,.05)` | `rgba(0,0,0,.04)` |
 | `star` | favorito | `#f5b524` | `#f5b524` |
@@ -282,4 +283,5 @@ Uma por vez. Cada fatia termina com:
 - **Testes:** `split_tokens` / `join_tokens` (ida e volta, inclusive aspas); campo de busca offscreen (chips no espaço, Enter e Tab, cursor preservado, × e Backspace, limpar, `set_text_silently`, placeholder, valor longo abreviado, foco); barra de escopo (opções, marcação, sinal, contagem, Limpar); na janela, chips que ainda buscam, troca de escopo e limpar, agrupamento próprio da busca, tag como chip.
 
 ### F8 — Busca rápida
-- [ ] Reestilização, seção de ações, Ctrl+C.
+- [x] Reestilização, seção de ações, Ctrl+C.
+- **Testes:** `filter_results` (nome, caminho e tag sem acento nem caixa, nome primeiro, operadores, `date:`, limite), `name_spans`, `action_matches`, `cycle_operator`; paleta offscreen (seções e linhas, filtro, linha vazia, setas pulando títulos, Enter em consulta e em ação, Ctrl+C — e cópia do texto quando há seleção —, Tab, Esc devolvendo o foco, clique dentro e fora, perda de foco, tamanho e posição do cartão, pt-BR, janela fechada com a paleta aberta); na janela, Ctrl+P abrindo uma consulta, Ctrl+C de consulta não aberta, ação, segundo Ctrl+P e Ctrl+F.

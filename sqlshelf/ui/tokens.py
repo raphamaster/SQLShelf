@@ -37,6 +37,7 @@ DARK: dict[str, str] = {
     "accent_text": "#2fe3a8",
     "mark": "rgba(10,222,153,.30)",
     "overlay": "rgba(5,6,8,.55)",
+    "shadow": "rgba(0,0,0,.50)",
     # Editor
     "line_no": "#848c95",
     "cur_line": "rgba(255,255,255,.05)",
@@ -75,6 +76,7 @@ LIGHT: dict[str, str] = {
     "accent_text": "#04794f",
     "mark": "rgba(10,222,153,.35)",
     "overlay": "rgba(20,24,28,.32)",
+    "shadow": "rgba(20,24,28,.24)",
     # Editor
     "line_no": "#656d76",
     "cur_line": "rgba(0,0,0,.04)",
@@ -133,6 +135,7 @@ FONT_PX_BASE = 13
 FONT_PX_SMALL = 12  # secondary text and labels
 FONT_PX_KBD = 11  # keyboard shortcut hints
 FONT_PX_TITLE = 16  # details panel title
+FONT_PX_INPUT = 15  # quick search input
 FONT_PX_CODE = 13
 CODE_LINE_HEIGHT_PX = 19
 

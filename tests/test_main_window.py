@@ -18,6 +18,7 @@ from sqlshelf.core.frontmatter import read_sql_file
 from sqlshelf.core.i18n import set_language
 from sqlshelf.core.navigation import NavState
 from sqlshelf.ui import main_window as mw
+from sqlshelf.ui.command_palette import CommandPalette
 from sqlshelf.ui.main_window import MainWindow
 from sqlshelf.ui.theme import apply_theme
 
@@ -456,3 +457,76 @@ def test_a_tag_is_a_chip_and_removing_it_leaves_the_tag(
     window._on_search_timeout()
     assert window._nav.current == NavState("folder", library)
     assert window._scope_bar.isHidden()
+
+
+def _open_palette(win: MainWindow) -> CommandPalette:
+    QTest.keyClick(win, Qt.Key.Key_P, Qt.KeyboardModifier.ControlModifier)
+    palette = win._palette
+    assert palette is not None and palette.is_open()
+    # The library's queries arrive from a worker.
+    _wait_until(lambda: palette._loaded)
+    return palette
+
+
+def test_quick_search_opens_a_query_of_the_library(
+    window: MainWindow, library: Path
+) -> None:
+    _load(window, library)
+    window._navigate(NavState("favorites"))
+    palette = _open_palette(window)
+    kinds = [kind for kind, _value in palette.rows()]
+    assert kinds.count("query") == 2 and kinds.count("action") == 3
+
+    QTest.keyClicks(palette._input, "sales")
+    QTest.keyClick(palette._input, Qt.Key.Key_Return)
+    assert window._palette is None
+    assert window._nav.current == NavState("folder", library)
+    _wait_until(
+        lambda: window._query_loaded
+        and window._current_result is not None
+        and window._current_result.rel_path == "sales.sql"
+    )
+
+
+def test_quick_search_copies_the_sql_of_a_query_not_loaded(
+    window: MainWindow, library: Path
+) -> None:
+    _load(window, library)
+    QApplication.clipboard().clear()
+    palette = _open_palette(window)
+    QTest.keyClicks(palette._input, "clients")
+    QTest.keyClick(palette._input, Qt.Key.Key_C, Qt.KeyboardModifier.ControlModifier)
+    assert window._palette is None
+    _wait_until(lambda: QApplication.clipboard().text() == "SELECT id FROM clients")
+
+
+def test_quick_search_runs_an_action(
+    window: MainWindow, library: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _load(window, library)
+    calls: list[str] = []
+    monkeypatch.setattr(window, "reindex_library", lambda: calls.append("reindex"))
+    palette = _open_palette(window)
+    QTest.keyClicks(palette._input, "reindex")
+    QTest.keyClick(palette._input, Qt.Key.Key_Return)
+    assert calls == ["reindex"]
+
+
+def test_ctrl_p_again_keeps_one_palette_and_ctrl_f_closes_it(
+    window: MainWindow, library: Path
+) -> None:
+    _load(window, library)
+    palette = _open_palette(window)
+    QTest.keyClicks(palette._input, "sales")
+    QTest.keyClick(palette._input, Qt.Key.Key_P, Qt.KeyboardModifier.ControlModifier)
+    assert window._palette is palette
+    assert palette._input.selectedText() == "sales"
+
+    QTest.keyClick(palette._input, Qt.Key.Key_F, Qt.KeyboardModifier.ControlModifier)
+    assert window._palette is None
+    assert window._search_bar._edit.hasFocus()
+
+
+def test_quick_search_needs_a_library(window: MainWindow) -> None:
+    QTest.keyClick(window, Qt.Key.Key_P, Qt.KeyboardModifier.ControlModifier)
+    assert window._palette is None
