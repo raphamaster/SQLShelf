@@ -15,6 +15,7 @@ from PySide6.QtWidgets import QApplication, QStyleOptionViewItem
 
 from sqlshelf.core.i18n import set_language
 from sqlshelf.core.models import SearchResult
+from sqlshelf.ui import query_grid as qg
 from sqlshelf.ui import query_list as ql
 from sqlshelf.ui.query_list import QueryListWidget
 
@@ -374,3 +375,171 @@ def test_every_cell_paints(widget: QueryListWidget, view_mode: str) -> None:
             widget._header.paintSection(painter, QRect(0, 0, 150, 32), column)
     finally:
         painter.end()
+
+
+# ── Grid view ──────────────────────────────────────────────────────────────
+
+
+def _grid_cards(widget: QueryListWidget) -> list[str]:
+    return [result.rel_path for result in widget._grid._cards]
+
+
+def test_grid_shows_the_grid_instead_of_the_tree(widget: QueryListWidget) -> None:
+    widget.set_results([_result("a.sql"), _result("old.sql", OLD)])
+
+    widget.set_view("grid")
+
+    assert widget.view_mode() == "grid"
+    assert widget._stack.currentWidget() is widget._grid
+    assert _grid_cards(widget) == ["a.sql", "old.sql"]
+
+    widget.set_view("details")
+    assert widget._stack.currentWidget() is widget._view
+
+
+def test_grid_keeps_the_selection_across_views_without_announcing_it(
+    widget: QueryListWidget,
+) -> None:
+    widget.set_results([_result("a.sql"), _result("reports/b.sql", OLD)])
+    widget.select_by_rel_path("reports/b.sql")
+    selected = _selections(widget)
+
+    widget.set_view("grid")
+    assert _current(widget) == "reports/b.sql"
+    widget.set_group("none")
+    widget.set_sort("name_desc")
+    assert _current(widget) == "reports/b.sql"
+    widget.set_view("content")
+    assert _current(widget) == "reports/b.sql"
+
+    assert selected == []
+
+
+def test_grid_announces_a_card_picked_by_the_user(widget: QueryListWidget) -> None:
+    widget.set_view("grid")
+    widget.set_results([_result("a.sql"), _result("old.sql", OLD)])
+    selected = _selections(widget)
+
+    QTest.keyClick(widget._grid, Qt.Key.Key_Right)
+    QTest.keyClick(widget._grid, Qt.Key.Key_Return)
+
+    assert [r.rel_path for r in selected] == ["old.sql", "old.sql"]
+    assert _current(widget) == "old.sql"
+
+
+def test_grid_announces_the_first_card_of_a_new_list(widget: QueryListWidget) -> None:
+    widget.set_view("grid")
+    selected = _selections(widget)
+
+    widget.set_results([_result("a.sql"), _result("b.sql", OLD)])
+
+    assert [r.rel_path for r in selected] == ["a.sql"]
+
+
+def test_select_by_rel_path_reveals_the_card_in_the_grid(
+    widget: QueryListWidget,
+) -> None:
+    widget.set_results([_result("a.sql"), _result("old.sql", OLD)])
+    widget.set_view("grid")
+    widget._grid.set_collapsed({"date:older"})
+    assert _grid_cards(widget) == ["a.sql"]
+
+    widget.select_by_rel_path("old.sql", ROOT)
+
+    assert _grid_cards(widget) == ["a.sql", "old.sql"]
+    assert _current(widget) == "old.sql"
+
+
+def test_folding_a_group_in_one_view_folds_it_in_the_other(
+    widget: QueryListWidget,
+) -> None:
+    widget.set_results([_result("a.sql"), _result("old.sql", OLD)])
+    tree = widget._view
+
+    tree.setExpanded(widget._model.index(1, 0), False)  # fold "older" in the tree
+    widget.set_view("grid")
+    assert _grid_cards(widget) == ["a.sql"]
+
+    widget._grid._toggle(1)  # unfold it in the grid
+    widget.set_view("details")
+    assert tree.isExpanded(widget._model.index(1, 0))
+
+    widget.set_view("grid")
+    widget._grid._toggle(1)  # fold "older" in the grid
+    widget.set_results([_result("a.sql"), _result("old.sql", OLD)])
+    assert _grid_cards(widget) == ["a.sql"]
+    widget.set_view("details")
+    assert not tree.isExpanded(widget._model.index(1, 0))
+
+
+def test_the_tree_unfolds_the_group_of_the_selection(widget: QueryListWidget) -> None:
+    widget.set_results([_result("a.sql"), _result("old.sql", OLD)])
+    widget.set_view("grid")
+
+    widget._grid._toggle(0)  # fold the group that holds the selected card
+    assert _current(widget) == "a.sql"
+    widget.set_view("details")
+
+    assert widget._view.isExpanded(widget._model.index(0, 0))
+    assert "date:today" not in widget._collapsed
+    assert _current(widget) == "a.sql"
+
+
+def test_a_star_click_in_the_grid_toggles_the_favorite(
+    widget: QueryListWidget,
+) -> None:
+    widget.set_view("grid")
+    widget.set_results([_result("a.sql"), _result("b.sql", OLD)])
+    toggled: list[SearchResult] = []
+    widget.favorite_toggled.connect(toggled.append)
+    grid = widget._grid
+
+    star = qg._star_rect(qg._thumb_rect(grid._card_rect(1))).center()
+    QTest.mouseClick(grid.viewport(), Qt.MouseButton.LeftButton, pos=star)
+
+    assert [r.rel_path for r in toggled] == ["b.sql"]
+    assert _current(widget) == "a.sql"
+
+
+def test_update_favorite_changes_the_card_of_the_grid(widget: QueryListWidget) -> None:
+    widget.set_view("grid")
+    widget.set_results([_result("a.sql")])
+
+    widget.update_favorite("a.sql", True, ROOT)
+
+    current = widget._grid.current_result()
+    assert current is not None and current.is_favorite
+
+
+def test_the_grid_marks_the_search_terms(widget: QueryListWidget) -> None:
+    widget.set_results([_result("a.sql")], highlight="table:Pedidos tag:bi venda")
+    assert widget._grid.terms == ["venda", "Pedidos"]
+
+    widget.set_results([_result("a.sql")])
+    assert widget._grid.terms == []
+
+
+def test_the_empty_state_wins_over_an_empty_grid(widget: QueryListWidget) -> None:
+    widget.set_view("grid")
+    widget.set_results([])
+    assert widget._stack.currentWidget() is widget._empty
+
+    widget.set_results([_result("a.sql")])
+    assert widget._stack.currentWidget() is widget._grid
+
+
+@pytest.mark.parametrize("view_mode", ["details", "content", "grid"])
+def test_every_view_survives_a_theme_switch_and_a_new_language(
+    widget: QueryListWidget, view_mode: str
+) -> None:
+    widget.set_view(view_mode)
+    widget.set_results([_result("a.sql", tags=["bi"]), _result("b.sql", OLD)])
+    try:
+        set_language("pt-BR")
+        widget.retranslate_ui()
+        widget.refresh_theme()
+    finally:
+        set_language("en")
+    QApplication.processEvents()
+
+    assert _current(widget) == "a.sql"

@@ -1,11 +1,12 @@
-"""Middle panel: the query list, in the Details or the Content view.
+"""Middle panel: the query list, in the Details, Content or Grid view.
 
 A QTreeView over a QStandardItemModel. Each query is a single item in column 0
 that holds its SearchResult; the other columns are painted from it, so a long
 result list costs one item per row. Groups (by date or by folder) are parent
 rows spanning every column. The view paints row backgrounds, and the delegate
 of the current view mode paints cell contents, reading colours at paint time,
-so a theme switch only needs a repaint.
+so a theme switch only needs a repaint. The Grid view is another widget
+(``query_grid``) fed with the same results; the list keeps both in step.
 """
 
 from __future__ import annotations
@@ -56,6 +57,7 @@ from ..core.grouping import (
     display_name,
     group_by_date,
     group_by_folder,
+    group_label,
     modified_label,
 )
 from ..core.i18n import tr
@@ -63,7 +65,8 @@ from ..core.models import SearchResult
 from ..core.text_match import highlight_terms, match_spans
 from . import icons
 from . import tokens as _tk
-from .paint import draw_marked_text
+from .paint import GROUP_HEIGHT, draw_group_header, draw_marked_text, sized_font
+from .query_grid import GridSection, QueryGrid
 from .theme import mono_font, qcolor, qss
 
 # ── Sort keys ───────────────────────────────────────────────────────────────
@@ -75,7 +78,7 @@ _SORT_MTIME_ASC = "mtime_asc"
 SORT_KEYS = (_SORT_NAME_ASC, _SORT_NAME_DESC, _SORT_MTIME_DESC, _SORT_MTIME_ASC)
 
 GROUP_MODES = ("date", "folder", "none")
-VIEW_MODES = ("details", "content")
+VIEW_MODES = ("details", "content", "grid")
 
 # ── Columns ─────────────────────────────────────────────────────────────────
 COL_STAR, COL_NAME, COL_TABLES, COL_TAGS, COL_MODIFIED = range(5)
@@ -96,8 +99,6 @@ _ROLE_COUNT = Qt.ItemDataRole.UserRole + 2  # queries in a group
 # ── Geometry, in logical px (docs/redesign-ui.md, reference screens) ────────
 ROW_HEIGHT = 34
 CONTENT_ROW_HEIGHT = 76
-GROUP_HEIGHT = 36  # a 32 px band under a 4 px gap
-_GROUP_BAND = 32
 HEADER_HEIGHT = 32
 _INSET = 8  # row background, from each side of the view
 _CELL_PAD = 8
@@ -106,8 +107,6 @@ _TABLES_W = 132
 _TAGS_W = 150
 _MODIFIED_W = 128  # includes the row inset on the right
 _NAME_TEXT_X = 30  # name text, from the start of the Name column
-_GROUP_CHEVRON_X = 14
-_GROUP_TEXT_X = 35
 # Below these list widths the Tags, then the Tables column make room for Name.
 _HIDE_TAGS_BELOW = 620
 _HIDE_TABLES_BELOW = 480
@@ -131,14 +130,6 @@ def _result_key(result: SearchResult | None) -> tuple[object, str] | None:
     if result is None:
         return None
     return result.folder, result.rel_path
-
-
-def _font(base: QFont, pixel_size: int, weight: QFont.Weight | None = None) -> QFont:
-    font = QFont(base)
-    font.setPixelSize(pixel_size)
-    if weight is not None:
-        font.setWeight(weight)
-    return font
 
 
 def _tabular(font: QFont) -> QFont:
@@ -269,7 +260,7 @@ class _ListHeader(QHeaderView):
         )
         if label:
             is_sorted = logicalIndex == self._sorted_column()
-            font = _font(
+            font = sized_font(
                 self.font(),
                 _tk.FONT_PX_SMALL,
                 QFont.Weight.DemiBold if is_sorted else None,
@@ -566,33 +557,14 @@ class _Delegate(QStyledItemDelegate):
         option: QStyleOptionViewItem,
         index: QModelIndex | QPersistentModelIndex,
     ) -> None:
-        rect = option.rect
-        band = QRect(
-            rect.left(), rect.bottom() - _GROUP_BAND + 1, rect.width(), _GROUP_BAND
+        draw_group_header(
+            painter,
+            option.rect,
+            option.font,
+            group_label(str(index.data(_ROLE_GROUP))),
+            int(index.data(_ROLE_COUNT)),
+            self._view.isExpanded(_lead(index)),
         )
-        centre_y = band.center().y()
-        expanded = self._view.isExpanded(_lead(index))
-        chevron = "chevron_down" if expanded else "chevron_right"
-        icons.icon(chevron, "text3", 14).paint(
-            painter, QRect(rect.left() + _GROUP_CHEVRON_X, centre_y - 7, 14, 14)
-        )
-
-        kind, _, key = str(index.data(_ROLE_GROUP)).partition(":")
-        label = tr(f"list.group_{key}") if kind == "date" else key
-        right = band.right() - 16
-        x = rect.left() + _GROUP_TEXT_X
-        painter.setFont(_font(option.font, _tk.FONT_PX_BASE, QFont.Weight.DemiBold))
-        x += _draw_text(
-            painter, QRect(x, band.top(), right - x - 48, _GROUP_BAND), label, "text"
-        )
-        x += 8
-        painter.setFont(_font(option.font, _tk.FONT_PX_SMALL))
-        count = str(index.data(_ROLE_COUNT))
-        x += _draw_text(painter, QRect(x, band.top(), 40, _GROUP_BAND), count, "text3")
-        x += 12
-        if x < right:
-            painter.setPen(QPen(qcolor(_tk.color("border")), 1))
-            painter.drawLine(x, centre_y, right, centre_y)
 
     def _paint_star(
         self,
@@ -627,11 +599,11 @@ class _DetailsDelegate(_Delegate):
             icons.icon("file", "accent_text" if has_title else "text3", 16).paint(
                 painter, QRect(rect.left() + _CELL_PAD, rect.center().y() - 8, 16, 16)
             )
-            painter.setFont(_font(option.font, _tk.FONT_PX_BASE))
+            painter.setFont(sized_font(option.font, _tk.FONT_PX_BASE))
             text_rect = rect.adjusted(_NAME_TEXT_X, 0, -_CELL_PAD, 0)
             _draw_text(painter, text_rect, name, "text", terms)
         elif column == COL_TABLES:
-            painter.setFont(_font(option.font, _tk.FONT_PX_BASE))
+            painter.setFont(sized_font(option.font, _tk.FONT_PX_BASE))
             text_rect = rect.adjusted(_CELL_PAD, 0, -_CELL_PAD, 0)
             if result.tables:
                 _draw_text(painter, text_rect, ", ".join(result.tables), "text2", terms)
@@ -642,11 +614,11 @@ class _DetailsDelegate(_Delegate):
                 painter,
                 rect.adjusted(_CELL_PAD, 0, -_CELL_PAD, 0),
                 result.tags,
-                _font(option.font, _tk.FONT_PX_SMALL),
+                sized_font(option.font, _tk.FONT_PX_SMALL),
                 _PILL_H,
             )
         elif column == COL_MODIFIED:
-            painter.setFont(_tabular(_font(option.font, _tk.FONT_PX_BASE)))
+            painter.setFont(_tabular(sized_font(option.font, _tk.FONT_PX_BASE)))
             text_rect = rect.adjusted(_CELL_PAD, 0, -_CELL_PAD - _INSET, 0)
             label = modified_label(result.file_mtime, datetime.now())
             _draw_text(painter, text_rect, label, "text2")
@@ -677,15 +649,17 @@ class _ContentDelegate(_Delegate):
         icons.icon("file", "accent_text" if has_title else "text3", 16).paint(
             painter, QRect(rect.left() + _CELL_PAD, top + 1, 16, 16)
         )
-        painter.setFont(_tabular(_font(option.font, _tk.FONT_PX_SMALL)))
+        painter.setFont(_tabular(sized_font(option.font, _tk.FONT_PX_SMALL)))
         date = modified_label(result.file_mtime, datetime.now())
         date_w = painter.fontMetrics().horizontalAdvance(date)
         _draw_text(painter, QRect(right - date_w, top, date_w + 1, 18), date, "text3")
-        painter.setFont(_font(option.font, _tk.FONT_PX_BASE, QFont.Weight.DemiBold))
+        painter.setFont(
+            sized_font(option.font, _tk.FONT_PX_BASE, QFont.Weight.DemiBold)
+        )
         title_rect = QRect(left, top, right - date_w - 12 - left, 18)
         _draw_text(painter, title_rect, name, "text", terms)
 
-        painter.setFont(_font(option.font, _tk.FONT_PX_SMALL))
+        painter.setFont(sized_font(option.font, _tk.FONT_PX_SMALL))
         description = " ".join(result.description.split())
         line = QRect(left, top + 21, right - left, 18)
         if description:
@@ -702,7 +676,7 @@ class _ContentDelegate(_Delegate):
                 painter,
                 chips,
                 result.tags,
-                _font(option.font, _tk.FONT_PX_SMALL),
+                sized_font(option.font, _tk.FONT_PX_SMALL),
                 _CHIP_H,
             )
 
@@ -761,7 +735,7 @@ class _EmptyState(QWidget):
 
 class QueryListWidget(QWidget):
     """Middle panel: the results of the current view or search, sorted,
-    optionally grouped, in the Details or the Content view."""
+    optionally grouped, in the Details, Content or Grid view."""
 
     query_selected = Signal(object)  # SearchResult
     # (action, SearchResult); action is one of "copy", "edit", "favorite",
@@ -811,10 +785,18 @@ class QueryListWidget(QWidget):
         self._view.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self._view.customContextMenuRequested.connect(self._show_context_menu)
 
+        self._grid = QueryGrid()
+        self._grid.current_changed.connect(self._on_grid_current_changed)
+        self._grid.activated.connect(self.query_selected)
+        self._grid.star_clicked.connect(self.favorite_toggled)
+        self._grid.group_toggled.connect(self._on_grid_group_toggled)
+        self._grid.context_requested.connect(self._open_context_menu)
+
         self._empty = _EmptyState()
         self._stack = QStackedLayout(self)
         self._stack.setContentsMargins(0, 0, 0, 0)
         self._stack.addWidget(self._view)
+        self._stack.addWidget(self._grid)
         self._stack.addWidget(self._empty)
 
         self.retranslate_ui()
@@ -829,6 +811,7 @@ class QueryListWidget(QWidget):
         current_key = _result_key(self._current_result())
         self._results = list(results)
         self._view.terms = highlight_terms(highlight) if highlight else []
+        self._grid.terms = self._view.terms
         self._sort_results()
         self._populate(current_key)
 
@@ -837,6 +820,9 @@ class QueryListWidget(QWidget):
             if result.rel_path == rel_path and (
                 folder is None or result.folder == folder
             ):
+                if self._view_mode == "grid":
+                    self._grid.reveal(result)
+                    return
                 parent = index.parent()
                 if parent.isValid() and not self._view.isExpanded(parent):
                     self._view.setExpanded(parent, True)
@@ -854,6 +840,7 @@ class QueryListWidget(QWidget):
             ):
                 result.is_favorite = is_fav
         self._view.viewport().update()
+        self._grid.viewport().update()
 
     def count(self) -> int:
         return len(self._results)
@@ -885,25 +872,31 @@ class QueryListWidget(QWidget):
         return self._view_mode
 
     def set_view(self, mode: str) -> None:
-        """Switch between the "details" and the "content" view."""
+        """Switch between the "details", "content" and "grid" views, keeping the
+        selected query selected."""
         if mode not in VIEW_MODES or mode == self._view_mode:
             return
+        current = self._current_result()
         self._view_mode = mode
-        content = mode == "content"
-        self._view.content_mode = content
-        self._view.setItemDelegate(
-            self._content_delegate if content else self._details_delegate
-        )
-        self._view.setHeaderHidden(content)
-        self._apply_columns()
-        current = self._view.currentIndex()
-        if current.isValid():
-            self._view.scrollTo(current)
+        if mode != "grid":
+            content = mode == "content"
+            self._view.content_mode = content
+            self._view.setItemDelegate(
+                self._content_delegate if content else self._details_delegate
+            )
+            self._view.setHeaderHidden(content)
+            self._apply_columns()
+        if mode == "grid":
+            self._grid.set_collapsed(self._collapsed)
+        self._show_results_view()
+        if current is not None:
+            self._select_quietly(current)
 
     def refresh_theme(self) -> None:
         self._empty.refresh_theme()
         self._header.viewport().update()
         self._view.viewport().update()
+        self._grid.refresh_theme()
 
     def retranslate_ui(self) -> None:
         for column, key in enumerate(_COLUMN_LABELS):
@@ -912,6 +905,7 @@ class QueryListWidget(QWidget):
             )
         self._empty.retranslate_ui()
         self._view.viewport().update()
+        self._grid.viewport().update()
 
     # ------------------------------------------------------------------
     # Model
@@ -999,10 +993,16 @@ class QueryListWidget(QWidget):
             else:
                 self._view.setCurrentIndex(QModelIndex())
                 self._view.clearSelection()
+            sections = (
+                [GridSection(None, self._results)]
+                if groups is None
+                else [GridSection(key, members) for key, members in groups]
+            )
+            self._grid.set_sections(sections, self._collapsed, restore_key)
         finally:
             self._populating = False
 
-        self._stack.setCurrentWidget(self._empty if not self._results else self._view)
+        self._show_results_view()
         current = self._view.currentIndex()
         if current.isValid():
             self._view.scrollTo(current)
@@ -1036,7 +1036,44 @@ class QueryListWidget(QWidget):
                     yield index, result
 
     def _current_result(self) -> SearchResult | None:
+        if self._view_mode == "grid":
+            return self._grid.current_result()
         return self._view.result_at(self._view.currentIndex())
+
+    def _show_results_view(self) -> None:
+        """Show the view of the current mode, or the empty state."""
+        if not self._results:
+            self._stack.setCurrentWidget(self._empty)
+        elif self._view_mode == "grid":
+            self._stack.setCurrentWidget(self._grid)
+        else:
+            self._stack.setCurrentWidget(self._view)
+        # Size the page now, so what follows scrolls on its real geometry.
+        self._stack.activate()
+
+    def _select_quietly(self, result: SearchResult) -> None:
+        """Make *result* current in the view now shown, which was hidden while
+        the selection moved, without announcing it: it is already selected."""
+        self._populating = True
+        try:
+            if self._view_mode == "grid":
+                self._grid.reveal(result)
+                return
+            for row in range(self._model.rowCount()):
+                top = self._model.index(row, 0)
+                group = top.data(_ROLE_GROUP)
+                if group is not None:
+                    self._view.setExpanded(top, group not in self._collapsed)
+            for index, candidate in self._iter_queries():
+                if _result_key(candidate) == _result_key(result):
+                    parent = index.parent()
+                    if parent.isValid():
+                        self._view.setExpanded(parent, True)
+                    self._view.setCurrentIndex(index)
+                    self._view.scrollTo(index)
+                    return
+        finally:
+            self._populating = False
 
     # ------------------------------------------------------------------
     # Layout
@@ -1063,6 +1100,16 @@ class QueryListWidget(QWidget):
         result = self._view.result_at(current)
         if result is not None:
             self.query_selected.emit(result)
+
+    def _on_grid_current_changed(self, result: SearchResult) -> None:
+        if not self._populating:
+            self.query_selected.emit(result)
+
+    def _on_grid_group_toggled(self, key: str, folded: bool) -> None:
+        if folded:
+            self._collapsed.add(key)
+        else:
+            self._collapsed.discard(key)
 
     def _on_activated(self, index: QModelIndex) -> None:
         result = self._view.result_at(index)
@@ -1093,8 +1140,10 @@ class QueryListWidget(QWidget):
 
     def _show_context_menu(self, pos: QPoint) -> None:
         result = self._view.result_at(self._view.indexAt(pos))
-        if result is None:
-            return
+        if result is not None:
+            self._open_context_menu(result, self._view.viewport().mapToGlobal(pos))
+
+    def _open_context_menu(self, result: SearchResult, global_pos: QPoint) -> None:
         favorite = "remove_favorite" if result.is_favorite else "add_favorite"
         entries = (
             ("copy", "copy_sql"),
@@ -1107,13 +1156,13 @@ class QueryListWidget(QWidget):
             None,
             ("duplicate", "duplicate"),
         )
-        menu = QMenu(self._view)
+        menu = QMenu(self)
         for entry in entries:
             if entry is None:
                 menu.addSeparator()
                 continue
             action, label = entry
             menu.addAction(tr(f"context_menu.{label}")).setData(action)
-        chosen = menu.exec(self._view.viewport().mapToGlobal(pos))
+        chosen = menu.exec(global_pos)
         if chosen is not None and chosen.data():
             self.context_action.emit(str(chosen.data()), result)

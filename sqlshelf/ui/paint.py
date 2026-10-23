@@ -9,11 +9,26 @@ from __future__ import annotations
 from PySide6.QtCore import QRect, QRectF, Qt
 from PySide6.QtGui import QBrush, QFont, QPainter, QPen
 
+from . import icons
 from . import tokens as _tk
 from .theme import qcolor
 
 KBD_HEIGHT = 18
 _KBD_PAD = 5
+GROUP_HEIGHT = 36  # a 32 px band under a 4 px gap
+GROUP_BAND = 32
+_GROUP_CHEVRON_X = 14
+_GROUP_TEXT_X = 35
+
+
+def sized_font(
+    base: QFont, pixel_size: int, weight: QFont.Weight | None = None
+) -> QFont:
+    font = QFont(base)
+    font.setPixelSize(pixel_size)
+    if weight is not None:
+        font.setWeight(weight)
+    return font
 
 
 def draw_marked_text(
@@ -76,3 +91,37 @@ def draw_kbd(painter: QPainter, right: int, center_y: int, keys: str) -> int:
     painter.drawText(box, Qt.AlignmentFlag.AlignCenter, keys)
     painter.restore()
     return right - width
+
+
+def draw_group_header(
+    painter: QPainter,
+    rect: QRect,
+    base_font: QFont,
+    label: str,
+    count: int,
+    expanded: bool,
+) -> None:
+    """Draw a list group header in *rect* (``GROUP_HEIGHT`` tall): a chevron,
+    the *label*, the *count* and a rule to the right edge."""
+    band = QRect(rect.left(), rect.bottom() - GROUP_BAND + 1, rect.width(), GROUP_BAND)
+    centre_y = band.center().y()
+    chevron = "chevron_down" if expanded else "chevron_right"
+    icons.icon(chevron, "text3", 14).paint(
+        painter, QRect(rect.left() + _GROUP_CHEVRON_X, centre_y - 7, 14, 14)
+    )
+
+    right = band.right() - 16
+    x = rect.left() + _GROUP_TEXT_X
+    painter.setFont(sized_font(base_font, _tk.FONT_PX_BASE, QFont.Weight.DemiBold))
+    x += draw_marked_text(
+        painter, QRect(x, band.top(), right - x - 48, GROUP_BAND), label, "text"
+    )
+    x += 8
+    painter.setFont(sized_font(base_font, _tk.FONT_PX_SMALL))
+    x += draw_marked_text(
+        painter, QRect(x, band.top(), 40, GROUP_BAND), str(count), "text3"
+    )
+    x += 12
+    if x < right:
+        painter.setPen(QPen(qcolor(_tk.color("border")), 1))
+        painter.drawLine(x, centre_y, right, centre_y)

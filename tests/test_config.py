@@ -43,6 +43,13 @@ def test_layout_round_trip() -> None:
     assert cfg.get_show_menu_bar() is True
 
 
+@pytest.mark.parametrize("mode", ["details", "content", "grid"])
+def test_every_view_mode_round_trips(mode: str) -> None:
+    cfg.set_view_mode(mode)
+
+    assert cfg.get_view_mode() == mode
+
+
 @pytest.mark.parametrize(
     ("setter", "getter", "default"),
     [

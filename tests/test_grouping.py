@@ -11,6 +11,7 @@ from sqlshelf.core.grouping import (
     folder_label,
     group_by_date,
     group_by_folder,
+    group_label,
     modified_label,
 )
 from sqlshelf.core.i18n import set_language
@@ -168,3 +169,20 @@ def test_modified_label() -> None:
     assert modified_label(_ts(2026, 10, 21, 19, 31), THURSDAY) == "Yesterday 19:31"
     assert modified_label(_ts(2026, 10, 17, 8, 0), THURSDAY) == "17/10/2026"
     assert modified_label(0, THURSDAY) == ""
+
+
+@pytest.mark.parametrize(
+    ("language", "key", "label"),
+    [
+        ("en", "date:today", "Today"),
+        ("en", "date:this_week", "This week"),
+        ("pt-BR", "date:older", "Mais antigos"),
+        ("en", "folder:Querys › reports", "Querys › reports"),
+    ],
+)
+def test_group_label(language: str, key: str, label: str) -> None:
+    set_language(language)
+    try:
+        assert group_label(key) == label
+    finally:
+        set_language("en")

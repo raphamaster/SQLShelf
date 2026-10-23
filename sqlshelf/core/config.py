@@ -163,7 +163,7 @@ def set_minimize_to_tray(enabled: bool) -> None:
 # Window layout (splitter, details panel, list view and grouping)
 # ---------------------------------------------------------------------------
 
-VIEW_MODES = ("details", "content")
+VIEW_MODES = ("details", "content", "grid")
 GROUP_MODES = ("date", "folder", "none")
 SORT_KEYS = ("name_asc", "name_desc", "mtime_desc", "mtime_asc")
 
@@ -202,7 +202,7 @@ def set_panel_visible(visible: bool) -> None:
 
 
 def get_view_mode() -> str:
-    """Return the query-list view: 'details' (default) or 'content'."""
+    """Return the query-list view: 'details' (default), 'content' or 'grid'."""
     mode = _load().get("view_mode", "details")
     return mode if mode in VIEW_MODES else "details"
 
