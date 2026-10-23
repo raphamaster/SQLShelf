@@ -8,7 +8,7 @@ from pathlib import Path
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
-from PySide6.QtCore import QPoint, Qt
+from PySide6.QtCore import QCoreApplication, QEvent, QPoint, Qt
 from PySide6.QtTest import QSignalSpy, QTest
 from PySide6.QtWidgets import QApplication, QLineEdit, QVBoxLayout, QWidget
 
@@ -47,6 +47,12 @@ LOGINS = _result("audit/logins.sql", "Logins by user", ["Logins"], 100)
 RESULTS = [LOGINS, SALES, BALANCE]
 
 
+def _flush_deletions() -> None:
+    """Run the pending deleteLater() calls, so no overlay outlives its test."""
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    QApplication.processEvents()
+
+
 class _Host(QWidget):
     """A window with an input that has the focus before the palette opens."""
 
@@ -70,6 +76,7 @@ def host() -> Iterator[_Host]:
     widget.other.setFocus()
     yield widget
     widget.close()
+    _flush_deletions()
     set_language("en")
 
 
@@ -252,7 +259,7 @@ def test_closing_the_window_closes_the_palette_and_frees_both() -> None:
     freed = weakref.ref(window)
     del window
     assert freed() is None
-    QTest.qWait(10)
+    _flush_deletions()
 
 
 # ── Mouse and focus ─────────────────────────────────────────────────────────

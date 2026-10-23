@@ -9,7 +9,7 @@ from pathlib import Path
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
-from PySide6.QtCore import QEventLoop, QTimer
+from PySide6.QtCore import QCoreApplication, QEvent, QEventLoop, QTimer
 from PySide6.QtGui import QFont, QFontMetrics
 from PySide6.QtTest import QSignalSpy
 from PySide6.QtWidgets import QApplication
@@ -41,6 +41,8 @@ def panel() -> Iterator[MetadataPanel]:
     widget.show()
     yield widget
     widget.close()
+    widget.deleteLater()
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
     set_language("en")
 
 
