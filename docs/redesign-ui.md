@@ -274,7 +274,8 @@ Uma por vez. Cada fatia termina com:
 - **Testes:** `modified_text`, `elide_lines`, `strip_info`, `display_fields`; painel offscreen (linhas vazias ocultas, sinais das ações e dos chips, menu ⋯, rótulo do botão Abrir por plataforma); na janela, faixa preenchida e ações liberadas só após carregar, Copiar SQL sem frontmatter, Ctrl+E e Esc.
 
 ### F6 — Painel de detalhes, edição
-- [ ] Faixa Editando, formulário, Esc / Ctrl+S.
+- [x] Faixa Editando, formulário, Esc / Ctrl+S.
+- **Testes:** `apply_edits` (campos desconhecidos mantidos, autor vazio removido), `normalize_tag` / `split_tags` / `suggest_tags`, `find_span`, `created_text`; campo de tags offscreen (Enter, vírgula, espaço, ×, Backspace, sugestões com contagem, setas, clique, rodapé do Enter, Esc antes do atalho da janela); na janela, Ctrl+S grava e preserva o frontmatter, falha ao salvar mantém a edição, Esc fecha sugestões e depois cancela, cursor na faixa.
 
 ### F7 — Busca com chips e barra de escopo
 - [ ] **Testes:** `split_tokens` / `join_tokens` (ida e volta).

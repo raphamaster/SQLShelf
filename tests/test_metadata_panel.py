@@ -3,7 +3,7 @@ from __future__ import annotations
 import gc
 import os
 from collections.abc import Iterator
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -16,7 +16,13 @@ from PySide6.QtWidgets import QApplication
 
 from sqlshelf.core.i18n import set_language
 from sqlshelf.ui import metadata_panel as mp
-from sqlshelf.ui.metadata_panel import MetadataPanel, elide_lines, modified_text
+from sqlshelf.ui.metadata_panel import (
+    MetadataPanel,
+    QueryEdits,
+    created_text,
+    elide_lines,
+    modified_text,
+)
 
 PATH = Path("C:/lib/Querys/reports/vendas_por_cliente.sql")
 
@@ -263,19 +269,74 @@ def test_star_tooltip_follows_the_favorite_state(panel: MetadataPanel) -> None:
 # ── Edit mode, language, clear ─────────────────────────────────────────────
 
 
-def test_edit_mode_swaps_the_read_view_for_the_form(panel: MetadataPanel) -> None:
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (date(2026, 3, 9), "09/03/2026"),
+        (datetime(2026, 3, 9, 14, 30), "09/03/2026"),
+        ("2026-03-09", "09/03/2026"),
+        ("2026-03-09T14:30:00", "09/03/2026"),
+        ("last spring", "last spring"),
+        ("", "—"),
+        (None, "—"),
+    ],
+)
+def test_created_text(value: object, expected: str) -> None:
+    assert created_text(value) == expected
+
+
+def _start_editing(panel: MetadataPanel) -> None:
     _fill(panel)
-    panel.set_edit_mode(True)
+    panel.start_editing(
+        "Vendas por cliente",
+        "Sales per client",
+        ["vendas", "bi"],
+        author="raphael",
+        created=date(2026, 3, 9),
+    )
+
+
+def test_start_editing_fills_the_form_and_hides_the_read_view(
+    panel: MetadataPanel,
+) -> None:
+    _start_editing(panel)
+    assert panel.is_editing()
     assert panel._ro_widget.isHidden()
     assert not panel._edit_widget.isHidden()
+    assert panel._title_edit.text() == "Vendas por cliente"
+    assert panel._desc_edit.toPlainText() == "Sales per client"
+    assert panel._tag_field.tags() == ["vendas", "bi"]
+    assert panel._author_edit.text() == "raphael"
+    assert panel._created_edit.text() == "09/03/2026"
+    assert panel._created_edit.isReadOnly()
 
+    panel.set_edit_mode(False)
+    assert not panel.is_editing()
+    assert not panel._ro_widget.isHidden()
+    assert panel._edit_widget.isHidden()
+
+
+def test_edited_values_are_trimmed(panel: MetadataPanel) -> None:
+    _start_editing(panel)
     panel._title_edit.setText("  New title ")
     panel._desc_edit.setPlainText("New description\n")
-    assert panel.get_edited_values() == (
-        "New title",
-        "New description",
-        ["vendas", "bi"],
+    panel._author_edit.setText("  ana ")
+    panel._tag_field.input().setText("pending")
+    assert panel.get_edited_values() == QueryEdits(
+        title="New title",
+        description="New description",
+        tags=["vendas", "bi", "pending"],
+        author="ana",
     )
+
+
+def test_banner_buttons_emit_save_and_cancel(panel: MetadataPanel) -> None:
+    _start_editing(panel)
+    assert panel._banner_title.text() == "Editing"
+    assert ".sql" in panel._banner_subtitle.full_text()
+    assert panel._save_btn.label_text() == "Save"
+    assert panel._save_btn.property("primary") is True
+    assert panel._cancel_btn.toolTip() == "Discard changes (Esc)"
 
     save = QSignalSpy(panel.save_requested)
     cancel = QSignalSpy(panel.cancel_requested)
@@ -284,9 +345,37 @@ def test_edit_mode_swaps_the_read_view_for_the_form(panel: MetadataPanel) -> Non
     assert save.count() == 1
     assert cancel.count() == 1
 
-    panel.set_edit_mode(False)
-    assert not panel._ro_widget.isHidden()
-    assert panel._edit_widget.isHidden()
+
+def test_saving_disables_the_banner_buttons(panel: MetadataPanel) -> None:
+    _start_editing(panel)
+    panel.set_saving(True)
+    assert not panel._save_btn.isEnabled()
+    assert not panel._cancel_btn.isEnabled()
+    panel.set_saving(False)
+    assert panel._save_btn.isEnabled()
+    assert panel._cancel_btn.isEnabled()
+
+
+def test_description_is_three_lines_tall(panel: MetadataPanel) -> None:
+    _start_editing(panel)
+    line = panel._desc_edit.fontMetrics().lineSpacing()
+    height = panel._desc_edit.height()
+    assert 3 * line < height < 4 * line + 16
+
+
+def test_form_labels_sit_above_their_fields(panel: MetadataPanel) -> None:
+    _start_editing(panel)
+    labels = panel._edit_labels
+    assert [labels[key].text() for key in labels] == [
+        "Title",
+        "Description",
+        "Tags",
+        "Author",
+        "Created",
+    ]
+    assert labels["title"].buddy() is panel._title_edit
+    assert labels["title"].y() < panel._title_edit.y()
+    assert panel._author_edit.y() == panel._created_edit.y()
 
 
 def test_retranslate_to_portuguese(panel: MetadataPanel) -> None:
@@ -299,7 +388,10 @@ def test_retranslate_to_portuguese(panel: MetadataPanel) -> None:
     assert panel._rows["location"][0].text() == "Local"
     assert panel._desc_label.full_text().startswith("Sem descrição")
     assert panel._tags_area.chips()[0].toolTip() == "Mostrar consultas com a tag vendas"
-    assert panel._save_btn.text() == "Salvar"
+    assert panel._save_btn.label_text() == "Salvar"
+    assert panel._banner_title.text() == "Editando"
+    assert panel._edit_labels["created"].text() == "Criado"
+    assert panel._tag_field.input().placeholderText() == "Adicionar tag…"
 
 
 def test_clear_resets_everything(panel: MetadataPanel) -> None:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlshelf.core.text_match import fold, highlight_terms, match_spans
+from sqlshelf.core.text_match import find_span, fold, highlight_terms, match_spans
 
 
 @pytest.mark.parametrize(
@@ -40,6 +40,23 @@ def test_match_spans(text: str, terms: list[str], spans: list[tuple[int, int]]) 
 
 def test_fold_drops_case_and_accents() -> None:
     assert fold("Ação Ñandú") == "acao nandu"
+
+
+@pytest.mark.parametrize(
+    ("text", "term", "span"),
+    [
+        ("relatorio-mensal", "mens", (10, 14)),
+        ("mensal", "MENS", (0, 4)),
+        ("dimensão", "sao", (5, 8)),
+        ("Variação", "acao", (4, 8)),
+        # A decomposed accent stays with its letter.
+        ("acaó", "acao", (0, 5)),
+        ("bi", "cte", None),
+        ("bi", "", None),
+    ],
+)
+def test_find_span(text: str, term: str, span: tuple[int, int] | None) -> None:
+    assert find_span(text, term) == span
 
 
 @pytest.mark.parametrize(

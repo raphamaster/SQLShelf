@@ -41,7 +41,12 @@ from PySide6.QtWidgets import (
 from ..core import config as cfg
 from ..core.encoding import encoding_label, read_text
 from ..core.folder_tree import folder_prefix
-from ..core.frontmatter import read_sql_file, split_frontmatter, write_sql_file
+from ..core.frontmatter import (
+    apply_edits,
+    read_sql_file,
+    split_frontmatter,
+    write_sql_file,
+)
 from ..core.i18n import available_languages, get_language, set_language, tr
 from ..core.index_db import IndexDB, IndexStats
 from ..core.library_summary import LibrarySummary, summarize_library
@@ -426,6 +431,72 @@ class _RecordAccessWorker(QRunnable):
             self._db.record_access(self._rel_path, self._action)
         except Exception:
             pass
+
+
+class _TagCountsSignals(QObject):
+    ready = Signal(list)  # [(tag, queries using it)], most used first
+
+
+class _TagCountsWorker(QRunnable):
+    """Every library tag and how many queries use it, for the edit form."""
+
+    def __init__(self, dbs: list[IndexDB]) -> None:
+        super().__init__()
+        self.signals = _TagCountsSignals()
+        self._dbs = dbs
+
+    def run(self) -> None:
+        totals: dict[str, int] = {}
+        for db in self._dbs:
+            try:
+                for name, count in db.get_tag_counts():
+                    totals[name] = totals.get(name, 0) + count
+            except Exception:
+                continue
+        counts = sorted(totals.items(), key=lambda item: (-item[1], item[0]))
+        self.signals.ready.emit(counts)
+
+
+class _SaveQuerySignals(QObject):
+    finished = Signal(object, str, str)  # (path, rel_path, error or "")
+
+
+class _SaveQueryWorker(QRunnable):
+    """Write the edited query to its file, then bring its index row up to date."""
+
+    def __init__(
+        self,
+        db: IndexDB | None,
+        path: Path,
+        rel_path: str,
+        metadata: dict,
+        body: str,
+    ) -> None:
+        super().__init__()
+        self.signals = _SaveQuerySignals()
+        self._db = db
+        self._path = path
+        self._rel_path = rel_path
+        self._metadata = metadata
+        self._body = body
+
+    def run(self) -> None:
+        try:
+            write_sql_file(self._path, self._metadata, self._body)
+        except Exception as exc:
+            message = str(exc) or type(exc).__name__
+            self.signals.finished.emit(self._path, self._rel_path, message)
+            return
+        if self._db is not None:
+            # scan_file, never scan_folder: re-scanning the whole folder to
+            # find one known file took seconds on real folders.
+            try:
+                updated = scan_file(self._path)
+                if updated is not None:
+                    self._db.upsert_query(updated)
+            except Exception:
+                pass  # the watcher reindexes the file anyway
+        self.signals.finished.emit(self._path, self._rel_path, "")
 
 
 # ---------------------------------------------------------------------------
@@ -829,6 +900,8 @@ class MainWindow(QMainWindow):
         self._current_result: SearchResult | None = None
         self._current_metadata: dict = {}
         self._edit_mode = False
+        # True while an edited query is being written in the background.
+        self._saving = False
         # True once the selected query's SQL is in the editor; the panel's
         # actions and Ctrl+E wait for it.
         self._query_loaded = False
@@ -1206,19 +1279,13 @@ class MainWindow(QMainWindow):
         self._editor.setFont(mono_font())
         self._highlighter = SqlHighlighter(self._editor.document())
         self._editor.set_syntax_highlighter(self._highlighter)
-
-        # The wrapper carries the accent border while the query is edited.
-        self._editor_wrapper = QWidget()
-        self._editor_wrapper.setObjectName("EditorWrapper")
-        self._editor_wrapper.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        self._editor_wrapper_layout = QVBoxLayout(self._editor_wrapper)
-        self._editor_wrapper_layout.setContentsMargins(0, 0, 0, 0)
-        self._editor_wrapper_layout.setSpacing(0)
-        self._editor_wrapper_layout.addWidget(self._editor)
+        # While editing, the strip shows the cursor and the line count.
+        self._editor.cursorPositionChanged.connect(self._update_cursor_info)
+        self._editor.blockCountChanged.connect(self._on_block_count_changed)
 
         right_layout.addWidget(self._metadata_panel)
         right_layout.addWidget(self._editor_strip)
-        right_layout.addWidget(self._editor_wrapper, stretch=1)
+        right_layout.addWidget(self._editor, stretch=1)
 
         # ── Empty / onboarding state ─────────────────────────────────────────
         self._onboarding = QWidget()
@@ -2057,35 +2124,59 @@ class MainWindow(QMainWindow):
             self._enter_edit_mode()
 
     def _enter_edit_mode(self) -> None:
-        if self._current_result is None or not self._query_loaded:
+        if (
+            self._current_result is None
+            or self._folder is None
+            or not self._query_loaded
+        ):
             return
         self._edit_mode = True
         self._editor.setReadOnly(False)
-        if self._db is not None:
-            self._metadata_panel.set_available_tags(self._db.get_all_tags())
-        self._metadata_panel.set_edit_mode(True)
-        self._show_editing_frame(True)
+        path = self._folder / self._current_result.rel_path
+        meta = self._current_metadata
+        title, description, tags = display_fields(path, meta)
+        self._metadata_panel.start_editing(
+            title,
+            description,
+            tags,
+            author=str(meta.get("author") or ""),
+            created=meta.get("created"),
+        )
+        self._editor_strip.set_editing(True)
+        self._update_cursor_info()
+        self._load_tag_counts()
+
+    def _load_tag_counts(self) -> None:
+        """Fetch the tag suggestions off the GUI thread."""
+        dbs = list(self._known_dbs.values())
+        if not dbs and self._db is not None:
+            dbs = [self._db]
+        worker = _TagCountsWorker(dbs)
+        worker.signals.ready.connect(self._metadata_panel.set_known_tags)
+        QThreadPool.globalInstance().start(worker)
 
     def _leave_edit_mode(self) -> None:
         """Back to read mode, keeping whatever is in the editor."""
         self._edit_mode = False
         self._editor.setReadOnly(True)
         self._metadata_panel.set_edit_mode(False)
-        self._show_editing_frame(False)
+        self._editor_strip.set_editing(False)
 
-    def _show_editing_frame(self, editing: bool) -> None:
-        """Outline the editor in the accent colour while the query is edited."""
-        inset = 1 if editing else 0
-        self._editor_wrapper_layout.setContentsMargins(inset, inset, inset, inset)
-        self._editor_wrapper.setStyleSheet(
-            f"#EditorWrapper {{ border: 1px solid {_tk.color('accent')}; }}"
-            if editing
-            else ""
+    def _update_cursor_info(self) -> None:
+        if not self._edit_mode:
+            return
+        cursor = self._editor.textCursor()
+        self._editor_strip.set_cursor(
+            cursor.blockNumber() + 1, cursor.positionInBlock() + 1
         )
+
+    def _on_block_count_changed(self, count: int) -> None:
+        if self._edit_mode:
+            self._editor_strip.set_lines(count)
 
     def _cancel_edit_mode(self) -> None:
         """Exit edit mode, discarding unsaved changes by reloading from disk."""
-        if not self._edit_mode:
+        if not self._edit_mode or self._saving:
             return
         self._leave_edit_mode()
         self._reload_current()
@@ -2114,39 +2205,56 @@ class MainWindow(QMainWindow):
         self._editor.selectAll()
         self._editor.setFocus()
 
+    def _current_path(self) -> Path | None:
+        if self._current_result is None or self._folder is None:
+            return None
+        return self._folder / self._current_result.rel_path
+
     def save_current(self) -> None:
-        if not self._edit_mode or self._current_result is None or self._folder is None:
+        result = self._current_result
+        if (
+            not self._edit_mode
+            or self._saving
+            or result is None
+            or self._folder is None
+        ):
             return
-        path = self._folder / self._current_result.rel_path
+        path = self._folder / result.rel_path
+        edits = self._metadata_panel.get_edited_values()
+        meta = apply_edits(
+            self._current_metadata,
+            title=edits.title or path.stem,
+            description=edits.description,
+            tags=edits.tags,
+            author=edits.author,
+        )
+        self._saving = True
+        self._metadata_panel.set_saving(True)
+        # Typing on while the file is written would be lost to the reload.
+        self._editor.setReadOnly(True)
+        worker = _SaveQueryWorker(
+            self._db, path, result.rel_path, meta, self._editor.toPlainText()
+        )
+        worker.signals.finished.connect(self._on_query_saved)
+        QThreadPool.globalInstance().start(worker)
 
-        title, description, tags = self._metadata_panel.get_edited_values()
-        body = self._editor.toPlainText()
-
-        meta = dict(self._current_metadata)
-        meta["title"] = title or path.stem
-        meta["description"] = description
-        meta["tags"] = tags
-
-        try:
-            write_sql_file(path, meta, body)
-        except Exception as exc:
-            QMessageBox.critical(self, tr("msg.save_error"), str(exc))
+    def _on_query_saved(self, path: Path, rel_path: str, error: str) -> None:
+        self._saving = False
+        self._metadata_panel.set_saving(False)
+        still_editing = self._edit_mode and self._current_path() == path
+        if error:
+            # Stay in edit mode so nothing typed is lost.
+            if still_editing:
+                self._editor.setReadOnly(False)
+            QMessageBox.critical(self, tr("msg.save_error"), error)
             return
-
-        if self._db is not None:
-            # scan_file, never scan_folder: re-scanning the whole folder to find
-            # one known file took seconds on real folders, all of it on the GUI
-            # thread.
-            updated = scan_file(path)
-            if updated is not None:
-                self._db.upsert_query(updated)
-
-        self._leave_edit_mode()
+        if still_editing:
+            self._leave_edit_mode()
+            # The list keeps the row selected without announcing it again, so
+            # the panel reads the saved file itself (new title, tags and mtime).
+            self._reload_current()
         self._refresh_ui(library_changed=True)
-        # The list keeps the row selected without announcing it again, so the
-        # panel reads the saved file itself (new title, tags and mtime).
-        self._reload_current()
-        self._status_bar.flash(tr("status.saved", path=self._current_result.rel_path))
+        self._status_bar.flash(tr("status.saved", path=rel_path))
 
     # ------------------------------------------------------------------
     # New query / duplicate / templates

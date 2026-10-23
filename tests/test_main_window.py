@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import stat
 import time
 from collections.abc import Callable, Iterator
 from pathlib import Path
@@ -13,8 +14,10 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
 from sqlshelf.core import config as cfg
+from sqlshelf.core.frontmatter import read_sql_file
 from sqlshelf.core.i18n import set_language
 from sqlshelf.core.navigation import NavState
+from sqlshelf.ui import main_window as mw
 from sqlshelf.ui.main_window import MainWindow
 from sqlshelf.ui.theme import apply_theme
 
@@ -270,3 +273,109 @@ def test_a_tag_pill_shows_the_queries_with_the_tag(
     window._metadata_panel._tags_area.chips()[0].click()
     assert window._search_bar.text() == "tag:bi"
     _wait_until(lambda: window._query_list.count() == 1)
+
+
+def _edit(win: MainWindow, rel_path: str = "sales.sql") -> None:
+    _select(win, rel_path)
+    win._on_edit_shortcut()
+    assert win._edit_mode
+
+
+def test_saving_writes_the_edits_and_keeps_the_other_fields(
+    window: MainWindow, library: Path
+) -> None:
+    sales = library / "sales.sql"
+    sales.write_text(
+        "/* ---\ntitle: Sales\ncreated: 2026-01-01\ncustom: keep\ntags: [bi]\n"
+        "--- */\nSELECT * FROM sales",
+        encoding="utf-8",
+    )
+    _load(window, library)
+    _edit(window)
+    panel = window._metadata_panel
+    assert panel._created_edit.text() == "01/01/2026"
+    panel._title_edit.setText("Monthly sales")
+    panel._desc_edit.setPlainText("Sales per month")
+    panel._tag_field.set_tags(["bi", "vendas"])
+    panel._author_edit.setText("ana")
+
+    QTest.keyClick(window, Qt.Key.Key_S, Qt.KeyboardModifier.ControlModifier)
+    _wait_until(lambda: not window._saving and window._query_loaded)
+
+    assert not window._edit_mode
+    assert window._editor.isReadOnly()
+    assert not window._editor_strip.is_editing()
+    meta, body, _ = read_sql_file(sales)
+    assert meta["title"] == "Monthly sales"
+    assert meta["description"] == "Sales per month"
+    assert meta["tags"] == ["bi", "vendas"]
+    assert meta["author"] == "ana"
+    assert meta["custom"] == "keep"
+    assert str(meta["created"]) == "2026-01-01"
+    assert "updated" in meta
+    assert body == "SELECT * FROM sales"
+    assert panel._title_label.full_text() == "Monthly sales"
+
+
+def test_a_failed_save_stays_in_edit_mode(
+    window: MainWindow, library: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    errors: list[tuple[object, ...]] = []
+    monkeypatch.setattr(mw.QMessageBox, "critical", lambda *args: errors.append(args))
+    _load(window, library)
+    _edit(window)
+    sales = library / "sales.sql"
+    sales.chmod(stat.S_IREAD)
+    try:
+        window._metadata_panel._title_edit.setText("Lost?")
+        window.save_current()
+        _wait_until(lambda: not window._saving)
+    finally:
+        sales.chmod(stat.S_IREAD | stat.S_IWRITE)
+    assert len(errors) == 1
+    assert window._edit_mode
+    assert not window._editor.isReadOnly()
+    assert window._metadata_panel._title_edit.text() == "Lost?"
+    assert read_sql_file(sales)[0]["title"] == "Sales"
+
+
+def test_escape_closes_the_tag_popup_then_cancels_the_edit(
+    window: MainWindow, library: Path
+) -> None:
+    _load(window, library)
+    _edit(window)
+    field = window._metadata_panel._tag_field
+    field.input().setFocus()
+    QTest.keyClicks(field.input(), "zz")
+    assert field.popup_visible()
+
+    QTest.keyClick(field.input(), Qt.Key.Key_Escape)
+    assert not field.popup_visible()
+    assert window._edit_mode
+
+    QTest.keyClick(field.input(), Qt.Key.Key_Escape)
+    assert not window._edit_mode
+    _wait_until(lambda: window._query_loaded)
+    assert read_sql_file(library / "sales.sql")[0]["tags"] == ["bi"]
+
+
+def test_the_strip_shows_the_cursor_while_editing(
+    window: MainWindow, library: Path
+) -> None:
+    _load(window, library)
+    _edit(window)
+    strip = window._editor_strip
+    assert strip.is_editing()
+    assert strip.mode_text() == "editable"
+    cursor = window._editor.textCursor()
+    cursor.movePosition(cursor.MoveOperation.End)
+    window._editor.setTextCursor(cursor)
+    assert strip.cursor_text() == "Ln 1, Col 20"
+
+    window._editor.insertPlainText("\nWHERE 1 = 1")
+    assert strip.cursor_text() == "Ln 2, Col 12"
+    assert strip.info_text().startswith("2 lines")
+
+    window._cancel_edit_mode()
+    assert not strip.is_editing()
+    assert strip.cursor_text() == ""

@@ -479,6 +479,96 @@ def app_stylesheet(palette: Mapping[str, str]) -> str:
             color: {c["text3"]};
             font-size: {_tk.FONT_PX_SMALL}px;
         }}
+        QLabel#EditorStripMode {{
+            color: {c["accent_text"]};
+            font-size: {_tk.FONT_PX_SMALL}px;
+            font-weight: 600;
+        }}
+
+        QWidget#EditBanner {{
+            background-color: {c["sel"]};
+            border-bottom: 1px solid {c["border"]};
+        }}
+        QWidget#EditBanner QLabel {{
+            background: transparent;
+        }}
+        QLabel#EditBannerTitle {{
+            color: {c["text"]};
+            font-weight: 600;
+        }}
+        QLabel#EditBannerSubtitle {{
+            color: {c["text2"]};
+            font-size: {_tk.FONT_PX_SMALL}px;
+        }}
+        QPushButton#PanelButton QLabel#PanelButtonText {{
+            background: transparent;
+            color: {c["text"]};
+            font-weight: 600;
+        }}
+        QPushButton#PanelButton[primary="true"] QLabel#PanelButtonText {{
+            color: {c["accent_ink"]};
+        }}
+        QPushButton#PanelButton[primary="true"] QLabel#Kbd {{
+            color: {c["accent_ink"]};
+            border-color: {c["accent_ink"]};
+        }}
+        QPushButton#PanelButton[primary="true"]:disabled QLabel {{
+            color: {c["text3"]};
+            border-color: {c["border_strong"]};
+        }}
+        QLineEdit#EditTitle {{
+            font-weight: 600;
+        }}
+        QLineEdit#EditCreated {{
+            background: transparent;
+            color: {c["text2"]};
+            border-color: {c["border"]};
+        }}
+        QFrame#TagField {{
+            background-color: {c["field"]};
+            border: 1px solid {c["border_strong"]};
+            border-radius: {r}px;
+        }}
+        QFrame#TagField[focused="true"] {{
+            border-color: {c["accent"]};
+        }}
+        QLineEdit#TagFieldInput {{
+            background: transparent;
+            border: none;
+            padding: 0px 2px;
+        }}
+        QWidget#EditTagPill {{
+            background-color: {c["sel_soft"]};
+            border-radius: 11px;
+        }}
+        QLabel#EditTagPillText {{
+            background: transparent;
+            color: {c["text"]};
+            font-size: {_tk.FONT_PX_SMALL}px;
+        }}
+        QToolButton#EditTagPillRemove {{
+            background: transparent;
+            border-radius: 8px;
+        }}
+        QToolButton#EditTagPillRemove:hover {{
+            background-color: {c["hover"]};
+        }}
+        QFrame#TagPopup {{
+            background-color: {c["panel"]};
+            border: 1px solid {c["border_strong"]};
+            border-radius: {r}px;
+        }}
+        QFrame#TagPopup QLabel {{
+            background: transparent;
+        }}
+        QLabel#TagPopupHeader, QLabel#TagPopupFooter {{
+            color: {c["text3"]};
+            font-size: {_tk.FONT_PX_SMALL}px;
+        }}
+        QFrame#TagPopupDivider {{
+            background-color: {c["border"]};
+            border: none;
+        }}
 
         QTreeWidget#SidebarTree {{
             background: transparent;

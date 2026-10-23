@@ -48,6 +48,29 @@ def split_frontmatter(content: str) -> tuple[dict, str, bool]:
     return metadata, body, True
 
 
+def apply_edits(
+    metadata: dict[str, Any],
+    *,
+    title: str,
+    description: str,
+    tags: list[str],
+    author: str,
+) -> dict[str, Any]:
+    """*metadata* with the edit form's fields; every other key keeps its place.
+
+    An empty author removes the key rather than writing ``author: ''``.
+    """
+    meta = dict(metadata)
+    meta["title"] = title
+    meta["description"] = description
+    meta["tags"] = list(tags)
+    if author:
+        meta["author"] = author
+    else:
+        meta.pop("author", None)
+    return meta
+
+
 def write_sql_file(path: Path, metadata: dict[str, Any], body: str) -> None:
     """Write (or overwrite) a .sql file with a YAML frontmatter block.
 

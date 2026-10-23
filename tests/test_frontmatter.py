@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from sqlshelf.core.frontmatter import (
+    apply_edits,
     read_sql_file,
     split_frontmatter,
     write_sql_file,
@@ -140,3 +141,59 @@ def test_read_sql_file_matches_split_frontmatter(tmp_path: Path) -> None:
     content = "/* ---\ntitle: T\n--- */\n\nSELECT 1\n"
     p = make_sql(tmp_path / "q.sql", content)
     assert read_sql_file(p) == split_frontmatter(content)
+
+
+class TestApplyEdits:
+    BASE = {
+        "title": "Old",
+        "created": "2026-01-01",
+        "tags": ["a"],
+        "custom_field": "keep_me",
+        "author": "ana",
+    }
+
+    def test_keeps_key_order_and_unknown_keys(self) -> None:
+        meta = apply_edits(
+            self.BASE, title="New", description="D", tags=["b"], author="bob"
+        )
+        assert list(meta) == [
+            "title",
+            "created",
+            "tags",
+            "custom_field",
+            "author",
+            "description",
+        ]
+        assert meta["title"] == "New"
+        assert meta["tags"] == ["b"]
+        assert meta["author"] == "bob"
+        assert meta["custom_field"] == "keep_me"
+        assert meta["created"] == "2026-01-01"
+
+    def test_does_not_change_the_original(self) -> None:
+        apply_edits(self.BASE, title="New", description="", tags=[], author="")
+        assert self.BASE["title"] == "Old"
+        assert self.BASE["author"] == "ana"
+
+    @pytest.mark.parametrize(("author", "present"), [("", False), ("bob", True)])
+    def test_an_empty_author_removes_the_key(self, author: str, present: bool) -> None:
+        meta = apply_edits(self.BASE, title="T", description="", tags=[], author=author)
+        assert ("author" in meta) is present
+
+    def test_written_edits_round_trip(self, tmp_path: Path) -> None:
+        p = make_sql(
+            tmp_path / "q.sql",
+            "/* ---\ntitle: Old\ncreated: 2026-01-01\n--- */\n\nSELECT 1",
+        )
+        meta, body, _ = read_sql_file(p)
+        edited = apply_edits(
+            meta, title="Novo título", description="Vendas", tags=["bi"], author="ana"
+        )
+        write_sql_file(p, edited, body)
+        meta2, body2, has_fm = read_sql_file(p)
+        assert has_fm is True
+        assert meta2["title"] == "Novo título"
+        assert meta2["author"] == "ana"
+        assert str(meta2["created"]) == "2026-01-01"
+        assert "updated" in meta2
+        assert body2 == "SELECT 1"

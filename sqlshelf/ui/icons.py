@@ -136,3 +136,18 @@ def pixmap(name: str, color_key: str = "text2", size: int = 16) -> QPixmap:
 
 def icon_size(size: int = 16) -> QSize:
     return QSize(size, size)
+
+
+def dot(color: str, size: int = 8) -> QPixmap:
+    """A filled circle in *color* (a CSS colour, e.g. a tag's), *size* px wide."""
+    dpr = _dpr()
+    result = QPixmap(round(size * dpr), round(size * dpr))
+    result.setDevicePixelRatio(dpr)
+    result.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(result)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.setBrush(qcolor(color))
+    painter.drawEllipse(0, 0, size, size)
+    painter.end()
+    return result

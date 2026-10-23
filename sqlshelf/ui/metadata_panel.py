@@ -3,15 +3,19 @@
 Read mode (docs/redesign-ui.md, F5): a file icon, the title and file name
 with a star; Copy SQL, Edit and Open in SSMS plus a ⋯ menu; then the
 description and a label | value grid with tags, tables, location and the
-modification date. Colours come from the global stylesheet through object
-names, so ``refresh_theme`` only re-requests the icons.
+modification date. Edit mode (F6): an "Editing" banner with Cancel and Save,
+then title, description, tags, author and the read-only creation date.
+Colours come from the global stylesheet through object names, so
+``refresh_theme`` only re-requests the icons.
 """
 
 from __future__ import annotations
 
 import sys
-from datetime import datetime
+from dataclasses import dataclass
+from datetime import date, datetime
 from pathlib import Path
+from typing import Any
 
 import shiboken6
 from PySide6.QtCore import QPoint, QSize, Qt, Signal
@@ -22,18 +26,17 @@ from PySide6.QtGui import (
     QGuiApplication,
     QPainter,
     QPaintEvent,
-    QPixmap,
     QResizeEvent,
     QTextLayout,
     QTextOption,
 )
 from PySide6.QtWidgets import (
     QAbstractButton,
-    QFormLayout,
     QFrame,
     QGridLayout,
     QHBoxLayout,
     QLabel,
+    QLayout,
     QLineEdit,
     QMenu,
     QPlainTextEdit,
@@ -48,8 +51,10 @@ from PySide6.QtWidgets import (
 from ..core.i18n import tr
 from . import icons
 from . import tokens as _tk
-from .tag_widget import FlowLayout, TagInputWidget
+from .tag_field import TagField
+from .tag_widget import FlowLayout
 from .theme import mono_font, qcolor
+from .widgets import KbdHint
 
 PANEL_BUTTON_HEIGHT = 32
 CHIP_HEIGHT = 22
@@ -57,6 +62,17 @@ _CHIP_GAP = 6
 _LABEL_COLUMN = 88
 _TITLE_LINES = 2
 _DESCRIPTION_LINES = 6
+_EDIT_DESCRIPTION_LINES = 3
+
+
+@dataclass(frozen=True)
+class QueryEdits:
+    """What the edit form holds, trimmed."""
+
+    title: str
+    description: str
+    tags: list[str]
+    author: str
 
 
 def _opens_in_ssms() -> bool:
@@ -113,6 +129,23 @@ def modified_text(mtime: float | None, author: str) -> str:
     if author:
         parts.append(author)
     return " · ".join(parts)
+
+
+def created_text(value: Any) -> str:
+    """The frontmatter's ``created`` as "dd/mm/yyyy"; "—" when there is none.
+
+    YAML reads a bare date as a ``date``; a quoted one stays a string, shown
+    as a date when it starts with one and as written otherwise.
+    """
+    if isinstance(value, (date, datetime)):
+        return value.strftime("%d/%m/%Y")
+    text = str(value).strip() if value is not None else ""
+    if not text:
+        return "—"
+    try:
+        return date.fromisoformat(text[:10]).strftime("%d/%m/%Y")
+    except ValueError:
+        return text
 
 
 def _repolish(widget: QWidget) -> None:
@@ -280,20 +313,6 @@ class _ChipArea(QScrollArea):
             self.updateGeometry()
 
 
-def _dot(color: str, size: int = 8) -> QPixmap:
-    dpr = QGuiApplication.instance().devicePixelRatio()  # type: ignore[union-attr]
-    pixmap = QPixmap(round(size * dpr), round(size * dpr))
-    pixmap.setDevicePixelRatio(dpr)
-    pixmap.fill(Qt.GlobalColor.transparent)
-    painter = QPainter(pixmap)
-    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-    painter.setPen(Qt.PenStyle.NoPen)
-    painter.setBrush(qcolor(color))
-    painter.drawEllipse(0, 0, size, size)
-    painter.end()
-    return pixmap
-
-
 class _TagPill(QPushButton):
     """A tag with its colour dot; clicking it shows the queries with the tag."""
 
@@ -305,7 +324,7 @@ class _TagPill(QPushButton):
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.setIconSize(QSize(8, 8))
-        self.setIcon(_dot(_tk.tag_color(tag)))
+        self.setIcon(icons.dot(_tk.tag_color(tag)))
         self.setToolTip(tr("details.tag_tooltip", tag=tag))
 
 
@@ -341,6 +360,49 @@ def _field_label() -> QLabel:
     label.setObjectName("PanelFieldLabel")
     label.setMinimumHeight(CHIP_HEIGHT)
     label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+    return label
+
+
+class _SaveButton(QPushButton):
+    """The primary "Save" button with its ``Ctrl S`` hint inside.
+
+    The label and hint are child labels, like the bar buttons', so each can
+    take its own colour from the stylesheet.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.setObjectName("PanelButton")
+        self.setProperty("primary", True)
+        self.setFixedHeight(PANEL_BUTTON_HEIGHT)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(12, 0, 8, 0)
+        layout.setSpacing(8)
+        # A QPushButton's size hint ignores its layout; without this the
+        # label would be squeezed instead of widening the button.
+        layout.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
+        self._text = QLabel()
+        self._text.setObjectName("PanelButtonText")
+        self._kbd = KbdHint("Ctrl S")
+        for part in (self._text, self._kbd):
+            part.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+            # Centred at its own height, the hint stays a key inside the button.
+            layout.addWidget(part, 0, Qt.AlignmentFlag.AlignVCenter)
+
+    def label_text(self) -> str:
+        return self._text.text()
+
+    def set_label(self, text: str) -> None:
+        self._text.setText(text)
+        self.setAccessibleName(text)
+
+
+def _edit_label(buddy: QWidget) -> QLabel:
+    """A form field's caption, shown above the field it names."""
+    label = QLabel()
+    label.setObjectName("PanelFieldLabel")
+    label.setBuddy(buddy)
     return label
 
 
@@ -537,37 +599,95 @@ class MetadataPanel(QWidget):
         return body
 
     def _build_edit_form(self) -> QWidget:
-        self._title_edit = QLineEdit()
-        self._desc_edit = QPlainTextEdit()
-        self._desc_edit.setMaximumHeight(70)
-        self._tags_input = TagInputWidget()
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.addWidget(self._build_edit_banner())
 
-        self._edit_form = QFormLayout()
-        self._edit_form.setContentsMargins(0, 0, 0, 0)
-        self._edit_form.setSpacing(8)
-        self._edit_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
-        self._edit_form.addRow(tr("metadata.label_title"), self._title_edit)
-        self._edit_form.addRow(tr("metadata.label_desc"), self._desc_edit)
-        self._edit_form.addRow(tr("metadata.label_tags"), self._tags_input)
+        self._title_edit = QLineEdit()
+        self._title_edit.setObjectName("EditTitle")
+        self._desc_edit = QPlainTextEdit()
+        self._desc_edit.setObjectName("EditDescription")
+        # Tab moves on to the tags; a description is prose, not code.
+        self._desc_edit.setTabChangesFocus(True)
+        self._tag_field = TagField()
+        self._author_edit = QLineEdit()
+        self._author_edit.setObjectName("EditAuthor")
+        self._created_edit = QLineEdit()
+        self._created_edit.setObjectName("EditCreated")
+        self._created_edit.setReadOnly(True)
+        self._created_edit.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+
+        self._edit_labels: dict[str, QLabel] = {}
+
+        def field(key: str, editor: QWidget) -> QVBoxLayout:
+            label = _edit_label(editor)
+            self._edit_labels[key] = label
+            column = QVBoxLayout()
+            column.setContentsMargins(0, 0, 0, 0)
+            column.setSpacing(6)
+            column.addWidget(label)
+            column.addWidget(editor)
+            return column
+
+        form = QVBoxLayout()
+        form.setContentsMargins(20, 16, 20, 20)
+        form.setSpacing(14)
+        form.addLayout(field("title", self._title_edit))
+        form.addLayout(field("description", self._desc_edit))
+        form.addLayout(field("tags", self._tag_field))
+        people = QHBoxLayout()
+        people.setContentsMargins(0, 0, 0, 0)
+        people.setSpacing(12)
+        people.addLayout(field("author", self._author_edit), 1)
+        people.addLayout(field("created", self._created_edit), 1)
+        form.addLayout(people)
+        layout.addLayout(form)
+        return widget
+
+    def _build_edit_banner(self) -> QWidget:
+        banner = QWidget()
+        banner.setObjectName("EditBanner")
+        banner.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        layout = QHBoxLayout(banner)
+        layout.setContentsMargins(20, 12, 16, 12)
+        layout.setSpacing(10)
+
+        self._banner_dot = QLabel()
+        self._banner_dot.setFixedSize(8, 8)
+        self._banner_title = QLabel()
+        self._banner_title.setObjectName("EditBannerTitle")
+        self._banner_subtitle = _ElidedLabel("EditBannerSubtitle", 1)
+        texts = QVBoxLayout()
+        texts.setContentsMargins(0, 0, 0, 0)
+        texts.setSpacing(2)
+        texts.addWidget(self._banner_title)
+        texts.addWidget(self._banner_subtitle)
 
         self._cancel_btn = _panel_button()
         self._cancel_btn.clicked.connect(self.cancel_requested)
-        self._save_btn = _panel_button(primary=True)
+        self._save_btn = _SaveButton()
         self._save_btn.clicked.connect(self.save_requested)
-        buttons = QHBoxLayout()
-        buttons.setContentsMargins(0, 0, 0, 0)
-        buttons.setSpacing(8)
-        buttons.addStretch(1)
-        buttons.addWidget(self._cancel_btn)
-        buttons.addWidget(self._save_btn)
 
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
-        layout.setContentsMargins(20, 16, 20, 16)
-        layout.setSpacing(12)
-        layout.addLayout(self._edit_form)
-        layout.addLayout(buttons)
-        return widget
+        layout.addWidget(self._banner_dot, 0, Qt.AlignmentFlag.AlignVCenter)
+        layout.addLayout(texts, 1)
+        layout.addWidget(self._cancel_btn)
+        layout.addWidget(self._save_btn)
+        return banner
+
+    def _fit_description_height(self) -> None:
+        """Three lines of text tall, whatever the font."""
+        editor = self._desc_edit
+        editor.ensurePolished()
+        margin = editor.document().documentMargin()
+        height = (
+            editor.fontMetrics().lineSpacing() * _EDIT_DESCRIPTION_LINES
+            + round(2 * margin)
+            + 2 * editor.frameWidth()
+            + 2
+        )
+        editor.setFixedHeight(height)
 
     # ── Menus and clipboard ────────────────────────────────────────────────
 
@@ -696,10 +816,6 @@ class MetadataPanel(QWidget):
             self._tables = list(tables)
             self._rebuild_tables()
 
-        self._title_edit.setText(title)
-        self._desc_edit.setPlainText(description)
-        self._tags_input.set_tags(tags)
-
     def set_path(
         self, path: Path | None, mtime: float | None = None, author: str = ""
     ) -> None:
@@ -739,22 +855,51 @@ class MetadataPanel(QWidget):
             button.setEnabled(enabled)
         self._select_all_act.setEnabled(enabled)
 
-    def set_available_tags(self, tags: list[str]) -> None:
-        """Forward the known-tag pool to the tag input for autocomplete."""
-        self._tags_input.set_available_tags(tags)
+    def set_known_tags(self, counts: list[tuple[str, int]]) -> None:
+        """The library's ``(tag, queries using it)`` pairs, for the suggestions."""
+        self._tag_field.set_known_tags(counts)
+
+    def start_editing(
+        self,
+        title: str,
+        description: str,
+        tags: list[str],
+        author: str = "",
+        created: Any = None,
+    ) -> None:
+        """Fill the form with the query's metadata and show it."""
+        self._title_edit.setText(title)
+        self._desc_edit.setPlainText(description)
+        self._tag_field.set_tags(tags)
+        self._author_edit.setText(author)
+        self._created_edit.setText(created_text(created))
+        self.set_saving(False)
+        self.set_edit_mode(True)
 
     def set_edit_mode(self, enabled: bool) -> None:
         self._edit_mode = enabled
         self._ro_widget.setVisible(not enabled)
         self._edit_widget.setVisible(enabled)
         if enabled:
+            self._fit_description_height()
             self._title_edit.setFocus()
+            self._title_edit.selectAll()
 
-    def get_edited_values(self) -> tuple[str, str, list[str]]:
-        title = self._title_edit.text().strip()
-        description = self._desc_edit.toPlainText().strip()
-        tags = self._tags_input.get_tags()
-        return title, description, tags
+    def is_editing(self) -> bool:
+        return self._edit_mode
+
+    def set_saving(self, saving: bool) -> None:
+        """While the file is written the form's buttons wait."""
+        self._save_btn.setEnabled(not saving)
+        self._cancel_btn.setEnabled(not saving)
+
+    def get_edited_values(self) -> QueryEdits:
+        return QueryEdits(
+            title=self._title_edit.text().strip(),
+            description=self._desc_edit.toPlainText().strip(),
+            tags=self._tag_field.tags(),
+            author=self._author_edit.text().strip(),
+        )
 
     def retranslate_ui(self) -> None:
         self._copy_btn.setText(tr("details.copy_sql"))
@@ -782,21 +927,17 @@ class MetadataPanel(QWidget):
         for chip in self._tables_area.chips():
             chip.setToolTip(tr("metadata.chip_tooltip_navigate"))
 
-        self._title_edit.setPlaceholderText(tr("metadata.title_placeholder"))
-        self._desc_edit.setPlaceholderText(tr("metadata.desc_placeholder"))
+        self._banner_title.setText(tr("details.editing"))
+        self._banner_subtitle.set_full_text(tr("details.editing_hint"))
         self._cancel_btn.setText(tr("common.cancel"))
-        self._save_btn.setText(tr("common.save"))
+        self._cancel_btn.setToolTip(tr("details.cancel_tooltip"))
+        self._save_btn.set_label(tr("common.save"))
         self._save_btn.setToolTip(tr("details.save_tooltip"))
-        for field, key in [
-            (self._title_edit, "metadata.label_title"),
-            (self._desc_edit, "metadata.label_desc"),
-            (self._tags_input, "metadata.label_tags"),
-        ]:
-            # labelForField is typed as returning a plain QWidget; a row built
-            # with a string label always gets a QLabel.
-            row_label = self._edit_form.labelForField(field)
-            if isinstance(row_label, QLabel):
-                row_label.setText(tr(key))
+        for key, label in self._edit_labels.items():
+            label.setText(tr(f"details.label_{key}"))
+        self._desc_edit.setPlaceholderText(tr("details.description_placeholder"))
+        self._author_edit.setPlaceholderText(tr("details.author_placeholder"))
+        self._tag_field.retranslate_ui()
 
     def refresh_theme(self) -> None:
         self._file_icon.setPixmap(icons.pixmap("file", "accent_text", 20))
@@ -804,13 +945,12 @@ class MetadataPanel(QWidget):
         self._edit_btn.setIcon(icons.icon("edit", "text2"))
         self._open_btn.setIcon(icons.icon("external", "text2"))
         self._more_btn.setIcon(icons.icon("more", "text2"))
-        self._cancel_btn.setIcon(icons.icon("close", "text2"))
-        self._save_btn.setIcon(icons.icon("check", "accent_ink"))
+        self._banner_dot.setPixmap(icons.dot(_tk.color("accent")))
         self._update_star()
         self._rebuild_tags()
         self._rebuild_tables()
         self._path_btn.update()
-        self._tags_input.refresh_theme()
+        self._tag_field.refresh_theme()
 
     def clear(self) -> None:
         self.set_query("", "", [], [])
@@ -819,4 +959,6 @@ class MetadataPanel(QWidget):
         self.set_actions_enabled(False)
         self._title_edit.clear()
         self._desc_edit.clear()
-        self._tags_input.set_tags([])
+        self._tag_field.set_tags([])
+        self._author_edit.clear()
+        self._created_edit.clear()

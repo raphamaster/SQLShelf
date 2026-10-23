@@ -64,3 +64,37 @@ def test_retranslate_leaves_an_empty_strip_empty(strip: EditorStrip) -> None:
     set_language("pt-BR")
     strip.retranslate_ui()
     assert strip.info_text() == ""
+
+
+def test_editing_shows_editable_and_the_cursor(strip: EditorStrip) -> None:
+    strip.set_info(6, "UTF-8")
+    assert strip.mode_text() == ""
+    assert strip.cursor_text() == ""
+
+    strip.set_editing(True)
+    strip.set_cursor(10, 27)
+    assert strip.is_editing()
+    assert strip.mode_text() == "editable"
+    assert strip.cursor_text() == "Ln 10, Col 27"
+
+    strip.set_lines(7)
+    assert strip.info_text() == "7 lines · UTF-8 · T-SQL"
+
+    strip.set_editing(False)
+    assert not strip.is_editing()
+    assert strip.cursor_text() == ""
+
+
+def test_retranslate_keeps_the_cursor(strip: EditorStrip) -> None:
+    strip.set_editing(True)
+    strip.set_cursor(2, 5)
+    set_language("es")
+    strip.retranslate_ui()
+    assert strip.cursor_text() == "Lín 2, Col 5"
+    assert strip.mode_text() == "editable"
+
+
+def test_clear_leaves_edit_mode(strip: EditorStrip) -> None:
+    strip.set_editing(True)
+    strip.clear()
+    assert not strip.is_editing()

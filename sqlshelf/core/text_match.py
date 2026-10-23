@@ -34,6 +34,25 @@ def fold(text: str) -> str:
     return _fold(text)[0]
 
 
+def find_span(text: str, term: str) -> tuple[int, int] | None:
+    """Where *term* first appears in *text*, ignoring case and accents.
+
+    Unlike ``match_spans`` it also matches inside a word, the way the tag
+    suggestions filter: "mens" marks "relatorio-mensal" and "dimensao".
+    """
+    needle = fold(term)
+    if not needle:
+        return None
+    folded, origin = _fold(text)
+    start = folded.find(needle)
+    if start == -1:
+        return None
+    end = origin[start + len(needle) - 1] + 1
+    while end < len(text) and unicodedata.category(text[end]) == "Mn":
+        end += 1
+    return origin[start], end
+
+
 def _words(term: str) -> list[str]:
     """The runs of letters and digits in *term*, folded: what FTS searches for."""
     words: list[str] = []
