@@ -1,4 +1,4 @@
-"""Address bar: the search field, then back / forward / up and the breadcrumb."""
+"""Address bar: back / forward / up, the breadcrumb and the search field."""
 
 from __future__ import annotations
 
@@ -102,12 +102,12 @@ class AddressBar(QWidget):
         nav_layout.addSpacing(8)
         nav_layout.addWidget(self._crumb_frame, 1)
 
-        # The search field comes first and gets the larger share of the row.
+        # The navigation comes first; the search field takes the larger share.
         layout = QHBoxLayout(self)
         layout.setContentsMargins(12, 9, 12, 9)
         layout.setSpacing(16)
-        layout.addWidget(search_bar, _SEARCH_STRETCH)
         layout.addWidget(nav, _NAV_STRETCH)
+        layout.addWidget(search_bar, _SEARCH_STRETCH)
 
         self.retranslate_ui()
         self.refresh_theme()

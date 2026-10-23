@@ -39,7 +39,7 @@ def _left(bar: AddressBar, widget: QWidget) -> int:
 
 
 @pytest.mark.parametrize("width", [1100, 1280, 1920])
-def test_the_search_comes_first_and_is_wider_than_the_navigation(
+def test_the_navigation_comes_first_and_the_search_is_wider(
     bar: AddressBar, width: int
 ) -> None:
     bar.resize(width, 52)
@@ -47,10 +47,10 @@ def test_the_search_comes_first_and_is_wider_than_the_navigation(
     navigation = bar._back.parentWidget()
     assert navigation is not None
 
-    assert _left(bar, bar._search_bar) < _left(bar, bar._back)
     assert _left(bar, bar._back) < _left(bar, bar._up) < _left(bar, bar._crumb_frame)
+    assert _left(bar, bar._crumb_frame) < _left(bar, bar._search_bar)
+    assert navigation.geometry().right() < bar._search_bar.geometry().left()
     assert bar._search_bar.width() > navigation.width()
-    assert bar._search_bar.geometry().right() < navigation.geometry().left()
 
 
 def test_the_breadcrumb_is_not_clipped_at_the_smallest_window(

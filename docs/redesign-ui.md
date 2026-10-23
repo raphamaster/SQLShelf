@@ -105,8 +105,8 @@ O qt-material impõe botões em caixa alta e contornos verdes — exatamente o q
 - **Breadcrumb** clicável por segmento.
   - Botão Reindexar à direita, que dispara a ação existente.
   - Com busca ativa, mostra "Resultados da busca em Biblioteca".
-- **Ordem:** a busca vem primeiro (à esquerda) e a navegação (Voltar / Avançar / Acima + breadcrumb) fica do lado oposto.
-- **Campo de busca:** sem largura fixa; ocupa 3 partes contra 2 da navegação (`_SEARCH_STRETCH` / `_NAV_STRETCH`), com mínimo de 320 px. Placeholder "Buscar em {local atual}" e dica `Ctrl F`.
+- **Ordem:** a navegação (Voltar / Avançar / Acima + breadcrumb) à esquerda e a busca à direita, como no desenho original.
+- **Campo de busca:** maior que a navegação e sem largura fixa; ocupa 3 partes contra 2 da navegação (`_SEARCH_STRETCH` / `_NAV_STRETCH`), com mínimo de 320 px. Placeholder "Buscar em {local atual}" e dica `Ctrl F`.
 
 ### Barra de comandos
 - **Itens, da esquerda para a direita:**
@@ -299,5 +299,5 @@ Uma por vez. Cada fatia termina com:
 - **Testes:** `filter_results` (nome, caminho e tag sem acento nem caixa, nome primeiro, operadores, `date:`, limite), `name_spans`, `action_matches`, `cycle_operator`; paleta offscreen (seções e linhas, filtro, linha vazia, setas pulando títulos, Enter em consulta e em ação, Ctrl+C — e cópia do texto quando há seleção —, Tab, Esc devolvendo o foco, clique dentro e fora, perda de foco, tamanho e posição do cartão, pt-BR, janela fechada com a paleta aberta); na janela, Ctrl+P abrindo uma consulta, Ctrl+C de consulta não aberta, ação, segundo Ctrl+P e Ctrl+F.
 
 ### F9 — Ajustes da barra superior e exibição Grade
-- [x] Busca à esquerda e maior que a navegação, ⋯ no início da barra de comandos, "Importar pasta", exibição Grade com miniaturas.
+- [x] Busca maior que a navegação (que continua à esquerda), ⋯ no início da barra de comandos, "Importar pasta", exibição Grade com miniaturas.
 - **Testes:** `read_head` (corte no meio de um caractere UTF-8, BOM, cp1252), `preview_text` / `read_preview`, `group_label`; miniaturas offscreen (tamanho por dpr, texto com realce e esmaecimento, leitura única em segundo plano, novo mtime, descarte de pixmaps ao trocar o tema, despejo LRU); grade offscreen (colunas e linhas, teclado, estrela, grupos dobráveis, menu de contexto, tooltip); barra de comandos e de endereço (ordem, proporção 3:2, botão Grade); na janela, a Grade escolhida na barra é lembrada ao reabrir.
