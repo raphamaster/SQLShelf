@@ -446,6 +446,40 @@ def test_a_search_groups_by_folder_and_keeps_its_own_grouping(
     assert window._command_bar._group == "date"
 
 
+def test_the_grid_view_is_chosen_from_the_command_bar_and_remembered(
+    window: MainWindow, library: Path
+) -> None:
+    _load(window, library)
+    selected = window._query_list._current_result()
+
+    window._command_bar._grid.click()
+
+    assert window._query_list.view_mode() == "grid"
+    assert window._query_list._stack.currentWidget() is window._query_list._grid
+    assert window._command_bar._grid.isChecked()
+    assert cfg.get_view_mode() == "grid"
+    assert window._query_list._current_result() == selected
+
+    window._command_bar._details.click()
+    assert window._query_list.view_mode() == "details"
+    assert cfg.get_view_mode() == "details"
+
+
+def test_the_window_opens_in_the_view_it_was_closed_in(
+    window: MainWindow, library: Path
+) -> None:
+    cfg.set_view_mode("grid")
+
+    second = MainWindow()
+    try:
+        second._startup_update_timer.stop()
+        assert second._query_list.view_mode() == "grid"
+        assert second._command_bar._grid.isChecked()
+    finally:
+        second._quitting = True
+        second.close()
+
+
 def test_a_tag_is_a_chip_and_removing_it_leaves_the_tag(
     window: MainWindow, library: Path
 ) -> None:

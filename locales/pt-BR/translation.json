@@ -74,7 +74,7 @@
 
   "toolbar.new_query": "Nova consulta",
   "toolbar.new_query_tip": "Criar uma nova consulta (Ctrl+N)",
-  "toolbar.open_folder": "Abrir pasta",
+  "toolbar.open_folder": "Importar pasta",
   "toolbar.open_folder_tip": "Adicionar uma pasta à biblioteca (Ctrl+O)",
   "toolbar.sort": "Ordenar",
   "toolbar.group": "Agrupar",
@@ -84,8 +84,9 @@
   "toolbar.quick_search": "Busca rápida",
   "toolbar.view_details": "Detalhes",
   "toolbar.view_content": "Conteúdo",
+  "toolbar.view_grid": "Ver em grade",
   "toolbar.toggle_panel": "Mostrar ou ocultar o painel de detalhes (Alt+P)",
-  "toolbar.more": "Mais",
+  "toolbar.menu": "Menu",
 
   "command_palette.placeholder": "Buscar consultas e ações…",
   "command_palette.queries": "Consultas",

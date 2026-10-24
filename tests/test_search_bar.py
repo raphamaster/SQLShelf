@@ -11,7 +11,7 @@ from PySide6.QtTest import QSignalSpy, QTest
 from PySide6.QtWidgets import QApplication, QLineEdit, QVBoxLayout, QWidget
 
 from sqlshelf.core.i18n import set_language
-from sqlshelf.ui.search_bar import ACTIVE_WIDTH, CHIP_VALUE_MAX, WIDTH, SearchBar
+from sqlshelf.ui.search_bar import CHIP_VALUE_MAX, MIN_WIDTH, SearchBar
 
 
 def _app() -> QApplication:
@@ -192,7 +192,6 @@ def test_the_placeholder_yields_to_chips(host: _Host) -> None:
 
 def test_a_long_value_is_shortened(host: _Host) -> None:
     bar = host.bar
-    bar.set_active(True)
     value = "VeryLongTableNameThatDoesNotFit" * 3
     bar.set_text_silently(f"table:{value}")
     QApplication.processEvents()
@@ -203,11 +202,12 @@ def test_a_long_value_is_shortened(host: _Host) -> None:
     assert label.full_text() == value
 
 
-def test_active_widens_the_field(host: _Host) -> None:
+def test_the_field_fills_the_width_it_is_given(host: _Host) -> None:
     bar = host.bar
-    assert bar.width() == WIDTH
-    bar.set_active(True)
-    assert bar.width() == ACTIVE_WIDTH
+    assert bar.width() > MIN_WIDTH
+    host.resize(MIN_WIDTH - 100, 120)
+    QApplication.processEvents()
+    assert bar.width() >= MIN_WIDTH
 
 
 def test_focus_marks_the_field(host: _Host) -> None:

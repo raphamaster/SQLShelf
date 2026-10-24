@@ -1,4 +1,4 @@
-"""Command bar: new query, open folder, sort, group, quick search and view."""
+"""Command bar: menu, new query, import folder, sort, group, quick search and view."""
 
 from __future__ import annotations
 
@@ -85,20 +85,31 @@ class CommandBar(QWidget):
         self._details.clicked.connect(lambda: self.view_requested.emit("details"))
         self._content = IconButton("rows", checkable=True)
         self._content.clicked.connect(lambda: self.view_requested.emit("content"))
+        self._grid = IconButton("grid", checkable=True)
+        self._grid.clicked.connect(lambda: self.view_requested.emit("grid"))
+        self._view_buttons = {
+            "details": self._details,
+            "content": self._content,
+            "grid": self._grid,
+        }
         self._view_group = QButtonGroup(self)
         self._view_group.setExclusive(True)
-        self._view_group.addButton(self._details)
-        self._view_group.addButton(self._content)
+        for button in self._view_buttons.values():
+            self._view_group.addButton(button)
 
         self._panel = IconButton("panel", checkable=True)
         self._panel.toggled.connect(self.panel_toggled)
 
-        self._more = IconButton("more")
-        self._more.set_menu(more_menu)
+        self._menu_button = IconButton("menu")
+        self._menu_button.set_menu(more_menu)
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(12, 8, 12, 8)
         layout.setSpacing(4)
+        layout.addWidget(self._menu_button)
+        layout.addSpacing(6)
+        layout.addWidget(BarSeparator())
+        layout.addSpacing(6)
         layout.addWidget(self._new)
         layout.addSpacing(4)
         layout.addWidget(self._open)
@@ -114,11 +125,11 @@ class CommandBar(QWidget):
         layout.addSpacing(6)
         layout.addWidget(self._details)
         layout.addWidget(self._content)
+        layout.addWidget(self._grid)
         layout.addSpacing(6)
         layout.addWidget(BarSeparator())
         layout.addSpacing(6)
         layout.addWidget(self._panel)
-        layout.addWidget(self._more)
 
         self.set_sort(self._sort)
         self.set_group(self._group)
@@ -142,8 +153,7 @@ class CommandBar(QWidget):
         self._group_btn.set_value(tr(_GROUP_LABELS[mode]))
 
     def set_view(self, mode: str) -> None:
-        button = self._content if mode == "content" else self._details
-        button.setChecked(True)
+        self._view_buttons.get(mode, self._details).setChecked(True)
 
     def set_panel_visible(self, visible: bool) -> None:
         self._panel.blockSignals(True)
@@ -164,8 +174,9 @@ class CommandBar(QWidget):
         self._quick.set_text(tr("toolbar.quick_search"))
         self._details.set_tooltip(tr("toolbar.view_details"))
         self._content.set_tooltip(tr("toolbar.view_content"))
+        self._grid.set_tooltip(tr("toolbar.view_grid"))
         self._panel.set_tooltip(tr("toolbar.toggle_panel"))
-        self._more.set_tooltip(tr("toolbar.more"))
+        self._menu_button.set_tooltip(tr("toolbar.menu"))
         self.set_sort(self._sort)
         self.set_group(self._group)
 
@@ -173,5 +184,11 @@ class CommandBar(QWidget):
         for button in (self._new, self._open, self._sort_btn, self._group_btn):
             button.refresh_theme()
         self._quick.refresh_theme()
-        for icon_button in (self._details, self._content, self._panel, self._more):
+        for icon_button in (
+            self._details,
+            self._content,
+            self._grid,
+            self._panel,
+            self._menu_button,
+        ):
             icon_button.refresh_theme()

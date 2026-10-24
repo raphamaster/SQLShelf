@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-23
+
+### Added
+- **Grid view** — a third way to see the list, next to Details and Content. Each query is a card with a thumbnail of the first lines of its SQL, drawn with the editor's syntax colours, plus its name, when it changed and a dot for each tag. Groups fold, the star shows on hover and on favorites, the arrow keys, Home, End and Page Up/Down move between cards and Enter opens one. The thumbnails are read in the background, so scrolling never waits on the disk; the view you pick is remembered
+
+### Changed
+- **Wider search field** — the search field in the address bar is wider than the navigation (Back, Forward, Up and the breadcrumb), which keeps its place at the left; both grow with the window instead of using fixed widths
+- **Menu at the left of the command bar** — the menu is the first item, and its button is now a hamburger (☰) with a "Menu" tooltip instead of three dots, so it reads as a menu
+- **Import folder** — the Open folder button (and its quick search action) is now called Import folder
+
 ## [1.1.0] - 2026-10-22
 
 ### Added

@@ -70,6 +70,12 @@ def group_by_date(
     return [(key, buckets[key]) for key in order if buckets[key]]
 
 
+def group_label(group_key: str) -> str:
+    """Heading of a group keyed "date:<bucket>" or "folder:<label>"."""
+    kind, _, key = group_key.partition(":")
+    return tr(f"list.group_{key}") if kind == "date" else key
+
+
 def folder_label(root: Path | None, rel_path: str) -> str:
     """Label of the folder holding *rel_path*: ``Querys › relatorios``."""
     parts = list(PurePosixPath(rel_path.replace("\\", "/")).parent.parts)

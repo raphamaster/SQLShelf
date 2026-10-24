@@ -105,20 +105,21 @@ O qt-material impõe botões em caixa alta e contornos verdes — exatamente o q
 - **Breadcrumb** clicável por segmento.
   - Botão Reindexar à direita, que dispara a ação existente.
   - Com busca ativa, mostra "Resultados da busca em Biblioteca".
-- **Campo de busca:** 320 px; com busca ativa, 520 px. Placeholder "Buscar em {local atual}" e dica `Ctrl F`.
+- **Ordem:** a navegação (Voltar / Avançar / Acima + breadcrumb) à esquerda e a busca à direita, como no desenho original.
+- **Campo de busca:** maior que a navegação e sem largura fixa; ocupa 3 partes contra 2 da navegação (`_SEARCH_STRETCH` / `_NAV_STRETCH`), com mínimo de 320 px. Placeholder "Buscar em {local atual}" e dica `Ctrl F`.
 
 ### Barra de comandos
 - **Itens, da esquerda para a direita:**
+  - ☰ (menu) — primeiro item, à esquerda; ícone `menu` (três barras), com a dica "Menu". O ⋯ (`more`) fica só no painel de detalhes, onde abre ações da consulta.
   - Nova consulta — botão primário, Ctrl+N.
-  - Abrir pasta — Ctrl+O.
+  - Importar pasta — Ctrl+O. (O rótulo era "Abrir pasta"; a chave de tradução é a mesma da Busca rápida.)
   - Ordenar ▾ — as 4 opções atuais; substitui o botão ⇅.
   - Agrupar ▾ — Data | Pasta | Nenhum.
   - Busca rápida — Ctrl+P.
-  - Alternância Detalhes | Conteúdo.
+  - Alternância Detalhes | Conteúdo | Grade.
   - Mostrar/ocultar painel — Alt+P.
-  - ⋯ (menu).
 - **QMenuBar oculta.**
-  - O ⋯ abre um QMenu com os submenus atuais (Arquivo, Editar, Exibir, Configurações, Ajuda), reaproveitando as mesmas QActions.
+  - O ☰ abre um QMenu com os submenus atuais (Arquivo, Editar, Exibir, Configurações, Ajuda), reaproveitando as mesmas QActions.
   - Todas as QActions também vão para a janela (`self.addAction(...)`), senão os atalhos param de funcionar com a barra oculta.
   - Item "Mostrar barra de menus" em Exibir, persistido.
 
@@ -164,6 +165,17 @@ Linhas de cerca de 76 px:
 - Chip de tabelas (mono, com borda) e todas as tags.
 
 Mesmo modelo, outro `QStyledItemDelegate`.
+
+### Lista — exibição Grade
+Cartões com miniatura do SQL, em `ui/query_grid.py` (um `QAbstractScrollArea` pintado à mão, não um modelo):
+- **Cartão:** miniatura de 260 × 120 px, título semibold (com destaque dos termos da busca), data de modificação em `text3` e até alguns pontos de cor das tags. A estrela aparece em hover, na seleção e nos favoritos, e o clique nela não muda a seleção.
+- **Colunas:** `max(1, (largura + GAP) // (CARD_MIN_WIDTH + GAP))`; o cartão cresce até 260 px para preencher a linha. Margem e espaço entre cartões de 12 px.
+- **Grupos:** os mesmos de Detalhes e Conteúdo (Data, Pasta, Nenhum), com cabeçalho dobrável; o estado dobrado é compartilhado com a árvore. Setas, Home, End e PageUp/PageDown navegam e Enter abre; o menu de contexto é o da linha.
+- **Miniatura** (`ui/thumbnails.py`, `core/preview.py`):
+  - Mostra as primeiras 12 linhas do corpo, sem o frontmatter, com o mesmo `SqlHighlighter` do editor e a fonte mono de 8 px; uma esmaecida na base evita o corte seco.
+  - O texto (primeiros 16 KiB do arquivo) é lido numa `QThreadPool` própria; a UI nunca lê o disco ao pintar. Um arquivo ilegível vira uma miniatura em branco, não um erro.
+  - O pixmap é renderizado na GUI thread e guardado por (caminho, mtime, dpr). Cache LRU: 2000 textos, 128 pixmaps. Trocar o tema descarta só os pixmaps.
+- **Persistência:** `view_mode = "grid"` em `config.json`, como os outros dois modos.
 
 ### Painel de detalhes — leitura
 - **Cabeçalho:** ícone 40 px, título (até 2 linhas), nome do arquivo em mono `text3`, botão estrela.
@@ -285,3 +297,7 @@ Uma por vez. Cada fatia termina com:
 ### F8 — Busca rápida
 - [x] Reestilização, seção de ações, Ctrl+C.
 - **Testes:** `filter_results` (nome, caminho e tag sem acento nem caixa, nome primeiro, operadores, `date:`, limite), `name_spans`, `action_matches`, `cycle_operator`; paleta offscreen (seções e linhas, filtro, linha vazia, setas pulando títulos, Enter em consulta e em ação, Ctrl+C — e cópia do texto quando há seleção —, Tab, Esc devolvendo o foco, clique dentro e fora, perda de foco, tamanho e posição do cartão, pt-BR, janela fechada com a paleta aberta); na janela, Ctrl+P abrindo uma consulta, Ctrl+C de consulta não aberta, ação, segundo Ctrl+P e Ctrl+F.
+
+### F9 — Ajustes da barra superior e exibição Grade
+- [x] Busca maior que a navegação (que continua à esquerda), menu ☰ no início da barra de comandos, "Importar pasta", exibição Grade com miniaturas.
+- **Testes:** `read_head` (corte no meio de um caractere UTF-8, BOM, cp1252), `preview_text` / `read_preview`, `group_label`; miniaturas offscreen (tamanho por dpr, texto com realce e esmaecimento, leitura única em segundo plano, novo mtime, descarte de pixmaps ao trocar o tema, despejo LRU); grade offscreen (colunas e linhas, teclado, estrela, grupos dobráveis, menu de contexto, tooltip); barra de comandos e de endereço (ordem, proporção 3:2, botão Grade); na janela, a Grade escolhida na barra é lembrada ao reabrir.

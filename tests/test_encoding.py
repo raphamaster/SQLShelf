@@ -7,6 +7,7 @@ import pytest
 from sqlshelf.core.encoding import (
     detect_encoding,
     encoding_label,
+    read_head,
     read_text,
     write_text,
 )
@@ -87,6 +88,52 @@ class TestReadText:
         assert text == "SELECT"
         assert enc == "utf-16-le"
         assert had_bom is True
+
+
+class TestReadHead:
+    @pytest.mark.parametrize(
+        ("raw", "expected"),
+        [
+            (b"SELECT 1", "SELECT 1"),
+            (b"\xef\xbb\xbfSELECT 1", "SELECT 1"),
+            (b"\xff\xfe" + "SELECT".encode("utf-16-le"), "SELECT"),
+            ("relat\xf3rio".encode("cp1252"), "relatório"),
+            (b"", ""),
+        ],
+    )
+    def test_a_short_file_is_read_whole(
+        self, tmp_path: Path, raw: bytes, expected: str
+    ) -> None:
+        p = tmp_path / "q.sql"
+        p.write_bytes(raw)
+        assert read_head(p) == expected
+
+    @pytest.mark.parametrize("limit", [10, 11, 12, 13])
+    def test_a_cut_utf8_character_is_dropped_not_misread(
+        self, tmp_path: Path, limit: int
+    ) -> None:
+        # "é" and "ã" take two bytes, so one of these limits splits a character.
+        text = "SELECT 'é', 'ã' FROM t"
+        p = tmp_path / "q.sql"
+        p.write_text(text, encoding="utf-8")
+        head = read_head(p, limit)
+        assert text.startswith(head)
+        assert "�" not in head and "Ã" not in head
+
+    def test_a_cut_utf16_character_is_dropped(self, tmp_path: Path) -> None:
+        p = tmp_path / "q.sql"
+        p.write_bytes(b"\xff\xfe" + "SELECT 1".encode("utf-16-le"))
+        assert read_head(p, 9) == "SEL"  # 2 BOM bytes + 3 characters + 1 byte
+
+    def test_a_large_cp1252_file_stays_cp1252(self, tmp_path: Path) -> None:
+        p = tmp_path / "q.sql"
+        p.write_bytes(("relat\xf3rio " * 50).encode("cp1252"))
+        assert read_head(p, 30).startswith("relatório relatório")
+
+    def test_only_the_limit_is_read(self, tmp_path: Path) -> None:
+        p = tmp_path / "q.sql"
+        p.write_text("x" * 100_000, encoding="utf-8")
+        assert len(read_head(p, 1024)) == 1024
 
 
 class TestWriteText:

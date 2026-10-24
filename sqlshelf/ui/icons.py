@@ -50,8 +50,15 @@ ICONS: dict[str, str] = {
         '<rect x="4" y="4.5" width="16" height="6.5" rx="1.5"/>'
         '<rect x="4" y="13" width="16" height="6.5" rx="1.5"/>'
     ),
+    "grid": (
+        '<rect x="4" y="4" width="6.5" height="6.5" rx="1.5"/>'
+        '<rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"/>'
+        '<rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"/>'
+        '<rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"/>'
+    ),
     "panel": '<rect x="3" y="4.5" width="18" height="15" rx="2"/><path d="M14 4.5v15"/>',
     "more": '<path d="M5 12h.01M12 12h.01M19 12h.01"/>',
+    "menu": '<path d="M4 6.5h16M4 12h16M4 17.5h16"/>',
     "file": (
         '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/>'
         '<path d="M14 3v5h5M9 13h6M9 17h6"/>'

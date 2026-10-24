@@ -74,7 +74,7 @@
 
   "toolbar.new_query": "New query",
   "toolbar.new_query_tip": "Create a new query (Ctrl+N)",
-  "toolbar.open_folder": "Open folder",
+  "toolbar.open_folder": "Import folder",
   "toolbar.open_folder_tip": "Add a folder to the library (Ctrl+O)",
   "toolbar.sort": "Sort",
   "toolbar.group": "Group",
@@ -84,8 +84,9 @@
   "toolbar.quick_search": "Quick search",
   "toolbar.view_details": "Details",
   "toolbar.view_content": "Content",
+  "toolbar.view_grid": "Grid view",
   "toolbar.toggle_panel": "Show or hide the details panel (Alt+P)",
-  "toolbar.more": "More",
+  "toolbar.menu": "Menu",
 
   "command_palette.placeholder": "Search queries and actions…",
   "command_palette.queries": "Queries",
