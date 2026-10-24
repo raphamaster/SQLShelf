@@ -39,7 +39,7 @@ def bar(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[CommandBar]
 
 def test_the_menu_comes_first_and_the_view_options_last(bar: CommandBar) -> None:
     order = [
-        bar._more,
+        bar._menu_button,
         bar._new,
         bar._open,
         bar._sort_btn,
@@ -55,6 +55,16 @@ def test_the_menu_comes_first_and_the_view_options_last(bar: CommandBar) -> None
 
     assert lefts == sorted(lefts)
     assert len(set(lefts)) == len(lefts)
+
+
+def test_the_menu_button_is_a_labelled_hamburger(bar: CommandBar) -> None:
+    assert bar._menu_button.toolTip() == "Menu"
+    assert bar._menu_button._icon_name == "menu"  # three bars, not the ⋯ of "more"
+    assert not bar._menu_button.icon().isNull()
+
+    set_language("es")
+    bar.retranslate_ui()
+    assert bar._menu_button.toolTip() == "Menú"
 
 
 def test_the_folder_button_says_import(bar: CommandBar) -> None:

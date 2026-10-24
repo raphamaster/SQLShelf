@@ -100,13 +100,13 @@ class CommandBar(QWidget):
         self._panel = IconButton("panel", checkable=True)
         self._panel.toggled.connect(self.panel_toggled)
 
-        self._more = IconButton("more")
-        self._more.set_menu(more_menu)
+        self._menu_button = IconButton("menu")
+        self._menu_button.set_menu(more_menu)
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(12, 8, 12, 8)
         layout.setSpacing(4)
-        layout.addWidget(self._more)
+        layout.addWidget(self._menu_button)
         layout.addSpacing(6)
         layout.addWidget(BarSeparator())
         layout.addSpacing(6)
@@ -176,7 +176,7 @@ class CommandBar(QWidget):
         self._content.set_tooltip(tr("toolbar.view_content"))
         self._grid.set_tooltip(tr("toolbar.view_grid"))
         self._panel.set_tooltip(tr("toolbar.toggle_panel"))
-        self._more.set_tooltip(tr("toolbar.more"))
+        self._menu_button.set_tooltip(tr("toolbar.menu"))
         self.set_sort(self._sort)
         self.set_group(self._group)
 
@@ -189,6 +189,6 @@ class CommandBar(QWidget):
             self._content,
             self._grid,
             self._panel,
-            self._more,
+            self._menu_button,
         ):
             icon_button.refresh_theme()

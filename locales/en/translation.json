@@ -86,7 +86,7 @@
   "toolbar.view_content": "Content",
   "toolbar.view_grid": "Grid view",
   "toolbar.toggle_panel": "Show or hide the details panel (Alt+P)",
-  "toolbar.more": "More",
+  "toolbar.menu": "Menu",
 
   "command_palette.placeholder": "Search queries and actions…",
   "command_palette.queries": "Queries",

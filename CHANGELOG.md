@@ -7,7 +7,7 @@
 
 ### Changed
 - **Wider search field** — the search field in the address bar is wider than the navigation (Back, Forward, Up and the breadcrumb), which keeps its place at the left; both grow with the window instead of using fixed widths
-- **Menu at the left of the command bar** — the ⋯ menu is the first item
+- **Menu at the left of the command bar** — the menu is the first item, and its button is now a hamburger (☰) with a "Menu" tooltip instead of three dots, so it reads as a menu
 - **Import folder** — the Open folder button (and its quick search action) is now called Import folder
 
 ## [1.1.0] - 2026-10-22

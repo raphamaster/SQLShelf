@@ -110,7 +110,7 @@ O qt-material impõe botões em caixa alta e contornos verdes — exatamente o q
 
 ### Barra de comandos
 - **Itens, da esquerda para a direita:**
-  - ⋯ (menu) — primeiro item, à esquerda.
+  - ☰ (menu) — primeiro item, à esquerda; ícone `menu` (três barras), com a dica "Menu". O ⋯ (`more`) fica só no painel de detalhes, onde abre ações da consulta.
   - Nova consulta — botão primário, Ctrl+N.
   - Importar pasta — Ctrl+O. (O rótulo era "Abrir pasta"; a chave de tradução é a mesma da Busca rápida.)
   - Ordenar ▾ — as 4 opções atuais; substitui o botão ⇅.
@@ -119,7 +119,7 @@ O qt-material impõe botões em caixa alta e contornos verdes — exatamente o q
   - Alternância Detalhes | Conteúdo | Grade.
   - Mostrar/ocultar painel — Alt+P.
 - **QMenuBar oculta.**
-  - O ⋯ abre um QMenu com os submenus atuais (Arquivo, Editar, Exibir, Configurações, Ajuda), reaproveitando as mesmas QActions.
+  - O ☰ abre um QMenu com os submenus atuais (Arquivo, Editar, Exibir, Configurações, Ajuda), reaproveitando as mesmas QActions.
   - Todas as QActions também vão para a janela (`self.addAction(...)`), senão os atalhos param de funcionar com a barra oculta.
   - Item "Mostrar barra de menus" em Exibir, persistido.
 
@@ -299,5 +299,5 @@ Uma por vez. Cada fatia termina com:
 - **Testes:** `filter_results` (nome, caminho e tag sem acento nem caixa, nome primeiro, operadores, `date:`, limite), `name_spans`, `action_matches`, `cycle_operator`; paleta offscreen (seções e linhas, filtro, linha vazia, setas pulando títulos, Enter em consulta e em ação, Ctrl+C — e cópia do texto quando há seleção —, Tab, Esc devolvendo o foco, clique dentro e fora, perda de foco, tamanho e posição do cartão, pt-BR, janela fechada com a paleta aberta); na janela, Ctrl+P abrindo uma consulta, Ctrl+C de consulta não aberta, ação, segundo Ctrl+P e Ctrl+F.
 
 ### F9 — Ajustes da barra superior e exibição Grade
-- [x] Busca maior que a navegação (que continua à esquerda), ⋯ no início da barra de comandos, "Importar pasta", exibição Grade com miniaturas.
+- [x] Busca maior que a navegação (que continua à esquerda), menu ☰ no início da barra de comandos, "Importar pasta", exibição Grade com miniaturas.
 - **Testes:** `read_head` (corte no meio de um caractere UTF-8, BOM, cp1252), `preview_text` / `read_preview`, `group_label`; miniaturas offscreen (tamanho por dpr, texto com realce e esmaecimento, leitura única em segundo plano, novo mtime, descarte de pixmaps ao trocar o tema, despejo LRU); grade offscreen (colunas e linhas, teclado, estrela, grupos dobráveis, menu de contexto, tooltip); barra de comandos e de endereço (ordem, proporção 3:2, botão Grade); na janela, a Grade escolhida na barra é lembrada ao reabrir.
