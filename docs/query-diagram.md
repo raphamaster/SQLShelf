@@ -413,7 +413,7 @@ Uma por vez, na branch `feat/query-diagram`, um commit por fatia (Conventional C
 - a caixa marcada aqui.
 
 ### D1 — Segmentação (core)
-- [ ] **Entrega:** `sql_segments.py` com `split_batches()`, `segments()` e `split_statements()`, offsets exatos.
+- [x] **Entrega:** `sql_segments.py` com `split_batches()`, `segments()` e `split_statements()`, offsets exatos.
 - **Testes** (`test_sql_segments.py`): os casos de 1 a 6 da tabela abaixo; `GO` com contagem e comentário; `CASE … END` e `ELSE` de `CASE`; `WITH (NOLOCK)` e `WITH CHECK`; `UPDATE STATISTICS`; `body[s.start:s.end] == s.text` em todos.
 
 ### D2 — Grafo (core)

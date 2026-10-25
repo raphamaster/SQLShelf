@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Internal
+- **Query diagram, statement splitting** — first step towards the query diagram (`docs/query-diagram.md`). `core/sql_segments.py` cuts a T-SQL script into batches at `GO` lines (with a count, a comment or Windows line endings) and each batch into its SELECT, INSERT, UPDATE, DELETE and MERGE statements, with exact offsets, so each one can be parsed on its own. Control flow stays out (`IF … ELSE`, `BEGIN … END`, `TRY … CATCH`, `DECLARE`, procedure and trigger headers), and so do the DML words that do not start a statement: inside strings and quoted names, `CASE … ELSE … END`, `WITH (NOLOCK)`, `WITH CHECK`, `UPDATE STATISTICS`, permissions, trigger events, foreign key rules and `OFFSET … FETCH`. A batch the tokenizer rejects is skipped alone. Nothing changes on screen yet
+
+### Tests
+- Statement splitting: the six reference scripts of the diagram spec (a SELECT with joins, a DMV script with a temp table and a CTE, an ETL with `GO` and `MERGE`, a procedure with `TRY … CATCH`, `IF … ELSE`, a DBA file), `GO` forms, CRLF, `CASE`, every use of `WITH`, quoted words, action words, a rejected batch and malformed input, with every offset checked against the text — 863 tests
+
 ## [1.2.0] - 2026-10-23
 
 ### Added
