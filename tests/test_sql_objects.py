@@ -169,3 +169,109 @@ class TestVariablesNeverLeakIntoTables:
     def test_real_tables_alongside_a_variable_survive(self) -> None:
         result = extract_objects("INSERT INTO @results SELECT * FROM dbo.Real")
         assert result["table"] == {"Real"}
+
+
+class TestDialects:
+    def test_postgres_function(self) -> None:
+        sql = (
+            "CREATE OR REPLACE FUNCTION refresh_totals() RETURNS void AS $$\n"
+            "BEGIN\n"
+            "  UPDATE orders o SET total = 0 FROM items i WHERE i.order_id = o.id;\n"
+            "END;\n"
+            "$$ LANGUAGE plpgsql;"
+        )
+        result = extract_objects(sql, "postgres")
+        assert result["table"] == {"orders", "items"}
+        assert result["function"] == {"refresh_totals"}
+        assert {"total", "order_id"} <= result["column"]
+
+    def test_mysql_procedure_behind_a_delimiter(self) -> None:
+        sql = (
+            "DELIMITER $$\n"
+            "CREATE PROCEDURE load_inv() BEGIN SELECT qty FROM inv; END$$\n"
+            "DELIMITER ;"
+        )
+        result = extract_objects(sql, "mysql")
+        assert result["table"] == {"inv"}
+        assert result["column"] == {"qty"}
+        assert result["procedure"] == {"load_inv"}
+
+    def test_oracle_block(self) -> None:
+        sql = (
+            "DECLARE\n"
+            "  v NUMBER;\n"
+            "BEGIN\n"
+            "  SELECT COUNT(*) INTO v FROM hr.employees e;\n"
+            "  FOR r IN (SELECT * FROM hr.depts) LOOP\n"
+            "    UPDATE hr.employees SET sal = sal * 1.1 WHERE dept_id = r.id;\n"
+            "  END LOOP;\n"
+            "END;\n"
+            "/"
+        )
+        result = extract_objects(sql, "oracle")
+        assert result["table"] == {"employees", "depts"}
+        assert {"sal", "dept_id"} <= result["column"]
+        assert not {"DECLARE", "END", "BEGIN"} & result["column"]
+
+    def test_oracle_procedure_is_not_a_table(self) -> None:
+        sql = "CREATE OR REPLACE PROCEDURE raise_sal AS\nBEGIN\n  UPDATE emp SET sal = 1;\nEND;\n/"
+        result = extract_objects(sql, "oracle")
+        assert result["table"] == {"emp"}
+        assert result["procedure"] == {"raise_sal"}
+
+    def test_oracle_q_quote(self) -> None:
+        result = extract_objects("SELECT q'[it's]' AS x, a FROM t", "oracle")
+        assert result["table"] == {"t"}
+
+    def test_bigquery_project_and_dataset(self) -> None:
+        sql = "SELECT o.id FROM `my-proj.sales.orders` o WHERE _TABLE_SUFFIX > '1'"
+        assert extract_objects(sql, "bigquery")["table"] == {"orders"}
+
+    @pytest.mark.parametrize(
+        "sql,dialect",
+        [
+            ("SELECT a INTO v FROM Old", "oracle"),
+            ("SELECT a INTO v FROM Old", "postgres"),
+            ("SELECT a INTO @v FROM Old", "mysql"),
+            ("SELECT a INTO v FROM Old", "mariadb"),
+        ],
+    )
+    def test_select_into_fills_a_variable(self, sql: str, dialect: str) -> None:
+        assert extract_objects(sql, dialect)["table"] == {"Old"}
+
+    def test_select_into_makes_a_table_in_tsql(self) -> None:
+        sql = "SELECT a INTO NewTable FROM Old"
+        assert extract_objects(sql, "tsql")["table"] == {"NewTable", "Old"}
+
+    def test_dialect_read_from_the_body(self) -> None:
+        sql = "SELECT o.id FROM `my-proj.sales.orders` o"
+        assert extract_objects(sql)["table"] == {"orders"}
+
+    def test_quoted_keyword_is_a_name(self) -> None:
+        result = extract_objects("SELECT [End] FROM [Begin]", "tsql")
+        assert result["table"] == {"Begin"}
+        assert result["column"] == {"End"}
+
+    @pytest.mark.parametrize(
+        "sql",
+        [
+            # sqlglot takes what follows END or PRINT, up to the next ";", as
+            # one command.
+            "IF @x = 1\nBEGIN\n  UPDATE t SET a = 1;\nEND\nSELECT b FROM u",
+            "PRINT 'x'\nSELECT b FROM u",
+        ],
+    )
+    def test_statement_after_a_command_word(self, sql: str) -> None:
+        result = extract_objects(sql, "tsql")
+        assert "u" in result["table"]
+        assert "b" in result["column"]
+
+    @pytest.mark.parametrize(
+        "dialect", ["tsql", "postgres", "mysql", "oracle", "bigquery"]
+    )
+    @pytest.mark.parametrize(
+        "sql",
+        ["SELECT q'[", "DELIMITER", "$$ $$ $$", "/\n/\n/", "`", "END$$", "DO $x$"],
+    )
+    def test_garbage_does_not_raise(self, sql: str, dialect: str) -> None:
+        assert isinstance(extract_objects(sql, dialect)["table"], set)

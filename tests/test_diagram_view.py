@@ -300,7 +300,8 @@ def test_graph_cache_keeps_the_most_recent() -> None:
 def test_cache_key_follows_text_and_dialect() -> None:
     assert GraphCache.key("SELECT 1") == GraphCache.key("SELECT 1")
     assert GraphCache.key("SELECT 1") != GraphCache.key("SELECT 1 ")
-    assert GraphCache.key("SELECT `a` FROM t")[1] == "bigquery"
+    assert GraphCache.key("SELECT 1") != GraphCache.key("SELECT 1", "oracle")
+    assert GraphCache.key("SELECT 1", "oracle")[1] == "oracle"
 
 
 # ---------------------------------------------------------------------------

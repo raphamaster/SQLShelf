@@ -556,3 +556,178 @@ class TestNeverLoses:
         found, _ = split_statements(sql)
         for seg in found:
             assert sql[seg.start : seg.end] == seg.text
+
+
+# ---------------------------------------------------------------------------
+# Dialects
+# ---------------------------------------------------------------------------
+
+
+def _in(sql: str, dialect: str) -> list[tuple[str, str]]:
+    found, rejected = split_statements(sql, dialect)
+    assert rejected == []
+    for seg in found:
+        assert sql[seg.start : seg.end] == seg.text
+    return [(seg.kind, seg.text) for seg in found]
+
+
+class TestBatchesByDialect:
+    def test_oracle_slash_lines(self) -> None:
+        sql = "SELECT 1 FROM dual;\n/\nSELECT 2 FROM dual;\n  /  \n"
+        assert [b.strip() for _, b in split_batches(sql, "oracle")] == [
+            "SELECT 1 FROM dual;",
+            "SELECT 2 FROM dual;",
+        ]
+
+    def test_slash_is_no_batch_end_in_tsql(self) -> None:
+        assert len(split_batches("SELECT 1\n/\nSELECT 2", "tsql")) == 1
+
+    def test_go_is_no_batch_end_in_oracle(self) -> None:
+        assert len(split_batches("SELECT 1 FROM dual\nGO\nSELECT 2", "oracle")) == 1
+
+    @pytest.mark.parametrize("dialect", ["mysql", "mariadb"])
+    def test_mysql_delimiter(self, dialect: str) -> None:
+        sql = (
+            "SELECT 1;\n"
+            "DELIMITER $$\n"
+            "CREATE PROCEDURE p() BEGIN SELECT * FROM inv; END$$\n"
+            "CREATE PROCEDURE q() BEGIN SELECT 2; END$$\n"
+            "DELIMITER ;\n"
+            "SELECT 3;"
+        )
+        batches = split_batches(sql, dialect)
+        assert [b.strip() for _, b in batches] == [
+            "SELECT 1;",
+            "CREATE PROCEDURE p() BEGIN SELECT * FROM inv; END",
+            "CREATE PROCEDURE q() BEGIN SELECT 2; END",
+            "SELECT 3;",
+        ]
+        for offset, batch in batches:
+            assert sql[offset : offset + len(batch)] == batch
+        assert "DELIMITER" not in " ".join(text for _, text in _in(sql, dialect))
+
+    @pytest.mark.parametrize("dialect", ["postgres", "bigquery"])
+    def test_one_batch(self, dialect: str) -> None:
+        sql = "SELECT 1;\nGO\nSELECT 2;\n/\n"
+        assert split_batches(sql, dialect) == [(0, sql)]
+
+
+class TestStatementsByDialect:
+    def test_postgres_function_body(self) -> None:
+        sql = (
+            "CREATE FUNCTION f() RETURNS void AS $$\n"
+            "BEGIN\n"
+            "  DELETE FROM t WHERE a = 1;\n"
+            "END;\n"
+            "$$ LANGUAGE plpgsql;\n"
+            "SELECT 2;"
+        )
+        assert _in(sql, "postgres") == [
+            ("DELETE", "DELETE FROM t WHERE a = 1"),
+            ("SELECT", "SELECT 2"),
+        ]
+
+    def test_postgres_do_block_with_tag(self) -> None:
+        sql = "DO $body$ BEGIN UPDATE t SET a = 1; END $body$;"
+        assert _in(sql, "postgres") == [("UPDATE", "UPDATE t SET a = 1")]
+
+    def test_postgres_dollar_string_stays_a_string(self) -> None:
+        sql = "SELECT $$ UPDATE t SET a = 1; $$ AS code;"
+        assert _in(sql, "postgres") == [
+            ("SELECT", "SELECT $$ UPDATE t SET a = 1; $$ AS code")
+        ]
+
+    @pytest.mark.parametrize(
+        "sql,dialect",
+        [
+            (
+                "INSERT INTO t (a) VALUES (1) ON CONFLICT (a) DO UPDATE SET a = 2",
+                "postgres",
+            ),
+            ("INSERT INTO t (a) VALUES (1) ON CONFLICT DO NOTHING", "postgres"),
+            ("INSERT INTO t (a) VALUES (1) ON DUPLICATE KEY UPDATE a = 2", "mysql"),
+            ("INSERT INTO t SET a = 1, b = 2", "mysql"),
+            ("SELECT a FROM t MINUS SELECT a FROM u", "oracle"),
+            ("SELECT a FROM t UNION DISTINCT SELECT a FROM u", "bigquery"),
+            ("SELECT IF(a > 1, 'x', 'y') AS f FROM t", "mysql"),
+            ("SELECT IF(a > 1, 'x', 'y') AS f FROM t", "bigquery"),
+        ],
+    )
+    def test_one_statement(self, sql: str, dialect: str) -> None:
+        assert [text for _, text in _in(sql + ";\nSELECT 9;", dialect)] == [
+            sql,
+            "SELECT 9",
+        ]
+
+    def test_oracle_block(self) -> None:
+        sql = (
+            "DECLARE\n"
+            "  v NUMBER;\n"
+            "BEGIN\n"
+            "  SELECT COUNT(*) INTO v FROM emp;\n"
+            "  IF v > 0 THEN\n"
+            "    UPDATE emp SET sal = sal * 1.1;\n"
+            "  ELSIF v < 0 THEN\n"
+            "    DELETE FROM emp;\n"
+            "  END IF;\n"
+            "EXCEPTION\n"
+            "  WHEN OTHERS THEN NULL;\n"
+            "END;\n"
+            "/\n"
+        )
+        assert [kind for kind, _ in _in(sql, "oracle")] == [
+            "SELECT",
+            "UPDATE",
+            "DELETE",
+        ]
+
+    def test_oracle_q_quote_keeps_offsets(self) -> None:
+        sql = "SELECT q'[it's; END]' AS x FROM dual;\nSELECT 2 FROM dual;"
+        assert _in(sql, "oracle") == [
+            ("SELECT", "SELECT q'[it's; END]' AS x FROM dual"),
+            ("SELECT", "SELECT 2 FROM dual"),
+        ]
+
+    def test_bigquery_script(self) -> None:
+        sql = (
+            "DECLARE x INT64 DEFAULT 1;\n"
+            "BEGIN\n"
+            "  SELECT 1;\n"
+            "EXCEPTION WHEN ERROR THEN\n"
+            "  SELECT 2;\n"
+            "END;\n"
+            "IF x > 0 THEN\n"
+            "  SELECT 3;\n"
+            "ELSEIF x < 0 THEN\n"
+            "  SELECT 4;\n"
+            "END IF;\n"
+            "LOOP\n"
+            "  DELETE FROM t WHERE TRUE;\n"
+            "END LOOP;\n"
+            "WHILE x > 0 DO\n"
+            "  INSERT INTO u VALUES (1);\n"
+            "END WHILE;"
+        )
+        assert [text for _, text in _in(sql, "bigquery")] == [
+            "SELECT 1",
+            "SELECT 2",
+            "SELECT 3",
+            "SELECT 4",
+            "DELETE FROM t WHERE TRUE",
+            "INSERT INTO u VALUES (1)",
+        ]
+
+    def test_if_statement_is_not_a_function_in_tsql(self) -> None:
+        assert _in("IF (SELECT 1) = 1 SELECT 2", "tsql") == [("SELECT", "SELECT 2")]
+
+    @pytest.mark.parametrize(
+        "sql",
+        [
+            # sqlglot reads what follows these, up to the next ";", as one
+            # string; the statement in there must still show.
+            "IF @x = 1\nBEGIN\n  UPDATE t SET a = 1;\nEND\nSELECT b FROM u",
+            "PRINT 'x'\nSELECT b FROM u",
+        ],
+    )
+    def test_statement_after_a_command_word(self, sql: str) -> None:
+        assert ("SELECT", "SELECT b FROM u") in _in(sql, "tsql")

@@ -99,7 +99,6 @@ from ..core.query_graph import (
     Span,
     StatementInfo,
 )
-from ..core.sql_objects import pick_dialect
 from . import icons
 from . import tokens as _tk
 from .theme import mono_font, qcolor, ui_font
@@ -630,9 +629,11 @@ class GraphCache:
         self._graphs: OrderedDict[tuple[str, str], QueryGraph] = OrderedDict()
 
     @staticmethod
-    def key(body: str, dialect: str = "tsql") -> tuple[str, str]:
+    def key(body: str, dialect: str | None = None) -> tuple[str, str]:
+        """*dialect* is the one the query declares; without it the dialect is
+        read off the body, which the digest already stands for."""
         digest = hashlib.sha256(body.encode("utf-8", "surrogatepass")).hexdigest()
-        return digest, pick_dialect(body, dialect)
+        return digest, dialect or ""
 
     def get(self, key: tuple[str, str]) -> QueryGraph | None:
         graph = self._graphs.get(key)

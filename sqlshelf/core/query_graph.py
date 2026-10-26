@@ -32,8 +32,8 @@ import sqlglot
 from sqlglot import exp
 from sqlglot.dialects.dialect import Dialect
 
-from .sql_objects import pick_dialect
-from .sql_segments import Segment, split_batches, split_statements
+from .dialects import code_view, key_for, parser_for
+from .sql_segments import Segment, readable, split_batches, split_statements
 
 NodeKind = Literal["table", "temp", "cte", "derived", "result"]
 EdgeKind = Literal["join", "flow"]
@@ -160,8 +160,10 @@ class QueryGraph:
         )
 
 
-def build_query_graph(body: str, dialect: str = "tsql") -> QueryGraph:
-    """The graph of *body*, the SQL without its frontmatter. Never raises."""
+def build_query_graph(body: str, dialect: str | None = None) -> QueryGraph:
+    """The graph of *body*, the SQL without its frontmatter, read as
+    *dialect*, a key of ``dialects.DIALECTS``; None reads the dialect off the
+    body. Never raises."""
     try:
         return _build(body, dialect)
     except Exception as error:
@@ -183,12 +185,15 @@ _EXPECTED: dict[str, tuple[type[exp.Expression], ...]] = {
     "MERGE": (exp.Merge,),
 }
 _EXEC = re.compile(r"(?i)\bEXEC(?:UTE)?\b")
+# Parsers of the dialects where SELECT … INTO fills variables, not a table.
+_INTO_VARIABLES = frozenset({"postgres", "mysql", "oracle", "bigquery"})
 
 
-def _build(body: str, dialect: str) -> QueryGraph:
-    dialect = pick_dialect(body, dialect)
-    found, rejected = split_statements(body)
-    batches = dict(split_batches(body)) if rejected else {}
+def _build(body: str, dialect: str | None) -> QueryGraph:
+    key = key_for(dialect, body)
+    parser = parser_for(key)
+    found, rejected = split_statements(body, key)
+    batches = dict(split_batches(body, key)) if rejected else {}
     items: list[tuple[int, Segment | str]] = [(s.start, s) for s in found]
     items += [(offset, batches.get(offset, "")) for offset in rejected]
     items.sort(key=lambda item: item[0])
@@ -209,21 +214,22 @@ def _build(body: str, dialect: str) -> QueryGraph:
                 )
             )
             continue
-        info, builder = _statement(index, item, body, dialect)
+        info, builder = _statement(index, item, body, key, parser)
         infos.append(info)
         if builder is not None:
             parts[index] = builder
-    notes = ["dynamic_sql"] if _has_dynamic_sql(body) else []
+    notes = ["dynamic_sql"] if _has_dynamic_sql(body, key) else []
     return _finish(infos, parts, notes)
 
 
 def _statement(
-    index: int, seg: Segment, body: str, dialect: str
+    index: int, seg: Segment, body: str, key: str, dialect: str
 ) -> tuple[StatementInfo, _Builder | None]:
-    """Parse and walk one statement. The builder is None when it is skipped."""
+    """Parse and walk one statement, written in *key* and read by the sqlglot
+    *dialect*. The builder is None when it is skipped."""
     line = body.count("\n", 0, seg.start) + 1
     span = Span(seg.start, seg.end)
-    text = _blank_xmlnamespaces(seg.text)
+    text = _blank_xmlnamespaces(readable(seg.text, key))
     kind = seg.kind
     tree, status, error = _parse(text, dialect, kind)
     issue = _issue(error, text, seg.start, body)
@@ -317,9 +323,24 @@ def _words(text: str, tokens: list) -> list[str]:
     return [" ".join(text[t.start : t.end + 1].upper().split()) for t in tokens]
 
 
-def _has_dynamic_sql(body: str) -> bool:
-    """``EXEC(@sql)``, ``EXECUTE ('…')`` or ``EXEC sp_executesql``: SQL built at
-    run time, which the diagram cannot see."""
+# SQL built at run time in the other dialects: PL/pgSQL's EXECUTE, Oracle's
+# EXECUTE IMMEDIATE and DBMS_SQL, MySQL's PREPARE … FROM and BigQuery's EXECUTE
+# IMMEDIATE. Looked for with comments and strings blanked.
+_DYNAMIC = {
+    "postgres": re.compile(r"(?i)\bEXECUTE\b"),
+    "oracle": re.compile(r"(?i)\bEXECUTE\s+IMMEDIATE\b|\bDBMS_SQL\s*\."),
+    "mysql": re.compile(r"(?i)\bPREPARE\s+\w+\s+FROM\b"),
+    "mariadb": re.compile(r"(?i)\bPREPARE\s+\w+\s+FROM\b"),
+    "bigquery": re.compile(r"(?i)\bEXECUTE\s+IMMEDIATE\b"),
+}
+
+
+def _has_dynamic_sql(body: str, key: str = "tsql") -> bool:
+    """``EXEC(@sql)``, ``EXECUTE ('…')`` or ``EXEC sp_executesql``, or what the
+    dialect *key* has for them: SQL built at run time, which the diagram cannot
+    see."""
+    if key in _DYNAMIC:
+        return bool(_DYNAMIC[key].search(code_view(body)))
     if not _EXEC.search(body):
         return False
     tokenizer = Dialect.get_or_raise("tsql")
@@ -1578,12 +1599,18 @@ class _Builder:
     def select_statement(self, query: exp.Expression) -> None:
         first = _leftmost(query)
         into = first.args.get("into") if first is not None else None
-        target = self.target(into.this if into is not None else None, "INTO")
+        variables = into is not None and self.dialect in _INTO_VARIABLES
+        if variables:
+            target = None
+        else:
+            target = self.target(into.this if into is not None else None, "INTO")
         result: str | None = None
         if target is not None:
             sink, label = target, "INTO"
-        elif first is not None and any(_is_assignment(e) for e in first.expressions):
-            sink, label = None, ""  # SELECT @x = …: no rows come out
+        elif variables or (
+            first is not None and any(_is_assignment(e) for e in first.expressions)
+        ):
+            sink, label = None, ""  # SELECT @x = … or INTO v: no rows come out
         else:
             result = sink = f"result:{self.index}"
             node = self.node(result, "result", "SELECT")
