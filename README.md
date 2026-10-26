@@ -40,7 +40,7 @@ Your files stay exactly as they are. SQLShelf only adds an optional metadata blo
 
 **Search**
 - Full-text search across all queries with instant results
-- Prefix filters: `table:orders`, `col:customer_id`, `tag:report`
+- Prefix filters: `table:orders`, `col:customer_id`, `tag:report`, `date:15/06/2026`, `dialect:oracle`
 - Combine filters freely — e.g. `table:orders tag:monthly`
 
 **Organization**
@@ -55,6 +55,13 @@ Your files stay exactly as they are. SQLShelf only adds an optional metadata blo
 - Metadata panel: title, description, author, tags — read/edit mode
 - Displays the absolute file path (clickable — opens in Explorer or SSMS)
 - Copy SQL content without the frontmatter block
+
+**SQL dialects**
+- T-SQL, PostgreSQL, MySQL, MariaDB, Oracle (PL/SQL) and BigQuery
+- Each query's dialect is read from its syntax (`GO` and `[brackets]`, `::` casts, backtick names, `FROM DUAL`, `` `project.dataset.table` ``…); a query with no clear sign is generic SQL
+- Wrong guess? Pick the dialect in the edit form: it is saved as `dialect:` in the metadata block and always wins
+- Tables and columns are indexed, the diagram is drawn and the SQL is coloured in that dialect; the editor and the status bar show which one, and why
+- Filter by it: `dialect:oracle` (also `dialect:plsql`, `dialect:sqlserver`, `dialect:pg`…)
 
 **Query diagram**
 - A _Diagram_ tab next to the SQL draws what the query uses: tables, temp tables, CTEs, derived tables and the result, linked by their joins and data flow (`INTO`, `INSERT`, `UPDATE`, `MERGE`)
@@ -125,6 +132,7 @@ title: Monthly Sales Report
 description: Aggregates revenue by product category for the current month
 tags: [report, sales, monthly]
 author: Raphael Franco
+dialect: postgres
 created: 2025-01-15
 updated: 2025-06-14
 --- */
@@ -138,6 +146,8 @@ GROUP BY category
 
 The file stays 100% valid SQL. Open it in SSMS, run it, edit it — SQLShelf will pick up the changes automatically.
 
+`dialect:` is optional: without it, SQLShelf reads the dialect from the SQL itself. It accepts the usual names — `tsql`, `SQL Server`, `postgres`, `pg`, `mysql`, `mariadb`, `oracle`, `PL/SQL`, `bigquery` — and keeps the spelling you wrote.
+
 ---
 
 ## Tech stack
@@ -150,7 +160,7 @@ The file stays 100% valid SQL. Open it in SSMS, run it, edit it — SQLShelf wil
 | Search index | SQLite FTS5 (stdlib `sqlite3`) |
 | Metadata | YAML frontmatter via PyYAML |
 | File watcher | watchdog |
-| SQL parsing | sqlglot (T-SQL dialect) |
+| SQL parsing | sqlglot, in each query's dialect |
 | Packaging | PyInstaller + Inno Setup (Windows) / AppImage (Linux) |
 
 ---

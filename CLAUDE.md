@@ -22,7 +22,8 @@ Já existe um **esqueleto funcional validado** com: janela PySide6, sidebar, lis
 | Índice | SQLite + FTS5 via `sqlite3` (stdlib) |
 | Frontmatter | `PyYAML` |
 | Watcher | `watchdog` |
-| Extração de objetos SQL | `sqlglot` (dialect `tsql`) |
+| Dialetos SQL | `core/dialects.py`: T-SQL, PostgreSQL, MySQL, MariaDB, Oracle, BigQuery (detecção por sintaxe + `dialect:` no frontmatter) |
+| Extração de objetos SQL | `sqlglot`, no parser do dialeto de cada query |
 | Testes | `pytest` |
 | Lint/format | `ruff` + `black` |
 | Empacotamento (Fase 2) | `PyInstaller` |
@@ -98,15 +99,17 @@ mypy                   # type check (paths vêm do pyproject.toml)
 - `.sqlshelf/` é ignorada no scan.
 - `sqlite3.connect(..., check_same_thread=False)` com lock próprio se houver acesso de múltiplas threads (UI + watcher).
 
-### sqlglot (`sql_objects.py`)
-- `dialect="tsql"` sempre.
+### Dialetos (`dialects.py`) e sqlglot (`sql_objects.py`)
+- Cada query tem um dialeto: o de `dialect:` no frontmatter (sempre vence, aceita apelidos como `PL/SQL`, `SQL Server`, `pg`) ou, sem ele, o lido pela sintaxe em `dialects.detect()`. Sem sinal claro → `sql` (SQL genérico), lido como T-SQL.
+- O parser do sqlglot vem de `Dialect.parser` (MariaDB usa `mysql`, o sqlglot não tem `mariadb`). Nunca fixar `dialect="tsql"` em código novo: passar o dialeto resolvido.
+- Índice, busca (`dialect:`), diagrama, highlight e miniaturas seguem o mesmo dialeto resolvido. Detalhes e casos que não podem regredir em `docs/sql-dialects.md`.
 - `sqlglot.ParseError` → retornar conjuntos vazios, marcar `has_parse_error=True`, nunca propagar exceção ao usuário.
 - CTEs (`exp.CTE`) excluídas do conjunto de tabelas.
 
 ### FTS5 (`schema.sql`, `search.py`)
 - Tokenizer `unicode61 remove_diacritics 2` (busca em PT-BR sem acento).
 - Sincronização `queries` ↔ `queries_fts` via triggers em `schema.sql`.
-- `table:`/`col:`/`tag:` parseados em `search.py` → filtros relacionais diretos; texto livre → `MATCH` com `bm25()` + `snippet()`.
+- `table:`/`col:`/`tag:`/`date:`/`dialect:` parseados em `search.py` → filtros relacionais diretos; texto livre → `MATCH` com `bm25()` + `snippet()`.
 - `schema.sql` carregado via `importlib.resources`; versão em `meta('schema_version')`, migrações incrementais em `index_db.py`.
 
 ### Watcher (`watcher.py`)

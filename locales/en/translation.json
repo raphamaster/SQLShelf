@@ -55,7 +55,7 @@
   "sidebar.ctx_remove": "Remove from sidebar",
   "sidebar.ctx_deindex": "Deindex folder…",
 
-  "search.help": "Search operators:\n  table:name        queries referencing a table\n  col:name          queries referencing a column\n  tag:name          queries tagged with name\n  date:DD/MM/YYYY   queries modified on that date\n  free text         full-text search across title & body\n\nTip: combine operators, e.g.  table:orders  tag:report  date:15/06/2026",
+  "search.help": "Search operators:\n  table:name        queries referencing a table\n  col:name          queries referencing a column\n  tag:name          queries tagged with name\n  date:DD/MM/YYYY   queries modified on that date\n  dialect:name      queries in a dialect: tsql, postgres, mysql, mariadb, oracle, bigquery\n  free text         full-text search across title & body\n\nTip: combine operators, e.g.  table:orders  tag:report  date:15/06/2026",
   "search.placeholder_in": "Search in {location}",
   "search.placeholder_short": "Search",
   "search.scope_in": "Search in",
@@ -303,7 +303,7 @@
   "list.yesterday_at": "Yesterday {time}",
   "list.no_description": "No description",
   "list.empty_title": "No queries here",
-  "list.empty_hint": "Search by name or text, or narrow it down with table:Name  col:Name  tag:name  date:DD/MM/YYYY",
+  "list.empty_hint": "Search by name or text, or narrow it down with table:Name  col:Name  tag:name  date:DD/MM/YYYY  dialect:oracle",
 
   "date.today": "today",
   "date.yesterday": "yesterday",
