@@ -98,6 +98,7 @@ ICONS: dict[str, str] = {
     ),
     "minus": '<path d="M5 12h14"/>',
     "expand": '<path d="M14 4h6v6M20 4l-6.5 6.5M10 20H4v-6M4 20l6.5-6.5"/>',
+    "download": '<path d="M12 4v11M7 10.5l5 5 5-5M5 19.5h14"/>',
     "link": (
         '<path d="M10 13.5a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1"/>'
         '<path d="M14 10.5a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1"/>'

@@ -266,9 +266,16 @@ def test_more_menu(strip: EditorStrip) -> None:
     toggled: list[bool] = []
     strip.rearrange_requested.connect(lambda: rearranged.append(True))
     strip.results_toggled.connect(toggled.append)
-    texts = [a.text() for a in strip.more_menu().actions()]
-    assert texts == ["Rearrange", "Show result"]
+    texts = [a.text() for a in strip.more_menu().actions() if not a.isSeparator()]
+    assert texts == [
+        "Rearrange",
+        "Show result",
+        "Export PNG…",
+        "Export SVG…",
+        "Copy image",
+    ]
     actions = strip.more_actions()
+    assert set(actions) == {"rearrange", "results", "png", "svg", "copy"}
     actions["rearrange"].trigger()
     actions["results"].trigger()
     assert rearranged == [True]
@@ -276,3 +283,37 @@ def test_more_menu(strip: EditorStrip) -> None:
     strip.set_show_results(True)
     assert actions["results"].isChecked()
     assert toggled == [False]  # quietly
+
+
+def test_exports_wait_for_a_diagram(strip: EditorStrip) -> None:
+    exported: list[str] = []
+    strip.export_requested.connect(exported.append)
+    actions = strip.more_actions()
+    assert not any(actions[kind].isEnabled() for kind in ("png", "svg", "copy"))
+
+    strip.set_counts(DiagramCounts(1, 0, 0, True))
+    assert all(actions[kind].isEnabled() for kind in ("png", "svg", "copy"))
+    actions["svg"].trigger()
+    actions["copy"].trigger()
+    assert exported == ["svg", "copy"]
+
+    strip.set_counts(None)
+    assert not actions["png"].isEnabled()
+
+
+def test_exports_follow_the_language(strip: EditorStrip) -> None:
+    set_language("pt-BR")
+    strip.retranslate_ui()
+    actions = strip.more_actions()
+    assert actions["png"].text() == "Exportar PNG…"
+    assert actions["copy"].text() == "Copiar imagem"
+
+
+def test_expand_asks_for_the_window(strip: EditorStrip) -> None:
+    fired: list[bool] = []
+    strip.expand_requested.connect(lambda: fired.append(True))
+    assert strip._expand.toolTip() == "Open in a window"
+    strip.set_tab("diagram")
+    assert not strip._expand.isHidden()
+    strip._expand.click()
+    assert fired == [True]

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import os
 from collections.abc import Iterator
 
@@ -17,7 +18,7 @@ from PySide6.QtGui import (
     QTextDocument,
 )
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QApplication, QMenu, QVBoxLayout, QWidget
 from test_query_graph import FILTERS
 from test_sql_segments import LTV_ETL, SALES_BY_CUSTOMER, SYSTEM_HEALTH
 
@@ -36,6 +37,7 @@ from sqlshelf.ui import tokens as _tk
 from sqlshelf.ui.diagram_view import (
     ANALYZING_DELAY_MS,
     CROWDED_NODES,
+    EXPORT_SCALE,
     HEADER_HEIGHT,
     LARGE_BODY,
     MAX_ROWS,
@@ -496,6 +498,18 @@ def pane() -> Iterator[DiagramPane]:
 def test_pane_starts_blank(pane: DiagramPane) -> None:
     assert pane.state() == "blank"
     assert pane.graph() is None
+
+
+def test_a_blank_pane_says_nothing_is_drawn(pane: DiagramPane) -> None:
+    pane.show_graph(SALES)
+    shown: list[QueryGraph | None] = []
+    pane.displayed_changed.connect(shown.append)
+    pane.begin_analysis()
+    pane.show_graph(SALES)
+    pane.clear()
+    assert shown[0] is None
+    assert shown[-1] is None
+    assert pane.displayed() is None
 
 
 def test_analyzing_shows_only_after_a_delay(pane: DiagramPane) -> None:
@@ -1166,13 +1180,85 @@ def test_only_tables_are_searched(view: DiagramView) -> None:
 def test_background_menu(view: DiagramView) -> None:
     view.show_graph(SALES)
     menu = view.background_menu()
-    actions = menu.actions()
-    assert [a.text() for a in actions] == ["Fit", "Rearrange"]
+    actions = [a for a in menu.actions() if not a.isSeparator()]
+    assert [a.text() for a in actions] == ["Fit", "Rearrange", "Export"]
     assert actions[0].shortcut() == QKeySequence("Ctrl+0")
     view.diagram().move_node("dbo.regiao", QPointF(30, 30))
     actions[1].trigger()
     assert not view.diagram().moved
+
+    (export,) = menu.findChildren(QMenu)
+    assert export.isEnabled()
+    assert [a.text() for a in export.actions()] == [
+        "Export PNG…",
+        "Export SVG…",
+        "Copy image",
+    ]
+    kinds: list[str] = []
+    view.export_requested.connect(kinds.append)
+    for action in export.actions():
+        action.trigger()
+    assert kinds == ["png", "svg", "copy"]
     menu.deleteLater()
+
+
+def test_an_empty_canvas_has_nothing_to_export(view: DiagramView) -> None:
+    menu = view.background_menu()
+    (export,) = menu.findChildren(QMenu)
+    assert not export.isEnabled()
+    menu.deleteLater()
+
+
+def test_the_scene_says_what_is_selected() -> None:
+    scene = _scene(SALES)
+    picked: list[str | None] = []
+    scene.node_selected.connect(picked.append)
+    scene.select("dbo.regiao")
+    assert picked[-1] == "dbo.regiao"
+    scene.select(None)
+    assert picked[-1] is None
+    assert scene.selected_span() is None
+    scene.select("vendas.pedidos")
+    assert scene.selected_span() == Span(110, 124)
+
+
+def test_an_export_draws_nothing_selected_then_puts_it_back() -> None:
+    scene = _scene(SALES)
+    scene.select("vendas.pedidos")
+    with scene.exporting(grid=False):
+        assert scene.selected is None
+        assert not scene.grid
+        assert all(item.opacity() == 1.0 for item in scene.nodes.values())
+    assert scene.selected == "vendas.pedidos"
+    assert scene.grid
+    dim = _tk.opacity("dg_dim")
+    assert scene.nodes["vendas.pedidos"].opacity() == 1.0
+    assert scene.nodes["dbo.regiao"].opacity() == pytest.approx(dim)
+
+
+def test_the_png_is_the_whole_diagram_at_twice_its_size(view: DiagramView) -> None:
+    view.show_graph(SALES)
+    view.set_zoom(0.5)  # what the view shows does not matter
+    view.diagram().select("vendas.pedidos")
+    rect = view.diagram().content_rect()
+    image = view.render_image()
+    assert EXPORT_SCALE == 2.0
+    assert image.width() == math.ceil(rect.width() * EXPORT_SCALE)
+    assert image.height() == math.ceil(rect.height() * EXPORT_SCALE)
+    assert image.devicePixelRatio() == 1.0
+    assert image.pixelColor(1, 1).name() == _tk.color("dg_canvas").lower()
+    assert view.diagram().selected == "vendas.pedidos"
+
+
+def test_the_svg_is_a_document_with_a_title(view: DiagramView) -> None:
+    view.show_graph(SALES)
+    rect = view.diagram().content_rect()
+    data = view.render_svg(title="sales")
+    assert b"<svg" in data
+    assert b"<title>sales</title>" in data
+    viewbox = f'viewBox="0 0 {math.ceil(rect.width())} {math.ceil(rect.height())}"'
+    assert viewbox.encode() in data
+    assert view.diagram().grid
 
 
 # ---------------------------------------------------------------------------

@@ -17,27 +17,33 @@ import html
 import math
 import re
 from collections import OrderedDict
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Literal
 
 from PySide6.QtCore import (
+    QBuffer,
     QEvent,
+    QIODevice,
     QObject,
     QPoint,
     QPointF,
     QRect,
     QRectF,
+    QSize,
     Qt,
     QTimer,
     Signal,
 )
 from PySide6.QtGui import (
+    QAction,
     QColor,
     QContextMenuEvent,
     QFont,
     QFontMetricsF,
     QGuiApplication,
+    QImage,
     QKeyEvent,
     QKeySequence,
     QMouseEvent,
@@ -50,6 +56,7 @@ from PySide6.QtGui import (
     QTransform,
     QWheelEvent,
 )
+from PySide6.QtSvg import QSvgGenerator
 from PySide6.QtWidgets import (
     QApplication,
     QFrame,
@@ -127,6 +134,8 @@ TIP_LINES = 12  # line numbers listed in a column's tooltip
 HALO = 5  # around a node, room for the selection's halo
 CHEVRON_HIT = 28  # a frame's title bar, from its left: the chevron
 JOIN_KINDS = frozenset({"INNER", "LEFT", "RIGHT", "FULL", "CROSS"})
+EXPORT_KINDS = ("png", "svg", "copy")
+EXPORT_SCALE = 2.0  # a PNG's pixels per canvas pixel
 
 PaneState = Literal["blank", "analyzing", "diagram", "empty", "failed", "large"]
 
@@ -284,6 +293,25 @@ def without_results(graph: QueryGraph) -> QueryGraph:
 def statement_label(info: StatementInfo) -> str:
     """ "2 · SELECT … INTO #x", as the statement selector lists it."""
     return f"{info.index} · {info.summary}"
+
+
+def add_export_actions(
+    menu: QMenu, slot: Callable[[str], object]
+) -> dict[str, QAction]:
+    """Export PNG…, Export SVG… and Copy image on *menu*, each calling *slot*
+    with its kind."""
+    actions: dict[str, QAction] = {}
+    for kind in EXPORT_KINDS:
+        action = menu.addAction("")
+        action.triggered.connect(lambda _=False, k=kind: slot(k))
+        actions[kind] = action
+    retranslate_exports(actions)
+    return actions
+
+
+def retranslate_exports(actions: dict[str, QAction]) -> None:
+    for kind, action in actions.items():
+        action.setText(tr(f"diagram.export_{kind}"))
 
 
 def regressed(new: QueryGraph, old: QueryGraph | None) -> bool:
@@ -1452,6 +1480,8 @@ class DiagramScene(QGraphicsScene):
     graph read again from the edited text brings it all back.
     """
 
+    node_selected = Signal(object)  # the node id, or None
+
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
         self.graph: QueryGraph | None = None
@@ -1469,6 +1499,7 @@ class DiagramScene(QGraphicsScene):
         self.collapsed: set[str] = set()  # groups
         self.expanded: set[str] = set()  # nodes showing every column
         self.headers_only = False
+        self.grid = True  # the dots under the diagram
 
     def build(self, graph: QueryGraph) -> None:
         """Measure, lay out and draw *graph*, replacing what was there."""
@@ -1535,6 +1566,7 @@ class DiagramScene(QGraphicsScene):
         self.lines = LineIndex()
         self.forget()
         self.setSceneRect(QRectF())
+        self.node_selected.emit(None)
 
     def forget(self) -> None:
         """Another query: nothing selected, moved, collapsed or expanded."""
@@ -1745,6 +1777,21 @@ class DiagramScene(QGraphicsScene):
                 edge.label.highlighted = edge.highlighted
                 edge.label.setOpacity(opacity)
                 edge.label.update()
+        self.node_selected.emit(selected)
+
+    @contextmanager
+    def exporting(self, grid: bool) -> Iterator[None]:
+        """Nothing selected and, unless *grid*, no dots, while the diagram is
+        drawn for an export; then as it was."""
+        selected, self.selected = self.selected, None
+        self.grid = grid
+        self._apply_selection()
+        try:
+            yield
+        finally:
+            self.selected = selected
+            self.grid = True
+            self._apply_selection()
 
     def neighbours(self, node_id: str) -> set[str]:
         """The nodes an edge links to *node_id*."""
@@ -1817,6 +1864,13 @@ class DiagramScene(QGraphicsScene):
             return row.filters[0].span
         return None
 
+    def selected_span(self) -> Span | None:
+        """The selected node's first mention, for "Go to SQL"."""
+        node_id = self.selected
+        if node_id is None or node_id not in self.nodes:
+            return None
+        return _first_span(self.nodes[node_id].node.spans)
+
     def helpEvent(self, event: QGraphicsSceneHelpEvent) -> None:
         text = self.tooltip_at(event.scenePos())
         if text:
@@ -1828,6 +1882,8 @@ class DiagramScene(QGraphicsScene):
     def drawBackground(self, painter: QPainter, rect: QRectF | QRect) -> None:
         rect = QRectF(rect)
         painter.fillRect(rect, _color("dg_canvas"))
+        if not self.grid:
+            return
         scale = abs(painter.transform().m11()) or 1.0
         step = float(DOT_STEP)
         while step * scale < 9:
@@ -1871,6 +1927,7 @@ class DiagramView(QGraphicsView):
     select_all_requested = Signal()  # Ctrl+A acts on the SQL
     span_requested = Signal(int, int)  # select that text in the SQL tab
     filter_requested = Signal(str, str)  # search every query: ("table", name)
+    export_requested = Signal(str)  # "png", "svg" or "copy"
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -2136,7 +2193,7 @@ class DiagramView(QGraphicsView):
         return menu
 
     def background_menu(self) -> QMenu:
-        """Fit and Rearrange."""
+        """Fit, Rearrange and Export."""
         menu = QMenu(self)
         fit = menu.addAction(tr("editor.fit"))
         fit.setShortcut(QKeySequence("Ctrl+0"))  # shown; keyPressEvent handles it
@@ -2144,7 +2201,53 @@ class DiagramView(QGraphicsView):
         fit.triggered.connect(self.fit)
         rearrange = menu.addAction(tr("diagram.rearrange"))
         rearrange.triggered.connect(self.rearrange)
+        menu.addSeparator()
+        export = menu.addMenu(tr("diagram.export"))
+        add_export_actions(export, self.export_requested.emit)
+        export.setEnabled(self._scene.graph is not None)
         return menu
+
+    # -- export ---------------------------------------------------------------
+
+    def render_image(self, scale: float = EXPORT_SCALE) -> QImage:
+        """The whole diagram on its canvas, *scale* pixels per canvas pixel,
+        with nothing selected."""
+        rect = self._scene.content_rect()
+        width = max(1, math.ceil(rect.width() * scale))
+        height = max(1, math.ceil(rect.height() * scale))
+        image = QImage(width, height, QImage.Format.Format_ARGB32_Premultiplied)
+        # Drawn in canvas pixels, so the cosmetic dots grow with the scale.
+        image.setDevicePixelRatio(scale)
+        image.fill(_color("dg_canvas"))
+        painter = QPainter(image)
+        painter.setRenderHints(self.renderHints())
+        target = QRectF(0, 0, width / scale, height / scale)
+        with self._scene.exporting(grid=True):
+            self._scene.render(painter, target, rect)
+        painter.end()
+        image.setDevicePixelRatio(1.0)
+        return image
+
+    def render_svg(self, title: str = "") -> bytes:
+        """The whole diagram as an SVG document, on its canvas colour but
+        without the dots."""
+        rect = self._scene.content_rect()
+        size = QSize(max(1, math.ceil(rect.width())), max(1, math.ceil(rect.height())))
+        buffer = QBuffer()
+        buffer.open(QIODevice.OpenModeFlag.WriteOnly)
+        generator = QSvgGenerator()
+        generator.setOutputDevice(buffer)
+        generator.setSize(size)
+        generator.setViewBox(QRectF(0, 0, size.width(), size.height()))
+        generator.setTitle(title)
+        painter = QPainter(generator)
+        painter.setRenderHints(self.renderHints())
+        target = QRectF(0, 0, size.width(), size.height())
+        with self._scene.exporting(grid=False):
+            self._scene.render(painter, target, rect)
+        painter.end()
+        buffer.close()
+        return bytes(buffer.data().data())
 
     # -- keyboard -------------------------------------------------------------
 
@@ -2257,6 +2360,7 @@ class DiagramPane(QWidget):
     filter_requested = Signal(str, str)
     displayed_changed = Signal(object)  # the graph drawn, or None
     analyze_requested = Signal()  # "Analyze anyway" on a large text
+    export_requested = Signal(str)  # "png", "svg" or "copy"
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -2273,6 +2377,7 @@ class DiagramPane(QWidget):
         self.view = DiagramView()
         self.view.span_requested.connect(self.span_requested)
         self.view.filter_requested.connect(self.filter_requested)
+        self.view.export_requested.connect(self.export_requested)
         self._message = QWidget()
         self._message.setObjectName("DiagramMessage")
         self._message.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
@@ -2357,6 +2462,7 @@ class DiagramPane(QWidget):
         self.view.clear()
         self._set_state("blank")
         self._update_notices()
+        self.displayed_changed.emit(None)
 
     def begin_analysis(self) -> None:
         """A new text is being read: blank now, "Analyzing…" if it takes long."""
@@ -2365,6 +2471,7 @@ class DiagramPane(QWidget):
         self._set_state("blank")
         self._update_notices()
         self._analyzing.start()
+        self.displayed_changed.emit(None)
 
     def show_graph(
         self, graph: QueryGraph, text: str = "", query: str = "", keep: bool = False

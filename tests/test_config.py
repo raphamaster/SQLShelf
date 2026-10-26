@@ -24,6 +24,8 @@ def test_layout_defaults() -> None:
     assert cfg.get_sort_key() == "mtime_desc"
     assert cfg.get_show_menu_bar() is False
     assert cfg.get_details_tab() == "sql"
+    assert cfg.get_diagram_window_geometry() is None
+    assert cfg.get_diagram_legend() is True
 
 
 def test_layout_round_trip() -> None:
@@ -35,6 +37,8 @@ def test_layout_round_trip() -> None:
     cfg.set_sort_key("name_asc")
     cfg.set_show_menu_bar(True)
     cfg.set_details_tab("diagram")
+    cfg.set_diagram_window_geometry("AdnQywADAAA=")
+    cfg.set_diagram_legend(False)
 
     assert cfg.get_splitter_sizes() == [240, 600, 500]
     assert cfg.get_panel_visible() is False
@@ -44,6 +48,8 @@ def test_layout_round_trip() -> None:
     assert cfg.get_sort_key() == "name_asc"
     assert cfg.get_show_menu_bar() is True
     assert cfg.get_details_tab() == "diagram"
+    assert cfg.get_diagram_window_geometry() == "AdnQywADAAA="
+    assert cfg.get_diagram_legend() is False
 
 
 @pytest.mark.parametrize("mode", ["details", "content", "grid"])
@@ -77,3 +83,14 @@ def test_bad_splitter_sizes_fall_back_to_none(
 ) -> None:
     isolated_config.write_text(stored, encoding="utf-8")
     assert cfg.get_splitter_sizes() is None
+
+
+@pytest.mark.parametrize(
+    "stored",
+    ['{"diagram_window_geometry": 12}', '{"diagram_window_geometry": ""}', "{bad"],
+)
+def test_bad_diagram_window_geometry_falls_back_to_none(
+    isolated_config: Path, stored: str
+) -> None:
+    isolated_config.write_text(stored, encoding="utf-8")
+    assert cfg.get_diagram_window_geometry() is None

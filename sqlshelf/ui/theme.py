@@ -529,6 +529,30 @@ def app_stylesheet(palette: Mapping[str, str]) -> str:
             color: {c["text2"]};
             font-size: {_tk.FONT_PX_SMALL}px;
         }}
+        QToolButton#StripButton[bordered="true"] {{
+            border: 1px solid {c["border_strong"]};
+            border-radius: {r}px;
+            padding: 0px 10px 0px 8px;
+        }}
+        QToolButton#StripButton[bordered="true"] QLabel {{
+            color: {c["text"]};
+            font-size: {_tk.FONT_PX_BASE}px;
+        }}
+        QWidget#DiagramWindow {{
+            background-color: {c["dg_canvas"]};
+        }}
+        QWidget#DiagramWindowBar {{
+            background-color: {c["chrome"]};
+            border-bottom: 1px solid {c["border"]};
+        }}
+        QLabel#DiagramWindowTitle {{
+            color: {c["text"]};
+            font-size: {_tk.FONT_PX_BASE + 1}px;
+            font-weight: 600;
+        }}
+        QLabel#DiagramWindowPath {{
+            color: {c["text3"]};
+        }}
         QGraphicsView#DiagramView {{
             background-color: {c["dg_canvas"]};
             border: none;
@@ -925,6 +949,10 @@ def app_stylesheet(palette: Mapping[str, str]) -> str:
         }}
         QStatusBar#StatusBar QLabel#StatusSeparator {{
             color: {c["text3"]};
+        }}
+        QStatusBar#StatusBar QLabel#DiagramWindowStale {{
+            color: {c["warning"]};
+            font-weight: 600;
         }}
         QStatusBar#StatusBar QLabel#StatusDot {{
             background-color: {c["accent"]};

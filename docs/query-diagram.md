@@ -454,7 +454,7 @@ Uma por vez, na branch `feat/query-diagram`, um commit por fatia (Conventional C
 - **Testes:** duplo clique seleciona o trecho certo; trocar de consulta descarta resultado velho; a seleção de instrução filtra nós e arestas.
 
 ### D6 — Janela expandida e exportação (ui)
-- [ ] **Entrega:**
+- [x] **Entrega:**
   - `diagram_window.py`, com legenda e barra de status;
   - Exportar PNG/SVG e Copiar imagem;
   - README (Features e tabela de atalhos) e CHANGELOG.

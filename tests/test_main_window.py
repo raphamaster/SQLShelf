@@ -9,7 +9,7 @@ from pathlib import Path
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
-from PySide6.QtCore import QEventLoop, QPointF, Qt, QTimer
+from PySide6.QtCore import QEvent, QEventLoop, QPointF, Qt, QTimer
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
@@ -21,6 +21,7 @@ from sqlshelf.core.query_graph import QueryGraph, build_query_graph
 from sqlshelf.ui import main_window as mw
 from sqlshelf.ui.command_palette import CommandPalette
 from sqlshelf.ui.diagram_view import GraphCache
+from sqlshelf.ui.diagram_window import DiagramWindow
 from sqlshelf.ui.main_window import MainWindow
 from sqlshelf.ui.theme import apply_theme
 
@@ -77,6 +78,12 @@ def window(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[MainWind
     yield win
     win._quitting = True
     win.close()
+    if win._diagram_window is not None:
+        # Delete it now: a menu left for deleteLater holds the last reference
+        # to it through its actions' slots.
+        win._diagram_window.deleteLater()
+        QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        win._diagram_window = None
 
 
 def _load(win: MainWindow, folder: Path) -> None:
@@ -849,3 +856,159 @@ def test_a_large_query_waits_for_analyze_anyway(
     window._diagram_pane._large_button.click()
     _wait_until(lambda: window._diagram_pane.state() == "diagram")
     assert _tables(window) == {"sales"}
+
+
+def _open_window(win: MainWindow) -> DiagramWindow:
+    win._editor_strip._expand.click()
+    diagram = win._diagram_window
+    assert diagram is not None
+    _wait_until(lambda: diagram.pane.state() == "diagram")
+    return diagram
+
+
+def _window_tables(diagram: DiagramWindow) -> set[str]:
+    graph = diagram.pane.displayed()
+    return {n.name for n in graph.nodes if n.kind == "table"} if graph else set()
+
+
+def test_expand_opens_a_window_that_follows_the_selection(
+    window: MainWindow, library: Path
+) -> None:
+    window._set_details_tab("diagram")
+    _load(window, library)
+    _show_diagram(window, "sales.sql")
+    diagram = _open_window(window)
+    assert diagram.isVisible()
+    assert diagram.windowTitle() == "Diagram — sales.sql — SQLShelf"
+    assert diagram.title_text() == "Sales"
+    assert diagram.path_text() == "library › sales.sql"
+    assert diagram.pane.graph() is window._diagram_pane.graph()  # read once
+
+    window._set_details_tab("sql")  # the window follows on its own
+    _select(window, "reports/clients.sql")
+    assert diagram.windowTitle() == "Diagram — clients.sql — SQLShelf"
+    assert diagram.path_text() == "library › reports › clients.sql"
+    _wait_until(lambda: _window_tables(diagram) == {"clients"})
+    assert window._diagram_pane.state() == "blank"
+
+    window._open_diagram_window()
+    assert window._diagram_window is diagram
+
+
+def test_closing_the_diagram_window_leaves_the_main_window(
+    window: MainWindow, library: Path
+) -> None:
+    window._set_details_tab("diagram")
+    _load(window, library)
+    _show_diagram(window, "sales.sql")
+    diagram = _open_window(window)
+    graph = diagram.pane.graph()
+    diagram.close()
+    _pump(50)
+    assert window.isVisible()
+    assert not diagram.isVisible()
+
+    window._open_diagram_window()
+    assert diagram.isVisible()
+    assert diagram.pane.graph() is graph
+
+
+def test_go_to_sql_from_the_window_selects_the_table(
+    window: MainWindow, library: Path
+) -> None:
+    window._set_details_tab("diagram")
+    _load(window, library)
+    _show_diagram(window, "sales.sql")
+    diagram = _open_window(window)
+    diagram.pane.view.diagram().select("sales")
+    diagram._go.click()
+    assert window._editor_strip.tab() == "sql"
+    assert window._editor.textCursor().selectedText() == "sales"
+
+    window._set_details_tab("diagram")
+    diagram.pane.view.diagram().select(None)
+    diagram._go.click()
+    assert window._editor_strip.tab() == "sql"
+
+
+@pytest.mark.parametrize("kind", ["png", "svg"])
+def test_an_export_is_written_where_the_user_chooses(
+    window: MainWindow,
+    library: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    kind: str,
+) -> None:
+    window._set_details_tab("diagram")
+    _load(window, library)
+    _show_diagram(window, "sales.sql")
+    out = tmp_path / "out"
+    out.mkdir()
+    asked: list[str] = []
+
+    def save_as(parent: object, title: str, suggested: str, filters: str) -> object:
+        asked.append(suggested)
+        return str(out / "sales"), filters  # no suffix: the kind's is added
+
+    monkeypatch.setattr(mw.QFileDialog, "getSaveFileName", save_as)
+    window._editor_strip.more_actions()[kind].trigger()
+    target = out / f"sales.{kind}"
+    assert asked == [str(library / f"sales.diagram.{kind}")]
+    _wait_until(lambda: "diagram" in window._status_bar._counts.text().lower())
+    assert window._status_bar._counts.text() == f"Diagram saved: {target}"
+    head = target.read_bytes()[:256]
+    assert head.startswith(b"\x89PNG") if kind == "png" else b"<svg" in head
+
+    diagram = _open_window(window)
+    window._export_window_diagram(kind)
+    _wait_until(lambda: diagram.counts_text().startswith("Diagram saved"))
+
+
+def test_a_failed_export_says_why(
+    window: MainWindow,
+    library: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    window._set_details_tab("diagram")
+    _load(window, library)
+    _show_diagram(window, "sales.sql")
+    missing = tmp_path / "missing" / "sales.svg"
+    monkeypatch.setattr(
+        mw.QFileDialog,
+        "getSaveFileName",
+        lambda *args: (str(missing), ""),
+    )
+    window._editor_strip.more_actions()["svg"].trigger()
+    status = window._status_bar._counts
+    _wait_until(lambda: status.text().startswith("Could not save the diagram"))
+    assert not missing.exists()
+
+
+def test_a_cancelled_export_writes_nothing(
+    window: MainWindow,
+    library: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    window._set_details_tab("diagram")
+    _load(window, library)
+    _show_diagram(window, "sales.sql")
+    monkeypatch.setattr(mw.QFileDialog, "getSaveFileName", lambda *args: ("", ""))
+    window._editor_strip.more_actions()["png"].trigger()
+    _pump(100)
+    assert not (library / "sales.diagram.png").exists()
+    assert not window._status_bar._counts.text().startswith("Diagram")
+
+
+def test_copy_image_puts_the_diagram_on_the_clipboard(
+    window: MainWindow, library: Path
+) -> None:
+    window._set_details_tab("diagram")
+    _load(window, library)
+    _show_diagram(window, "sales.sql")
+    QApplication.clipboard().clear()
+    window._editor_strip.more_actions()["copy"].trigger()
+    image = QApplication.clipboard().image()
+    assert not image.isNull()
+    assert image.size() == window._diagram_pane.view.render_image().size()
+    assert window._status_bar._counts.text() == "Diagram image copied"

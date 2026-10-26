@@ -270,3 +270,25 @@ def set_details_tab(tab: str) -> None:
     """Persist the tab under the details panel; unknown values are ignored."""
     if tab in DETAILS_TABS:
         _set_key("details_tab", tab)
+
+
+def get_diagram_window_geometry() -> str | None:
+    """Return where the diagram window was (Qt's saved geometry, in base64),
+    or None if never saved."""
+    geometry = _load().get("diagram_window_geometry")
+    return geometry if isinstance(geometry, str) and geometry else None
+
+
+def set_diagram_window_geometry(geometry: str) -> None:
+    """Persist where the diagram window is."""
+    _set_key("diagram_window_geometry", str(geometry))
+
+
+def get_diagram_legend() -> bool:
+    """Return whether the diagram window shows its legend (default True)."""
+    return bool(_load().get("diagram_legend", True))
+
+
+def set_diagram_legend(visible: bool) -> None:
+    """Persist whether the diagram window shows its legend."""
+    _set_key("diagram_legend", bool(visible))

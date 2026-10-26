@@ -56,6 +56,14 @@ Your files stay exactly as they are. SQLShelf only adds an optional metadata blo
 - Displays the absolute file path (clickable — opens in Explorer or SSMS)
 - Copy SQL content without the frontmatter block
 
+**Query diagram**
+- A _Diagram_ tab next to the SQL draws what the query uses: tables, temp tables, CTEs, derived tables and the result, linked by their joins and data flow (`INTO`, `INSERT`, `UPDATE`, `MERGE`)
+- Read from the query text alone — no database connection; each table shows only the columns the query mentions, and how they are used
+- Multi-statement scripts (`GO`, `BEGIN … END`): see every statement or pick one
+- Click a table to highlight its connections; double-click or _Go to SQL_ selects it in the editor; search all queries that use it
+- Redraws as you edit, keeping the last good drawing while the text does not parse
+- Open it in a window of its own, with a legend, and export it as PNG or SVG, or copy it as an image
+
 **File-first philosophy**
 - Your `.sql` files on disk are always the source of truth
 - Metadata lives in a YAML comment block at the top of each file — not in a proprietary database
@@ -159,6 +167,10 @@ The file stays 100% valid SQL. Open it in SSMS, run it, edit it — SQLShelf wil
 | `Ctrl+Shift+F` | Clear search |
 | `Ctrl+E` | Toggle edit mode |
 | `Ctrl+A` | Select all (view mode) |
+| `Ctrl+Shift+D` | Switch between the SQL and Diagram tabs |
+| `Ctrl+0` | Fit the diagram |
+| `Ctrl+=` / `Ctrl+-` | Zoom the diagram in / out |
+| `Esc` | Clear the diagram selection, then close the diagram window |
 | `F1` | Help |
 | `Alt+F4` | Quit (exits, does not minimize to tray) |
 
