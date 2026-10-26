@@ -2595,14 +2595,23 @@ class DiagramPane(QWidget):
         }
         active = graph is not None and self._state in ("diagram", "empty")
         if unread:
-            self._partial.label.setText(
-                ntr(
+            first, issue = unread[0], unread[0].issue
+            if issue is None:
+                text = ntr(
                     "diagram.partial_one",
                     "diagram.partial_other",
                     len(unread),
-                    line=unread[0].line,
+                    line=first.line,
                 )
-            )
+            else:
+                text = ntr(
+                    "diagram.partial_near_one",
+                    "diagram.partial_near_other",
+                    len(unread),
+                    near=issue.near,
+                    line=issue.line,
+                )
+            self._partial.label.setText(text)
             self._partial.set_action(tr("diagram.go_to_line"))
         self._dynamic.label.setText(tr("diagram.dynamic_sql"))
         self._crowded.label.setText(tr("diagram.crowded"))
@@ -2623,11 +2632,18 @@ class DiagramPane(QWidget):
         self._update_notices()
 
     def _go_to_partial(self) -> None:
+        """Selects the token sqlglot stopped at, or else goes to the start of
+        the first statement it could not fully read."""
         graph = self._graph
         unread = [s for s in graph.statements if s.status != "ok"] if graph else []
-        if unread:
+        if not unread:
+            return
+        issue = unread[0].issue
+        if issue is None:
             start = unread[0].span.start
             self.span_requested.emit(start, start)
+        else:
+            self.span_requested.emit(issue.span.start, issue.span.end)
 
     def _show_columns(self) -> None:
         self.view.show_columns()

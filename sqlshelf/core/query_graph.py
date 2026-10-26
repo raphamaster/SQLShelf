@@ -116,6 +116,15 @@ class GraphEdge:
     span: Span | None = None
 
 
+@dataclass(frozen=True)
+class ParseIssue:
+    """Where sqlglot stopped reading a statement: the token it could not take."""
+
+    line: int
+    span: Span
+    near: str  # the token's text, clipped: "innerjoin"
+
+
 @dataclass
 class StatementInfo:
     index: int  # 1, 2, 3… in file order
@@ -125,6 +134,7 @@ class StatementInfo:
     span: Span
     status: Status
     base: str | None = None  # id of the first source in its FROM
+    issue: ParseIssue | None = None  # why it is not "ok", when sqlglot said where
 
 
 @dataclass
@@ -194,7 +204,7 @@ def _build(body: str, dialect: str) -> QueryGraph:
                     "",
                     _first_line(item),
                     body.count("\n", 0, start + lead) + 1,
-                    Span(start, start + len(item)),
+                    Span(start + lead, start + len(item.rstrip())),
                     "skipped",
                 )
             )
@@ -215,8 +225,10 @@ def _statement(
     span = Span(seg.start, seg.end)
     text = _blank_xmlnamespaces(seg.text)
     kind = seg.kind
-    tree, status = _parse(text, dialect, kind)
-    skipped = StatementInfo(index, kind, _first_line(seg.text), line, span, "skipped")
+    tree, status, error = _parse(text, dialect, kind)
+    issue = _issue(error, text, seg.start, body)
+    first = _first_line(seg.text)
+    skipped = StatementInfo(index, kind, first, line, span, "skipped", issue=issue)
     if tree is None:
         return skipped, None
     if kind == "WITH":
@@ -228,30 +240,65 @@ def _statement(
         return skipped, None
     if status == "approximate" and not builder.nodes:
         return skipped, None  # nothing could be read from what sqlglot made of it
-    summary = builder.summary or _first_line(seg.text)
+    summary = builder.summary or first
     return (
-        StatementInfo(index, kind, summary, line, span, status, builder.base),
+        StatementInfo(index, kind, summary, line, span, status, builder.base, issue),
         builder,
     )
 
 
-def _parse(text: str, dialect: str, kind: str) -> tuple[exp.Expression | None, Status]:
+def _parse(
+    text: str, dialect: str, kind: str
+) -> tuple[exp.Expression | None, Status, sqlglot.ParseError | None]:
     """Parse strictly; failing that, take what the lenient parser makes of the
-    statement when it is still the kind of statement expected."""
+    statement when it is still the kind of statement expected. The strict
+    parser's error comes along: it says where the statement went wrong."""
     expected = _EXPECTED.get(kind) or tuple(t for ts in _EXPECTED.values() for t in ts)
     attempts: tuple[tuple[sqlglot.ErrorLevel, Status], ...] = (
         (sqlglot.ErrorLevel.RAISE, "ok"),
         (sqlglot.ErrorLevel.IGNORE, "approximate"),
     )
+    failure: sqlglot.ParseError | None = None
     for level, status in attempts:
         try:
             with contextlib.redirect_stderr(io.StringIO()):
                 tree = sqlglot.parse_one(text, read=dialect, error_level=level)
+        except sqlglot.ParseError as error:
+            failure = failure or error
+            continue
         except Exception:
             continue
         if isinstance(tree, expected):
-            return tree, status
-    return None, "skipped"
+            return tree, status, failure
+    return None, "skipped", failure
+
+
+_LINE_BREAK = re.compile(r"\r\n|\n|\r")
+
+
+def _issue(
+    error: sqlglot.ParseError | None, text: str, offset: int, body: str
+) -> ParseIssue | None:
+    """Where in the body *error* points. sqlglot gives the line of the token it
+    stopped at and the column where that token ends, both counted in *text*,
+    which starts at *offset* in the body. None when they do not lead back to
+    the token."""
+    if error is None or not error.errors:
+        return None
+    first = error.errors[0]
+    line, col, near = first.get("line"), first.get("col"), first.get("highlight")
+    if not (isinstance(line, int) and isinstance(col, int) and isinstance(near, str)):
+        return None
+    starts = [0, *(m.end() for m in _LINE_BREAK.finditer(text))]
+    if not near.strip() or not 1 <= line <= len(starts):
+        return None
+    end = starts[line - 1] + col
+    start = end - len(near)
+    if start < 0 or text[start:end] != near:
+        return None
+    start, end = start + offset, end + offset
+    line = body.count("\n", 0, start) + 1
+    return ParseIssue(line, Span(start, end), _clip(" ".join(near.split()), 40))
 
 
 def _first_line(text: str) -> str:

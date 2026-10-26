@@ -765,6 +765,30 @@ def test_go_to_sql_selects_the_table_in_the_editor(
     assert window._editor.textCursor().selectedText() == "sales"
 
 
+def test_go_to_line_selects_where_the_query_stops_parsing(
+    window: MainWindow, library: Path
+) -> None:
+    (library / "sales.sql").write_text(
+        "/* ---\ntitle: Sales\n--- */\n"
+        "SELECT s.id, r.name FROM sales s\n"
+        "INNER JOIN stores t ON t.id = s.store_id\n"
+        "innerjoin regions r ON r.id = t.region_id\n",
+        encoding="utf-8",
+    )
+    window._set_details_tab("diagram")
+    _load(window, library)
+    _show_diagram(window, "sales.sql")
+    pane = window._diagram_pane
+    assert pane.notices() == ["partial"]
+    assert "near “innerjoin” (line 3)" in pane._partial.label.text()
+
+    pane._partial.button.click()
+    assert window._editor_strip.tab() == "sql"
+    cursor = window._editor.textCursor()
+    assert cursor.selectedText() == "innerjoin"
+    assert cursor.blockNumber() == 2
+
+
 def test_search_in_all_queries_from_a_table(window: MainWindow, library: Path) -> None:
     window._set_details_tab("diagram")
     _load(window, library)

@@ -339,6 +339,41 @@ def test_batch_the_tokenizer_rejects_is_skipped() -> None:
         ("ok", 1, "SELECT"),
         ("skipped", 3, ""),
     ]
+    assert [s.issue for s in graph.statements] == [None, None]  # no parser said where
+    span = graph.statements[1].span
+    assert body[span.start : span.end] == "SELECT 'never closed FROM dbo.B"
+
+
+TYPO = (
+    "select u.id, emp.nome from usuario u\n"
+    "inner join signatario s on s.id = u.id\n"
+    "inner join empresa e on e.id = u.empresacontextoid\n"
+    "innerjoin signatario emp on emp.id = e.id\n"
+)
+
+
+@pytest.mark.parametrize(
+    ("body", "near", "line"),
+    [
+        (TYPO, "innerjoin", 4),
+        (TYPO.replace("\n", "\r\n"), "innerjoin", 4),
+        ("SELECT 1 AS a INTO #x;\n\nGO\nUPDATE t\n  SET a =\nFROM x\n", "FROM", 6),
+        ("SELECT a FROM t\nWHERE x = 'é' AND\n  y = = 2", "=", 3),
+        ("SELECT a FROM t;\nSELECT FROM WHERE ((;", "WHERE", 2),
+        ("SELECT a FROM t WHERE x = (1 + '" + "x" * 80 + "'", "'" + "x" * 38, 1),
+    ],
+)
+def test_a_statement_not_fully_read_says_where_sqlglot_stopped(
+    body: str, near: str, line: int
+) -> None:
+    unread = [s for s in build_query_graph(body).statements if s.status != "ok"]
+
+    assert len(unread) == 1
+    issue = unread[0].issue
+    assert issue is not None
+    assert issue.line == line
+    assert issue.near.rstrip("…") == near  # a long token is clipped
+    assert body[issue.span.start : issue.span.end].startswith(near)
 
 
 @pytest.mark.parametrize(

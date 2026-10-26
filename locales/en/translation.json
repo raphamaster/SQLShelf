@@ -185,6 +185,8 @@
   "diagram.tip_more": "Click to show every column",
   "diagram.partial_one": "Partial analysis — {count} statement could not be fully read (line {line})",
   "diagram.partial_other": "Partial analysis — {count} statements could not be fully read (line {line})",
+  "diagram.partial_near_one": "Partial analysis — {count} statement could not be fully read: error near “{near}” (line {line})",
+  "diagram.partial_near_other": "Partial analysis — {count} statements could not be fully read; the first error is near “{near}” (line {line})",
   "diagram.dynamic_sql": "Dynamic SQL (EXEC / sp_executesql) is not analyzed.",
   "diagram.crowded": "Many objects: only the headers are shown.",
   "diagram.show_columns": "Show columns",

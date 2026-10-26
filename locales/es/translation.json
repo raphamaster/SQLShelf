@@ -185,6 +185,8 @@
   "diagram.tip_more": "Haga clic para mostrar todas las columnas",
   "diagram.partial_one": "Análisis parcial — {count} instrucción no se pudo leer por completo (línea {line})",
   "diagram.partial_other": "Análisis parcial — {count} instrucciones no se pudieron leer por completo (línea {line})",
+  "diagram.partial_near_one": "Análisis parcial — {count} instrucción no se pudo leer por completo: error cerca de “{near}” (línea {line})",
+  "diagram.partial_near_other": "Análisis parcial — {count} instrucciones no se pudieron leer por completo; el primer error está cerca de “{near}” (línea {line})",
   "diagram.dynamic_sql": "El SQL dinámico (EXEC / sp_executesql) no se analiza.",
   "diagram.crowded": "Muchos objetos: solo se muestran los encabezados.",
   "diagram.show_columns": "Mostrar columnas",

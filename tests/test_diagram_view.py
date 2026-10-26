@@ -1349,12 +1349,13 @@ def test_partial_notice(pane: DiagramPane) -> None:
     assert pane.state() == "diagram"
     assert pane.notices() == ["partial"]
     assert pane._partial.label.text() == (
-        "Partial analysis — 1 statement could not be fully read (line 2)"
+        "Partial analysis — 1 statement could not be fully read: "
+        "error near “WHERE” (line 2)"
     )
     assert pane._partial.button.text() == "Go to line"
     pane._partial.button.click()
-    start = _PARTIAL.statements[1].span.start
-    assert spans == [(start, start)]
+    start = PARTIAL.index("WHERE")
+    assert spans == [(start, start + len("WHERE"))]
 
     pane._partial._close.click()
     assert pane.notices() == []
@@ -1362,6 +1363,34 @@ def test_partial_notice(pane: DiagramPane) -> None:
     assert pane.notices() == []  # dismissed for this query
     pane.show_graph(_PARTIAL, PARTIAL, "b.sql")
     assert pane.notices() == ["partial"]
+
+
+@pytest.mark.parametrize(
+    ("body", "text", "token"),
+    [
+        (
+            "SELECT a FROM t\nGO\nSELECT FROM WHERE ((\nGO\nUPDATE t SET a = FROM x\n",
+            "Partial analysis — 2 statements could not be fully read; "
+            "the first error is near “WHERE” (line 3)",
+            "WHERE",
+        ),
+        (  # the tokenizer rejects the batch: no token to point at
+            "SELECT a FROM t\nGO\nSELECT 'never closed FROM dbo.B\n",
+            "Partial analysis — 1 statement could not be fully read (line 3)",
+            "",
+        ),
+    ],
+)
+def test_partial_notice_goes_to_the_first_error(
+    pane: DiagramPane, body: str, text: str, token: str
+) -> None:
+    spans: list[tuple[int, int]] = []
+    pane.span_requested.connect(lambda start, end: spans.append((start, end)))
+    pane.show_graph(build_query_graph(body), body, "a.sql")
+    assert pane._partial.label.text() == text
+    pane._partial.button.click()
+    start = body.index(token) if token else body.index("SELECT 'never")
+    assert spans == [(start, start + len(token))]
 
 
 def test_dynamic_sql_notice(pane: DiagramPane) -> None:
