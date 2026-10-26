@@ -85,6 +85,30 @@ ICONS: dict[str, str] = {
     "close": '<path d="M6 6l12 12M18 6 6 18"/>',
     "table": '<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M3.5 10h17M9.5 10v9.5"/>',
     "check": '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+    "code": '<path d="m8.5 7-5 5 5 5M15.5 7l5 5-5 5"/>',
+    "diagram": (
+        '<rect x="3.5" y="3.5" width="8" height="6" rx="1.5"/>'
+        '<rect x="12.5" y="14.5" width="8" height="6" rx="1.5"/>'
+        '<path d="M7.5 9.5v5a3 3 0 0 0 3 3h2"/>'
+    ),
+    "fit": (
+        '<path d="M4 8.5V5.5A1.5 1.5 0 0 1 5.5 4h3M15.5 4h3A1.5 1.5 0 0 1 20 5.5v3'
+        'M20 15.5v3a1.5 1.5 0 0 1-1.5 1.5h-3M8.5 20h-3A1.5 1.5 0 0 1 4 18.5v-3"/>'
+        '<rect x="8.5" y="8.5" width="7" height="7" rx="1"/>'
+    ),
+    "minus": '<path d="M5 12h14"/>',
+    "expand": '<path d="M14 4h6v6M20 4l-6.5 6.5M10 20H4v-6M4 20l6.5-6.5"/>',
+    "download": '<path d="M12 4v11M7 10.5l5 5 5-5M5 19.5h14"/>',
+    "link": (
+        '<path d="M10 13.5a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1"/>'
+        '<path d="M14 10.5a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1"/>'
+    ),
+    "funnel": '<path d="M4 5h16l-6.2 7.4V19l-3.6-1.8v-4.8z"/>',
+    "alert": (
+        '<path d="M10.3 4.6 2.9 17.5A2 2 0 0 0 4.6 20.5h14.8a2 2 0 0 0 1.7-3L13.7 4.6a2 2 0 0 0-3.4 0z"/>'
+        '<path d="M12 9.5v4M12 17h.01"/>'
+    ),
+    "info": '<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5M12 8h.01"/>',
 }
 
 _DISABLED_OPACITY = 0.4
@@ -92,14 +116,27 @@ _DISABLED_OPACITY = 0.4
 _cache: dict[tuple[str, str, int, float], QIcon] = {}
 
 
-def _render(
-    name: str, color: str, size: int, dpr: float, opacity: float = 1.0
-) -> QPixmap:
+_renderers: dict[tuple[str, str], QSvgRenderer] = {}
+
+
+def _renderer(name: str, color: str) -> QSvgRenderer:
     hex_color = qcolor(color).name()
+    key = (name, hex_color)
+    cached = _renderers.get(key)
+    if cached is not None:
+        return cached
     weight = "2.6" if name == "more" else "1.75"
     body = ICONS[name].replace("{c}", hex_color)
     svg = _SVG.format(c=hex_color, w=weight, body=body)
     renderer = QSvgRenderer(QByteArray(svg.encode("utf-8")))
+    _renderers[key] = renderer
+    return renderer
+
+
+def _render(
+    name: str, color: str, size: int, dpr: float, opacity: float = 1.0
+) -> QPixmap:
+    renderer = _renderer(name, color)
     pixmap = QPixmap(round(size * dpr), round(size * dpr))
     pixmap.fill(Qt.GlobalColor.transparent)
     painter = QPainter(pixmap)
@@ -139,6 +176,12 @@ def icon(name: str, color_key: str = "text2", size: int = 16) -> QIcon:
 def pixmap(name: str, color_key: str = "text2", size: int = 16) -> QPixmap:
     """Icon *name* as a pixmap, for a QLabel."""
     return icon(name, color_key, size).pixmap(QSize(size, size))
+
+
+def paint(painter: QPainter, name: str, rect: QRectF, color: str) -> None:
+    """Draw icon *name* in *color* (a CSS colour) into *rect* as vectors, so it
+    stays sharp at any zoom and in an SVG export."""
+    _renderer(name, color).render(painter, rect)
 
 
 def icon_size(size: int = 16) -> QSize:

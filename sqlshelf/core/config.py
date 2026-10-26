@@ -166,6 +166,7 @@ def set_minimize_to_tray(enabled: bool) -> None:
 VIEW_MODES = ("details", "content", "grid")
 GROUP_MODES = ("date", "folder", "none")
 SORT_KEYS = ("name_asc", "name_desc", "mtime_desc", "mtime_asc")
+DETAILS_TABS = ("sql", "diagram")
 
 
 def _set_key(key: str, value: object) -> None:
@@ -257,3 +258,37 @@ def get_show_menu_bar() -> bool:
 def set_show_menu_bar(visible: bool) -> None:
     """Persist whether the classic menu bar is shown."""
     _set_key("show_menu_bar", bool(visible))
+
+
+def get_details_tab() -> str:
+    """Return the tab under the details panel: 'sql' (default) or 'diagram'."""
+    tab = _load().get("details_tab", "sql")
+    return tab if tab in DETAILS_TABS else "sql"
+
+
+def set_details_tab(tab: str) -> None:
+    """Persist the tab under the details panel; unknown values are ignored."""
+    if tab in DETAILS_TABS:
+        _set_key("details_tab", tab)
+
+
+def get_diagram_window_geometry() -> str | None:
+    """Return where the diagram window was (Qt's saved geometry, in base64),
+    or None if never saved."""
+    geometry = _load().get("diagram_window_geometry")
+    return geometry if isinstance(geometry, str) and geometry else None
+
+
+def set_diagram_window_geometry(geometry: str) -> None:
+    """Persist where the diagram window is."""
+    _set_key("diagram_window_geometry", str(geometry))
+
+
+def get_diagram_legend() -> bool:
+    """Return whether the diagram window shows its legend (default True)."""
+    return bool(_load().get("diagram_legend", True))
+
+
+def set_diagram_legend(visible: bool) -> None:
+    """Persist whether the diagram window shows its legend."""
+    _set_key("diagram_legend", bool(visible))

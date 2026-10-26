@@ -12,7 +12,10 @@ from PySide6.QtGui import (
     QAction,
     QActionGroup,
     QDesktopServices,
+    QGuiApplication,
     QIcon,
+    QImage,
+    QImageWriter,
     QKeySequence,
     QPixmap,
 )
@@ -52,6 +55,7 @@ from ..core.index_db import IndexDB, IndexStats
 from ..core.library_summary import LibrarySummary, summarize_library
 from ..core.models import SearchResult
 from ..core.navigation import NavHistory, NavState, root_of, search_text, with_search
+from ..core.query_graph import QueryGraph, build_query_graph
 from ..core.scanner import display_fields, scan_file, scan_folder
 from ..core.snippets import list_templates
 from ..core.watcher import FolderWatcher
@@ -60,6 +64,8 @@ from .address_bar import AddressBar
 from .code_editor import CodeEditor
 from .command_bar import CommandBar
 from .command_palette import CommandPalette
+from .diagram_view import DiagramPane, GraphCache, graph_counts, is_large, regressed
+from .diagram_window import DiagramWindow
 from .editor_strip import EditorStrip
 from .highlighter import SqlHighlighter
 from .metadata_panel import MetadataPanel
@@ -102,6 +108,9 @@ _INDEX_POOL.setMaxThreadCount(1)
 # queued call that relabels the dialog and repaints it. Files arrive far faster
 # than a human can read them, so coalesce to a readable rate.
 _PROGRESS_INTERVAL_MS = 60
+
+# While the SQL is edited, the diagram reads it again once typing pauses.
+DIAGRAM_EDIT_DELAY_MS = 800
 
 
 class _IndexWorkerSignals(QObject):
@@ -421,6 +430,55 @@ class _ReadBodyWorker(QRunnable):
         except Exception:
             return
         self.signals.done.emit(body, self._rel_path)
+
+
+class _DiagramSignals(QObject):
+    ready = Signal(object, object, int)  # (QueryGraph, cache key, generation)
+
+
+class _DiagramWorker(QRunnable):
+    """Read the graph of a query's SQL for the Diagram tab; sqlglot is slow on
+    long scripts, so it never runs on the GUI thread."""
+
+    def __init__(self, body: str, key: tuple[str, str], gen: int) -> None:
+        super().__init__()
+        self.signals = _DiagramSignals()
+        self._body = body
+        self._key = key
+        self._gen = gen
+
+    def run(self) -> None:
+        graph = build_query_graph(self._body)
+        self.signals.ready.emit(graph, self._key, self._gen)
+
+
+class _ExportSignals(QObject):
+    done = Signal(str, str, bool)  # (path written, error or "", from the window)
+
+
+class _ExportWorker(QRunnable):
+    """Write an exported diagram where the user chose; the drawing itself was
+    made on the GUI thread."""
+
+    def __init__(self, target: Path, data: QImage | bytes, in_window: bool) -> None:
+        super().__init__()
+        self.signals = _ExportSignals()
+        self._target = target
+        self._data = data
+        self._in_window = in_window
+
+    def run(self) -> None:
+        error = ""
+        try:
+            if isinstance(self._data, QImage):
+                writer = QImageWriter(str(self._target), b"png")
+                if not writer.write(self._data):
+                    error = writer.errorString()
+            else:
+                self._target.write_bytes(self._data)
+        except Exception as exc:  # disk full, no permission, ...
+            error = str(exc) or type(exc).__name__
+        self.signals.done.emit(str(self._target), error, self._in_window)
 
 
 class _RecordAccessWorker(QRunnable):
@@ -956,6 +1014,22 @@ class MainWindow(QMainWindow):
         self._load_timer.setInterval(75)
         self._load_timer.timeout.connect(self._dispatch_query_load)
 
+        # The Diagram tab: graphs already read, by text, and the generation a
+        # graph must carry to be drawn; a stale one only fills the cache.
+        self._diagram_cache = GraphCache()
+        self._diagram_gen = 0
+        # The text each pane shows (the tab's and the window's), by its key.
+        self._diagram_keys: dict[DiagramPane, tuple[str, str]] = {}
+        self._diagram_reading: tuple[str, str] | None = None  # in a worker
+        self._diagram_forced = False  # "Analyze anyway" on a large text
+        self._diagram_body = ""  # the text being read
+        self._diagram_window: DiagramWindow | None = None  # made when first opened
+        # While the SQL is edited, the diagram follows it after a pause.
+        self._diagram_timer = QTimer(self)
+        self._diagram_timer.setSingleShot(True)
+        self._diagram_timer.setInterval(DIAGRAM_EDIT_DELAY_MS)
+        self._diagram_timer.timeout.connect(self._refresh_diagram)
+
         self._build_menu()
         self._build_ui()
         self._build_shortcuts()
@@ -1291,6 +1365,8 @@ class MainWindow(QMainWindow):
         panel.cancel_requested.connect(self._cancel_edit)
 
         self._editor_strip = EditorStrip()
+        strip = self._editor_strip
+        strip.tab_changed.connect(self._set_details_tab)
 
         self._editor = CodeEditor()
         self._editor.setReadOnly(True)
@@ -1300,10 +1376,35 @@ class MainWindow(QMainWindow):
         # While editing, the strip shows the cursor and the line count.
         self._editor.cursorPositionChanged.connect(self._update_cursor_info)
         self._editor.blockCountChanged.connect(self._on_block_count_changed)
+        self._editor.textChanged.connect(self._on_editor_text_changed)
+
+        # The SQL and the Diagram tabs share the space under the strip.
+        self._diagram_pane = DiagramPane()
+        pane = self._diagram_pane
+        pane.view.zoom_changed.connect(strip.set_zoom)
+        strip.fit_requested.connect(pane.fit)
+        strip.zoom_in_requested.connect(pane.zoom_in)
+        strip.zoom_out_requested.connect(pane.zoom_out)
+        strip.zoom_reset_requested.connect(pane.reset_zoom)
+        strip.statement_changed.connect(pane.set_statement)
+        strip.rearrange_requested.connect(pane.rearrange)
+        strip.results_toggled.connect(pane.set_show_results)
+        strip.export_requested.connect(self._export_tab_diagram)
+        strip.expand_requested.connect(self._open_diagram_window)
+        pane.view.select_all_requested.connect(self._editor_select_all)
+        pane.span_requested.connect(self._select_span)
+        pane.filter_requested.connect(self._on_filter_requested)
+        pane.displayed_changed.connect(self._on_diagram_displayed)
+        pane.analyze_requested.connect(self._analyze_anyway)
+        pane.export_requested.connect(self._export_tab_diagram)
+        self._details_stack = QStackedWidget()
+        self._details_stack.addWidget(self._editor)
+        self._details_stack.addWidget(pane)
 
         right_layout.addWidget(self._metadata_panel)
         right_layout.addWidget(self._editor_strip)
-        right_layout.addWidget(self._editor, stretch=1)
+        right_layout.addWidget(self._details_stack, stretch=1)
+        self._set_details_tab(cfg.get_details_tab(), save=False)
 
         # ── Empty / onboarding state ─────────────────────────────────────────
         self._onboarding = QWidget()
@@ -1397,6 +1498,9 @@ class MainWindow(QMainWindow):
         esc = QShortcut(QKeySequence(_Qt.Key.Key_Escape), self)
         esc.setContext(_Qt.ShortcutContext.WindowShortcut)
         esc.activated.connect(self._cancel_edit_mode)
+        QShortcut(QKeySequence("Ctrl+Shift+D"), self).activated.connect(
+            self._editor_strip.toggle_tab
+        )
 
     # ------------------------------------------------------------------
     # i18n — live language switching
@@ -1450,6 +1554,9 @@ class MainWindow(QMainWindow):
         # Rebuild the recent menu "(none)" label if needed
         self._rebuild_recent_menu()
         self._editor_strip.retranslate_ui()
+        self._diagram_pane.retranslate_ui()
+        if self._diagram_window is not None:
+            self._diagram_window.retranslate_ui()
         # Onboarding
         self._ob_title.setText(tr("onboarding.no_folder"))
         self._ob_sub.setText(tr("onboarding.subtitle"))
@@ -1604,6 +1711,7 @@ class MainWindow(QMainWindow):
         self._query_loaded = False
         self._editor.clear()
         self._editor_strip.clear()
+        self._reset_diagram()
         self._metadata_panel.clear()
         self._current_result = None
         self._current_metadata = {}
@@ -1847,6 +1955,9 @@ class MainWindow(QMainWindow):
         self._query_loaded = False
         self._editor.clear()
         self._editor_strip.clear()
+        self._reset_diagram()
+        for diagram in self._diagram_panes():
+            diagram.begin_analysis()
         self._metadata_panel.set_actions_enabled(False)
         self._metadata_panel.set_query(
             title=result.title,
@@ -1912,6 +2023,7 @@ class MainWindow(QMainWindow):
 
         self._query_loaded = True
         self._metadata_panel.set_actions_enabled(True)
+        self._refresh_diagram()
 
         edit_key, self._edit_after_load = self._edit_after_load, None
         if edit_key == (result.folder, result.rel_path) and not self._edit_mode:
@@ -2211,6 +2323,8 @@ class MainWindow(QMainWindow):
             return
         self._edit_mode = True
         self._editor.setReadOnly(False)
+        # The SQL is what gets edited; the saved tab stays as it was.
+        self._set_details_tab("sql", save=False)
         path = self._folder / self._current_result.rel_path
         meta = self._current_metadata
         title, description, tags = display_fields(path, meta)
@@ -2240,6 +2354,14 @@ class MainWindow(QMainWindow):
         self._editor.setReadOnly(True)
         self._metadata_panel.set_edit_mode(False)
         self._editor_strip.set_editing(False)
+        window = self._diagram_window
+        if self._editor_strip.is_stale() or (window is not None and window.is_stale()):
+            # Out of editing the diagram shows the text as it is, read or not.
+            self._editor_strip.set_stale(False)
+            if window is not None:
+                window.set_stale(False)
+            self._diagram_keys.clear()
+            self._refresh_diagram()
 
     def _update_cursor_info(self) -> None:
         if not self._edit_mode:
@@ -2281,8 +2403,275 @@ class MainWindow(QMainWindow):
         self._cancel_edit_mode()
 
     def _editor_select_all(self) -> None:
+        if self._editor_strip.tab() != "sql":
+            self._set_details_tab("sql")
         self._editor.selectAll()
         self._editor.setFocus()
+
+    # ------------------------------------------------------------------
+    # Details tabs: SQL | Diagram
+    # ------------------------------------------------------------------
+
+    def _set_details_tab(self, tab: str, save: bool = True) -> None:
+        """Show the SQL editor or the diagram; *save* keeps the choice."""
+        if tab not in cfg.DETAILS_TABS:
+            tab = "sql"
+        self._editor_strip.set_tab(tab)
+        diagram = tab == "diagram"
+        self._details_stack.setCurrentWidget(
+            self._diagram_pane if diagram else self._editor
+        )
+        if save:
+            cfg.set_details_tab(tab)
+        if diagram:
+            self._refresh_diagram()
+
+    def _reset_diagram(self) -> None:
+        """Another query, or none: what the panes show no longer applies."""
+        self._diagram_timer.stop()
+        self._diagram_gen += 1
+        self._diagram_keys.clear()
+        self._diagram_reading = None
+        self._diagram_forced = False
+        self._diagram_pane.clear()
+        self._editor_strip.set_counts(None)
+        self._editor_strip.set_stale(False)
+        self._editor_strip.set_statements([], 0)
+        window = self._diagram_window
+        if window is not None:
+            window.pane.clear()
+            window.set_stale(False)
+            window.set_statements([], 0)
+            self._update_diagram_window_query()
+
+    def _diagram_visible(self) -> bool:
+        return self._editor_strip.tab() == "diagram"
+
+    def _diagram_panes(self) -> list[DiagramPane]:
+        """The diagrams on screen: the tab's when in front, and the window's."""
+        panes = []
+        if self._diagram_visible():
+            panes.append(self._diagram_pane)
+        window = self._diagram_window
+        if window is not None and window.isVisible():
+            panes.append(window.pane)
+        return panes
+
+    def _diagram_bar(self, pane: DiagramPane) -> EditorStrip | DiagramWindow:
+        """Where *pane*'s statements and "outdated" show."""
+        window = self._diagram_window
+        if window is not None and pane is window.pane:
+            return window
+        return self._editor_strip
+
+    def _refresh_diagram(self) -> None:
+        """Draw the loaded SQL on the diagrams on screen, from the cache or by
+        reading it off the GUI thread. Nothing happens while the SQL tab is in
+        front and the window is closed.
+
+        The text comes from the editor, so offsets match its positions. While
+        it is edited, the diagram drawn stays until the new one is read.
+        """
+        self._diagram_timer.stop()
+        if not self._query_loaded:
+            return
+        body = self._editor.toPlainText()
+        key = GraphCache.key(body)
+        panes = [p for p in self._diagram_panes() if self._diagram_keys.get(p) != key]
+        if not panes:
+            return
+        for pane in panes:
+            self._diagram_keys[pane] = key
+        graph = self._diagram_cache.get(key)
+        if graph is None and is_large(body) and not self._diagram_forced:
+            path = self._current_path()
+            for pane in panes:
+                pane.show_large(str(path) if path else "")
+                bar = self._diagram_bar(pane)
+                bar.set_stale(False)
+                bar.set_statements([], 0)
+            return
+        if graph is not None:
+            self._show_diagram(graph, body, panes)
+            return
+        for pane in panes:
+            if pane.state() != "diagram":
+                pane.begin_analysis()
+                if pane is self._diagram_pane:
+                    self._editor_strip.set_counts(None)
+        if key == self._diagram_reading:
+            return  # already being read, for the other pane
+        self._diagram_gen += 1
+        self._diagram_reading = key
+        self._diagram_body = body
+        worker = _DiagramWorker(body, key, self._diagram_gen)
+        worker.signals.ready.connect(self._on_diagram_ready)
+        QThreadPool.globalInstance().start(worker)
+
+    def _on_diagram_ready(
+        self, graph: QueryGraph, key: tuple[str, str], gen: int
+    ) -> None:
+        self._diagram_cache.put(key, graph)
+        if gen != self._diagram_gen:
+            return
+        self._diagram_reading = None
+        panes = [p for p in self._diagram_panes() if self._diagram_keys.get(p) == key]
+        self._show_diagram(graph, self._diagram_body, panes)
+
+    def _show_diagram(
+        self, graph: QueryGraph, body: str, panes: list[DiagramPane]
+    ) -> None:
+        path = self._current_path()
+        for pane in panes:
+            bar = self._diagram_bar(pane)
+            # Already drawn: the same query, edited; its layout stays.
+            live = pane.state() == "diagram"
+            if live and self._edit_mode and regressed(graph, pane.graph()):
+                # Half-typed text reads worse: keep the last good diagram.
+                bar.set_stale(True)
+                continue
+            bar.set_stale(False)
+            pane.show_graph(
+                graph, text=body, query=str(path) if path else "", keep=live
+            )
+            bar.set_statements(graph.statements, pane.statement())
+
+    def _on_diagram_displayed(self, graph: QueryGraph | None) -> None:
+        self._editor_strip.set_counts(graph_counts(graph) if graph else None)
+        self._editor_strip.set_zoom(self._diagram_pane.zoom_percent())
+
+    def _analyze_anyway(self) -> None:
+        """The pane's button on a large text: read it this once."""
+        self._diagram_forced = True
+        self._diagram_keys.clear()
+        self._refresh_diagram()
+
+    def _on_editor_text_changed(self) -> None:
+        if self._edit_mode and self._diagram_panes():
+            self._diagram_timer.start()
+
+    # -- the diagram window --------------------------------------------------
+
+    def _open_diagram_window(self) -> None:
+        """Expand: the diagram in a window of its own, following the query
+        selected here."""
+        window = self._diagram_window
+        if window is None:
+            window = self._diagram_window = DiagramWindow()
+            window.pane.span_requested.connect(self._select_span_from_window)
+            window.pane.filter_requested.connect(self._on_filter_requested)
+            window.pane.analyze_requested.connect(self._analyze_anyway)
+            window.pane.export_requested.connect(self._export_window_diagram)
+            window.export_requested.connect(self._export_window_diagram)
+            window.go_to_sql_requested.connect(self._go_to_sql_from_window)
+        self._update_diagram_window_query()
+        if window.isMinimized():
+            window.showNormal()
+        else:
+            window.show()
+        window.raise_()
+        window.activateWindow()
+        self._refresh_diagram()
+
+    def _update_diagram_window_query(self) -> None:
+        window = self._diagram_window
+        if window is None:
+            return
+        result = self._current_result
+        if result is None:
+            window.set_query("", [])
+            return
+        folder = result.folder or self._folder
+        parts = [folder.name] if folder is not None else []
+        parts.extend(Path(result.rel_path).parts)
+        window.set_query(result.title or Path(result.rel_path).stem, parts)
+
+    def _bring_to_front(self) -> None:
+        if self.isMinimized() or not self.isVisible():
+            self.showNormal()
+        self.raise_()
+        self.activateWindow()
+
+    def _select_span_from_window(self, start: int, end: int) -> None:
+        self._bring_to_front()
+        self._select_span(start, end)
+
+    def _go_to_sql_from_window(self) -> None:
+        """The window's "Go to SQL": this window, on the SQL tab, with the
+        selected table's text selected if one is."""
+        window = self._diagram_window
+        span = window.pane.view.diagram().selected_span() if window else None
+        self._bring_to_front()
+        if span is not None:
+            self._select_span(span.start, span.end)
+        else:
+            self._set_details_tab("sql")
+        self._editor.setFocus()
+
+    # -- export --------------------------------------------------------------
+
+    def _export_tab_diagram(self, kind: str) -> None:
+        self._export_diagram(self._diagram_pane, kind, None)
+
+    def _export_window_diagram(self, kind: str) -> None:
+        self._export_diagram(
+            self._diagram_window.pane if self._diagram_window else self._diagram_pane,
+            kind,
+            self._diagram_window,
+        )
+
+    def _export_diagram(
+        self, pane: DiagramPane, kind: str, window: DiagramWindow | None
+    ) -> None:
+        """Copy the diagram drawn on *pane*, or save it as a PNG or an SVG
+        where the user chooses; *window* is the diagram window when it asked."""
+        if pane.displayed() is None:
+            return
+        view = pane.view
+        if kind == "copy":
+            QGuiApplication.clipboard().setImage(view.render_image())
+            self._flash_export(tr("diagram.image_copied"), window)
+            return
+        path = self._current_path()
+        stem = path.stem if path is not None else "diagram"
+        folder = path.parent if path is not None else Path.home()
+        suggested = folder / f"{stem}.diagram.{kind}"
+        chosen, _filter = QFileDialog.getSaveFileName(
+            window or self,
+            tr("diagram.export_title"),
+            str(suggested),
+            tr(f"diagram.{kind}_filter"),
+        )
+        if not chosen:
+            return
+        target = Path(chosen)
+        if not target.suffix:
+            target = target.with_suffix(f".{kind}")
+        data: QImage | bytes
+        if kind == "png":
+            data = view.render_image()
+        else:
+            data = view.render_svg(title=stem)
+        worker = _ExportWorker(target, data, window is not None)
+        worker.signals.done.connect(self._on_diagram_exported)
+        QThreadPool.globalInstance().start(worker)
+
+    def _on_diagram_exported(self, path: str, error: str, in_window: bool) -> None:
+        if error:
+            message = tr("diagram.export_failed", error=error)
+        else:
+            message = tr("diagram.exported", path=path)
+        self._flash_export(message, self._diagram_window if in_window else None)
+
+    def _flash_export(self, message: str, window: DiagramWindow | None) -> None:
+        self._status_bar.flash(message)
+        if window is not None:
+            window.flash(message)
+
+    def _select_span(self, start: int, end: int) -> None:
+        """Double-click or "Go to SQL" on the diagram: that text, selected."""
+        self._set_details_tab("sql")
+        self._editor.select_range(start, end)
 
     def _current_path(self) -> Path | None:
         if self._current_result is None or self._folder is None:
@@ -2663,6 +3052,10 @@ class MainWindow(QMainWindow):
         self._sidebar.refresh_theme()
         self._metadata_panel.refresh_theme()
         self._editor.refresh_theme()
+        self._editor_strip.refresh_theme()
+        self._diagram_pane.refresh_theme()
+        if self._diagram_window is not None:
+            self._diagram_window.refresh_theme()
         if self._palette is not None:
             self._palette.refresh_theme()
         self._highlighter.refresh_theme()
@@ -2684,6 +3077,8 @@ class MainWindow(QMainWindow):
             self.hide()
             return
         self._save_splitter_sizes()
+        if self._diagram_window is not None:
+            self._diagram_window.close()  # and where it was is saved
         self._stop_watchers()
         # Let running workers finish before the connections they hold go away.
         # Bounded, so a wedged worker can never block the app from exiting.

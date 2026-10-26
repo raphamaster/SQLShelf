@@ -470,11 +470,6 @@ def app_stylesheet(palette: Mapping[str, str]) -> str:
             border-top: 1px solid {c["border"]};
             border-bottom: 1px solid {c["border"]};
         }}
-        QLabel#EditorStripTitle {{
-            color: {c["text2"]};
-            font-size: {_tk.FONT_PX_SMALL}px;
-            font-weight: 600;
-        }}
         QLabel#EditorStripInfo {{
             color: {c["text3"]};
             font-size: {_tk.FONT_PX_SMALL}px;
@@ -483,6 +478,128 @@ def app_stylesheet(palette: Mapping[str, str]) -> str:
             color: {c["accent_text"]};
             font-size: {_tk.FONT_PX_SMALL}px;
             font-weight: 600;
+        }}
+        QLabel#EditorStripStale {{
+            color: {c["warning"]};
+            font-size: {_tk.FONT_PX_SMALL}px;
+            font-weight: 600;
+        }}
+        QToolButton#EditorTab {{
+            background: transparent;
+            color: {c["text2"]};
+            border: none;
+            border-bottom: 2px solid transparent;
+            padding: 2px 6px 0px 4px;
+            font-size: {_tk.FONT_PX_SMALL}px;
+        }}
+        QToolButton#EditorTab:hover {{
+            color: {c["text"]};
+        }}
+        QToolButton#EditorTab:checked {{
+            color: {c["text"]};
+            border-bottom-color: {c["accent"]};
+            font-weight: 600;
+        }}
+        QToolButton#StripButton, QToolButton#StripZoom {{
+            background: transparent;
+            color: {c["text2"]};
+            border: none;
+            border-radius: {r_sm}px;
+            font-size: {_tk.FONT_PX_SMALL}px;
+        }}
+        QToolButton#StripButton {{
+            padding: 0px 8px 0px 6px;
+        }}
+        QToolButton#StripZoom {{
+            padding: 0px;
+        }}
+        QToolButton#StripButton:hover, QToolButton#StripZoom:hover {{
+            background-color: {c["hover"]};
+            color: {c["text"]};
+        }}
+        QToolButton#StripButton:pressed, QToolButton#StripZoom:pressed {{
+            background-color: {c["sel_soft"]};
+        }}
+        QToolButton#StripButton::menu-indicator {{
+            image: none;
+            width: 0px;
+        }}
+        QToolButton#StripButton QLabel {{
+            background: transparent;
+            color: {c["text2"]};
+            font-size: {_tk.FONT_PX_SMALL}px;
+        }}
+        QToolButton#StripButton[bordered="true"] {{
+            border: 1px solid {c["border_strong"]};
+            border-radius: {r}px;
+            padding: 0px 10px 0px 8px;
+        }}
+        QToolButton#StripButton[bordered="true"] QLabel {{
+            color: {c["text"]};
+            font-size: {_tk.FONT_PX_BASE}px;
+        }}
+        QWidget#DiagramWindow {{
+            background-color: {c["dg_canvas"]};
+        }}
+        QWidget#DiagramWindowBar {{
+            background-color: {c["chrome"]};
+            border-bottom: 1px solid {c["border"]};
+        }}
+        QLabel#DiagramWindowTitle {{
+            color: {c["text"]};
+            font-size: {_tk.FONT_PX_BASE + 1}px;
+            font-weight: 600;
+        }}
+        QLabel#DiagramWindowPath {{
+            color: {c["text3"]};
+        }}
+        QGraphicsView#DiagramView {{
+            background-color: {c["dg_canvas"]};
+            border: none;
+        }}
+        QWidget#DiagramMessage {{
+            background-color: {c["dg_canvas"]};
+        }}
+        QLabel#DiagramMessageTitle {{
+            background: transparent;
+            color: {c["text"]};
+            font-size: {_tk.FONT_PX_BASE}px;
+            font-weight: 600;
+        }}
+        QLabel#DiagramMessageTitle[state="analyzing"] {{
+            color: {c["text3"]};
+            font-weight: 400;
+        }}
+        QLabel#DiagramMessageDetail {{
+            background: transparent;
+            color: {c["text3"]};
+            font-size: {_tk.FONT_PX_SMALL}px;
+        }}
+        QWidget#DiagramNotices {{
+            background-color: {c["dg_canvas"]};
+        }}
+        QFrame#DiagramNotice {{
+            background-color: {c["panel"]};
+            border: 1px solid {c["border"]};
+            border-radius: {r}px;
+        }}
+        QFrame#DiagramNotice QLabel {{
+            background: transparent;
+            border: none;
+            color: {c["text"]};
+            font-size: {_tk.FONT_PX_SMALL}px;
+        }}
+        QToolButton#DiagramNoticeButton {{
+            background: transparent;
+            color: {c["accent_text"]};
+            border: none;
+            border-radius: {r_sm}px;
+            padding: 2px 6px;
+            font-size: {_tk.FONT_PX_SMALL}px;
+            font-weight: 600;
+        }}
+        QToolButton#DiagramNoticeButton:hover {{
+            background-color: {c["hover"]};
         }}
 
         QWidget#EditBanner {{
@@ -832,6 +949,10 @@ def app_stylesheet(palette: Mapping[str, str]) -> str:
         }}
         QStatusBar#StatusBar QLabel#StatusSeparator {{
             color: {c["text3"]};
+        }}
+        QStatusBar#StatusBar QLabel#DiagramWindowStale {{
+            color: {c["warning"]};
+            font-weight: 600;
         }}
         QStatusBar#StatusBar QLabel#StatusDot {{
             background-color: {c["accent"]};

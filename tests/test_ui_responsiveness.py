@@ -1,13 +1,21 @@
 from __future__ import annotations
 
 import os
+import threading
+import time
 from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+import pytest
+from PySide6.QtCore import QEventLoop, QTimer
 from PySide6.QtWidgets import QApplication
 
+from sqlshelf.core import config as cfg
+from sqlshelf.core.i18n import set_language
 from sqlshelf.core.models import SearchResult
+from sqlshelf.core.query_graph import QueryGraph, build_query_graph
+from sqlshelf.ui import main_window as mw
 from sqlshelf.ui.code_editor import CodeEditor
 from sqlshelf.ui.highlighter import SqlHighlighter
 from sqlshelf.ui.query_list import QueryListWidget
@@ -109,3 +117,66 @@ def test_default_sort_is_most_recently_modified() -> None:
         "older.sql",
     ]
     assert selected[0].rel_path == "newest.sql"
+
+
+def _pump(ms: int) -> None:
+    loop = QEventLoop()
+    QTimer.singleShot(ms, loop.quit)
+    loop.exec()
+
+
+def test_fast_navigation_with_the_diagram_tab_never_parses_on_the_gui_thread(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    app = _app()
+    config_dir = tmp_path / "config"
+    monkeypatch.setattr(cfg, "_CONFIG_DIR", config_dir)
+    monkeypatch.setattr(cfg, "_CONFIG_FILE", config_dir / "config.json")
+    cfg.set_details_tab("diagram")
+    set_language("en")
+    library = tmp_path / "library"
+    library.mkdir()
+    names = [f"q{i:02}.sql" for i in range(12)]
+    for i, name in enumerate(names):
+        (library / name).write_text(
+            f"SELECT a.id, b.v FROM t{i} a JOIN u{i} b ON b.id = a.id",
+            encoding="utf-8",
+        )
+
+    on_gui_thread: list[bool] = []
+
+    def recording(body: str, dialect: str = "tsql") -> QueryGraph:
+        on_gui_thread.append(threading.current_thread() is threading.main_thread())
+        time.sleep(0.05)  # a long script
+        return build_query_graph(body, dialect)
+
+    monkeypatch.setattr(mw, "build_query_graph", recording)
+
+    win = mw.MainWindow()
+    win._startup_update_timer.stop()
+    win.show()
+    try:
+        win.load_folder(library)
+        deadline = time.monotonic() + 20
+        while win._index_jobs or win._query_list.count() < 12:
+            assert time.monotonic() < deadline, "the library did not load"
+            _pump(20)
+
+        for name in names:
+            win._query_list.select_by_rel_path(name)
+            _pump(30)  # holding the arrow key down
+
+        deadline = time.monotonic() + 10
+        while win._diagram_pane.state() != "diagram":
+            assert time.monotonic() < deadline, "the last query was not drawn"
+            _pump(20)
+        graph = win._diagram_pane.graph()
+        assert graph is not None
+        assert {n.name for n in graph.nodes if n.kind == "table"} == {"t11", "u11"}
+        assert win._editor_strip.counts_text() == "2 tables · 1 join"
+        assert on_gui_thread and not any(on_gui_thread)
+        assert len(on_gui_thread) < len(names)
+    finally:
+        win._quitting = True
+        win.close()
+        app.processEvents()
