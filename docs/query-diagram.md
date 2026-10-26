@@ -421,7 +421,7 @@ Uma por vez, na branch `feat/query-diagram`, um commit por fatia (Conventional C
 - **Testes** (`test_query_graph.py`): todos os casos da tabela abaixo, com `pytest.mark.parametrize`; os de filtro (17 a 20) conferem `predicate`, `clause`, `in_or` e `span` de cada filtro.
 
 ### D3 — Layout (core)
-- [ ] **Entrega:** `graph_layout.py`.
+- [x] **Entrega:** `graph_layout.py`.
 - **Testes** (`test_graph_layout.py`):
   - nenhum nó sobrepõe outro;
   - nenhuma moldura cobre nó de outro grupo;
