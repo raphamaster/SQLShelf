@@ -154,7 +154,12 @@ class TestApplyEdits:
 
     def test_keeps_key_order_and_unknown_keys(self) -> None:
         meta = apply_edits(
-            self.BASE, title="New", description="D", tags=["b"], author="bob"
+            self.BASE,
+            title="New",
+            description="D",
+            tags=["b"],
+            author="bob",
+            dialect="",
         )
         assert list(meta) == [
             "title",
@@ -171,14 +176,54 @@ class TestApplyEdits:
         assert meta["created"] == "2026-01-01"
 
     def test_does_not_change_the_original(self) -> None:
-        apply_edits(self.BASE, title="New", description="", tags=[], author="")
+        apply_edits(
+            self.BASE, title="New", description="", tags=[], author="", dialect=""
+        )
         assert self.BASE["title"] == "Old"
         assert self.BASE["author"] == "ana"
 
     @pytest.mark.parametrize(("author", "present"), [("", False), ("bob", True)])
     def test_an_empty_author_removes_the_key(self, author: str, present: bool) -> None:
-        meta = apply_edits(self.BASE, title="T", description="", tags=[], author=author)
+        meta = apply_edits(
+            self.BASE, title="T", description="", tags=[], author=author, dialect=""
+        )
         assert ("author" in meta) is present
+
+    @pytest.mark.parametrize(
+        ("current", "chosen", "expected"),
+        [
+            # Automatic leaves the dialect to detection.
+            (None, "", None),
+            ("oracle", "", None),
+            ("PL/SQL", "", None),
+            # A name the app does not know is kept: it is not the app's to drop.
+            ("snowflake", "", "snowflake"),
+            (None, "postgres", "postgres"),
+            ("snowflake", "postgres", "postgres"),
+            ("tsql", "mariadb", "mariadb"),
+            # The same dialect stays as the author wrote it.
+            ("PL/SQL", "oracle", "PL/SQL"),
+            ("SQL Server", "tsql", "SQL Server"),
+            (None, "sql", "sql"),
+        ],
+    )
+    def test_dialect(
+        self, current: str | None, chosen: str, expected: str | None
+    ) -> None:
+        base = dict(self.BASE)
+        if current is not None:
+            base["dialect"] = current
+        meta = apply_edits(
+            base, title="T", description="", tags=[], author="", dialect=chosen
+        )
+        assert meta.get("dialect") == expected
+
+    def test_dialect_keeps_its_place(self) -> None:
+        base = {"title": "T", "dialect": "pg", "tags": []}
+        meta = apply_edits(
+            base, title="T", description="", tags=[], author="", dialect="oracle"
+        )
+        assert list(meta)[:3] == ["title", "dialect", "tags"]
 
     def test_written_edits_round_trip(self, tmp_path: Path) -> None:
         p = make_sql(
@@ -187,13 +232,19 @@ class TestApplyEdits:
         )
         meta, body, _ = read_sql_file(p)
         edited = apply_edits(
-            meta, title="Novo título", description="Vendas", tags=["bi"], author="ana"
+            meta,
+            title="Novo título",
+            description="Vendas",
+            tags=["bi"],
+            author="ana",
+            dialect="oracle",
         )
         write_sql_file(p, edited, body)
         meta2, body2, has_fm = read_sql_file(p)
         assert has_fm is True
         assert meta2["title"] == "Novo título"
         assert meta2["author"] == "ana"
+        assert meta2["dialect"] == "oracle"
         assert str(meta2["created"]) == "2026-01-01"
         assert "updated" in meta2
         assert body2 == "SELECT 1"

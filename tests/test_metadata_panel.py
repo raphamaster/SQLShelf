@@ -295,6 +295,8 @@ def _start_editing(panel: MetadataPanel) -> None:
         ["vendas", "bi"],
         author="raphael",
         created=date(2026, 3, 9),
+        dialect="oracle",
+        detected="T-SQL",
     )
 
 
@@ -311,6 +313,7 @@ def test_start_editing_fills_the_form_and_hides_the_read_view(
     assert panel._author_edit.text() == "raphael"
     assert panel._created_edit.text() == "09/03/2026"
     assert panel._created_edit.isReadOnly()
+    assert panel._dialect_combo.currentText() == "Oracle"
 
     panel.set_edit_mode(False)
     assert not panel.is_editing()
@@ -329,7 +332,45 @@ def test_edited_values_are_trimmed(panel: MetadataPanel) -> None:
         description="New description",
         tags=["vendas", "bi", "pending"],
         author="ana",
+        dialect="oracle",
     )
+
+
+@pytest.mark.parametrize(
+    ("dialect", "shown"),
+    [
+        ("", "Automatic (detected: T-SQL)"),
+        ("postgres", "PostgreSQL"),
+        ("mariadb", "MariaDB"),
+        ("sql", "Generic SQL"),
+        # A key the form does not offer falls back to automatic.
+        ("snowflake", "Automatic (detected: T-SQL)"),
+    ],
+)
+def test_dialect_choice(panel: MetadataPanel, dialect: str, shown: str) -> None:
+    _fill(panel)
+    panel.start_editing("T", "", [], dialect=dialect, detected="T-SQL")
+    assert panel._dialect_combo.currentText() == shown
+    expected = dialect if dialect != "snowflake" else ""
+    assert panel.get_edited_values().dialect == expected
+
+
+def test_dialect_offers_automatic_then_each_dialect(panel: MetadataPanel) -> None:
+    _fill(panel)
+    panel.start_editing("T", "", [])
+    combo = panel._dialect_combo
+    assert [combo.itemText(i) for i in range(combo.count())] == [
+        "Automatic (none detected)",
+        "T-SQL",
+        "PostgreSQL",
+        "MySQL",
+        "MariaDB",
+        "Oracle",
+        "BigQuery",
+        "Generic SQL",
+    ]
+    combo.setCurrentIndex(combo.findText("BigQuery"))
+    assert panel.get_edited_values().dialect == "bigquery"
 
 
 def test_banner_buttons_emit_save_and_cancel(panel: MetadataPanel) -> None:
@@ -372,6 +413,7 @@ def test_form_labels_sit_above_their_fields(panel: MetadataPanel) -> None:
         "Title",
         "Description",
         "Tags",
+        "Dialect",
         "Author",
         "Created",
     ]
@@ -393,6 +435,8 @@ def test_retranslate_to_portuguese(panel: MetadataPanel) -> None:
     assert panel._save_btn.label_text() == "Salvar"
     assert panel._banner_title.text() == "Editando"
     assert panel._edit_labels["created"].text() == "Criado"
+    assert panel._dialect_combo.itemText(0) == "Automático (nenhum detectado)"
+    assert panel._dialect_combo.itemText(7) == "SQL genérico"
     assert panel._tag_field.input().placeholderText() == "Adicionar tag…"
 
 
@@ -400,7 +444,10 @@ def test_clear_resets_everything(panel: MetadataPanel) -> None:
     _fill(panel)
     panel.set_favorite(True)
     panel.set_actions_enabled(True)
+    panel.start_editing("T", "", [], dialect="mysql", detected="Oracle")
     panel.clear()
+    assert panel._dialect_combo.currentIndex() == 0
+    assert panel._dialect_combo.currentText() == "Automatic (none detected)"
     assert panel._title_label.full_text() == ""
     assert panel._file_name_label.full_text() == ""
     assert panel._tags_area.chips() == []

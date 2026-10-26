@@ -323,8 +323,32 @@ def test_saving_writes_the_edits_and_keeps_the_other_fields(
     assert meta["custom"] == "keep"
     assert str(meta["created"]) == "2026-01-01"
     assert "updated" in meta
+    assert "dialect" not in meta  # automatic writes nothing
     assert body == "SELECT * FROM sales"
     assert panel._title_label.full_text() == "Monthly sales"
+
+
+def test_the_form_offers_the_detected_dialect_and_saves_a_choice(
+    window: MainWindow, library: Path
+) -> None:
+    sales = library / "sales.sql"
+    sales.write_text("SELECT SYSDATE FROM dual WHERE ROWNUM <= 5", encoding="utf-8")
+    _load(window, library)
+    _edit(window)
+    combo = window._metadata_panel._dialect_combo
+    assert combo.currentText() == "Automatic (detected: Oracle)"
+
+    combo.setCurrentIndex(combo.findData("postgres"))
+    window.save_current()
+    _wait_until(lambda: not window._saving and window._query_loaded)
+    assert read_sql_file(sales)[0]["dialect"] == "postgres"
+
+    _edit(window)
+    assert combo.currentText() == "PostgreSQL"
+    combo.setCurrentIndex(0)
+    window.save_current()
+    _wait_until(lambda: not window._saving and window._query_loaded)
+    assert "dialect" not in read_sql_file(sales)[0]
 
 
 def test_a_failed_save_stays_in_edit_mode(

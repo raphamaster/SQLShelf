@@ -42,6 +42,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..core import config as cfg
+from ..core.dialects import GENERIC, Detection, detect, normalize
 from ..core.encoding import encoding_label, read_text
 from ..core.folder_tree import folder_prefix
 from ..core.frontmatter import (
@@ -348,6 +349,7 @@ class _LoadedQuery:
     is_favorite: bool
     encoding: str  # display name, "" when the file could not be read
     mtime: float | None
+    detected: Detection  # what the syntax shows, whatever the frontmatter says
 
 
 def _read_query_file(path: Path) -> tuple[dict, str, str, float | None]:
@@ -407,6 +409,7 @@ class _LoadQueryWorker(QRunnable):
             is_favorite=is_favorite,
             encoding=encoding,
             mtime=mtime,
+            detected=detect(body),
         )
         self.signals.finished.emit(payload, self._gen)
 
@@ -963,6 +966,7 @@ class MainWindow(QMainWindow):
 
         self._current_result: SearchResult | None = None
         self._current_metadata: dict = {}
+        self._current_detected = Detection(GENERIC)
         self._edit_mode = False
         # True while an edited query is being written in the background.
         self._saving = False
@@ -1715,6 +1719,7 @@ class MainWindow(QMainWindow):
         self._metadata_panel.clear()
         self._current_result = None
         self._current_metadata = {}
+        self._current_detected = Detection(GENERIC)
         self._status_bar.set_selected(0)
 
     # ------------------------------------------------------------------
@@ -1952,6 +1957,7 @@ class MainWindow(QMainWindow):
         # is being loaded in the background. Until then the panel shows what
         # the index knows, without touching the disk.
         self._current_metadata = {}
+        self._current_detected = Detection(GENERIC)
         self._query_loaded = False
         self._editor.clear()
         self._editor_strip.clear()
@@ -2002,6 +2008,7 @@ class MainWindow(QMainWindow):
             return
         result = loaded.result
         self._current_metadata = loaded.metadata
+        self._current_detected = loaded.detected
         self._editor.setPlainText(loaded.body)
         # The file is fresher than the index: after a save the list keeps its
         # selection without announcing it, so this is what shows the new values.
@@ -2328,12 +2335,15 @@ class MainWindow(QMainWindow):
         path = self._folder / self._current_result.rel_path
         meta = self._current_metadata
         title, description, tags = display_fields(path, meta)
+        detected = self._current_detected.dialect
         self._metadata_panel.start_editing(
             title,
             description,
             tags,
             author=str(meta.get("author") or ""),
             created=meta.get("created"),
+            dialect=normalize(meta.get("dialect")) or "",
+            detected="" if detected is GENERIC else detected.label,
         )
         self._editor_strip.set_editing(True)
         self._update_cursor_info()
@@ -2695,6 +2705,7 @@ class MainWindow(QMainWindow):
             description=edits.description,
             tags=edits.tags,
             author=edits.author,
+            dialect=edits.dialect,
         )
         self._saving = True
         self._metadata_panel.set_saving(True)
