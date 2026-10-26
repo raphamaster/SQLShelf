@@ -677,6 +677,28 @@ def test_the_diagram_tab_draws_the_loaded_query(
     assert window._details_stack.currentWidget() is window._editor
 
 
+def test_the_diagram_reads_the_declared_dialect(
+    window: MainWindow, library: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    read_as: list[str | None] = []
+
+    def spy(body: str, dialect: str | None = None) -> QueryGraph:
+        read_as.append(dialect)
+        return build_query_graph(body, dialect)
+
+    monkeypatch.setattr(mw, "build_query_graph", spy)
+    (library / "sales.sql").write_text(
+        "/* ---\ntitle: Sales\ndialect: PL/SQL\n--- */\nSELECT * FROM sales",
+        encoding="utf-8",
+    )
+    window._set_details_tab("diagram")
+    _load(window, library)
+    _show_diagram(window, "sales.sql")
+    _show_diagram(window, "reports/clients.sql")
+    # Without a declaration the dialect is left to the body.
+    assert read_as == ["oracle", None]
+
+
 def test_ctrl_shift_d_toggles_the_details_tab(
     window: MainWindow, library: Path
 ) -> None:
@@ -731,7 +753,7 @@ def test_going_back_to_a_query_uses_the_cache(
 
     calls: list[str] = []
 
-    def counting(body: str, dialect: str = "tsql") -> QueryGraph:
+    def counting(body: str, dialect: str | None = None) -> QueryGraph:
         calls.append(body)
         return build_query_graph(body, dialect)
 

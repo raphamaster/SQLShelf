@@ -441,7 +441,10 @@ class _DiagramSignals(QObject):
 
 class _DiagramWorker(QRunnable):
     """Read the graph of a query's SQL for the Diagram tab; sqlglot is slow on
-    long scripts, so it never runs on the GUI thread."""
+    long scripts, so it never runs on the GUI thread.
+
+    *key* is ``GraphCache.key(body, dialect)``: its dialect is the one the
+    query declares, or "" to read it off the body."""
 
     def __init__(self, body: str, key: tuple[str, str], gen: int) -> None:
         super().__init__()
@@ -451,7 +454,7 @@ class _DiagramWorker(QRunnable):
         self._gen = gen
 
     def run(self) -> None:
-        graph = build_query_graph(self._body)
+        graph = build_query_graph(self._body, self._key[1] or None)
         self.signals.ready.emit(graph, self._key, self._gen)
 
 
@@ -2490,7 +2493,7 @@ class MainWindow(QMainWindow):
         if not self._query_loaded:
             return
         body = self._editor.toPlainText()
-        key = GraphCache.key(body)
+        key = GraphCache.key(body, normalize(self._current_metadata.get("dialect")))
         panes = [p for p in self._diagram_panes() if self._diagram_keys.get(p) != key]
         if not panes:
             return
