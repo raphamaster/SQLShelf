@@ -240,4 +240,20 @@ def test_the_oldest_texts_and_pixmaps_are_evicted(
     cache.thumbnail(c, 1)
     cache.thumbnail(b, 1, 2.0)
 
-    assert list(cache._pixmaps) == [((str(c), 1), 1.0), ((str(b), 1), 2.0)]
+    assert list(cache._pixmaps) == [
+        ((str(c), 1), 1.0, "sql"),
+        ((str(b), 1), 2.0, "sql"),
+    ]
+
+
+def test_each_dialect_has_its_own_thumbnail(
+    cache: th.ThumbnailCache, tmp_path: Path
+) -> None:
+    path = tmp_path / "q.sql"
+    cache._on_read(str(path), 1, "SELECT 1 # note")
+    plain = cache.thumbnail(path, 1)
+    mysql = cache.thumbnail(path, 1, dialect="mysql")
+    assert plain is not None and mysql is not None
+    assert plain is not mysql
+    assert plain.toImage() != mysql.toImage()  # "# note" is a comment in MySQL
+    assert cache.thumbnail(path, 1, dialect="mysql") is mysql

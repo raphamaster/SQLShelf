@@ -2014,6 +2014,9 @@ class MainWindow(QMainWindow):
         result = loaded.result
         self._current_metadata = loaded.metadata
         self._current_detected = loaded.detected
+        dialect = settle(loaded.metadata.get("dialect"), loaded.detected)
+        # Before the text arrives, so it is coloured once.
+        self._highlighter.set_dialect(dialect.key)
         self._editor.setPlainText(loaded.body)
         # The file is fresher than the index: after a save the list keeps its
         # selection without announcing it, so this is what shows the new values.
@@ -2031,7 +2034,6 @@ class MainWindow(QMainWindow):
         )
         self._metadata_panel.set_favorite(loaded.is_favorite)
         lines = self._editor.blockCount() if loaded.body else 0
-        dialect = settle(loaded.metadata.get("dialect"), loaded.detected)
         self._editor_strip.set_info(lines, loaded.encoding, dialect)
         self._status_bar.set_dialect(dialect)
 

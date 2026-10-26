@@ -14,6 +14,7 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
 from sqlshelf.core import config as cfg
+from sqlshelf.core.dialects import get
 from sqlshelf.core.frontmatter import read_sql_file
 from sqlshelf.core.i18n import set_language
 from sqlshelf.core.navigation import NavState
@@ -257,7 +258,7 @@ def test_selecting_a_query_fills_the_strip_and_enables_the_actions(
         ("", "SELECT * FROM sales", "SQL", "No dialect detected"),
     ],
 )
-def test_the_strip_and_status_bar_show_the_dialect(
+def test_the_strip_status_bar_and_colours_follow_the_dialect(
     window: MainWindow,
     library: Path,
     header: str,
@@ -277,6 +278,7 @@ def test_the_strip_and_status_bar_show_the_dialect(
     assert not status._dialect.isHidden()
     assert status._dialect.text() == label
     assert status._dialect.toolTip() == strip._info.toolTip()
+    assert get(window._highlighter.dialect()).label == label
 
     window._reset_editor()  # as when a search finds nothing
     assert status._dialect.isHidden()

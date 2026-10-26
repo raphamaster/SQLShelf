@@ -584,6 +584,7 @@ class QueryGrid(QAbstractScrollArea):
                 Path(result.folder) / result.rel_path,
                 result.file_mtime,
                 self.viewport().devicePixelRatioF(),
+                result.dialect,
             )
             if pixmap is not None:
                 # The page is wider than any card: the clip crops it.
