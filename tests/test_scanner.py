@@ -36,6 +36,26 @@ class TestScanFile:
         assert query.tags == ["vendas", "mensal"]
         assert query.has_frontmatter is True
 
+    @pytest.mark.parametrize(
+        ("declared", "expected"),
+        [
+            ("dialect: PL/SQL\n", "oracle"),
+            ("dialect: postgresql\n", "postgres"),
+            ("dialect: sql\n", "sql"),
+            # An unknown name leaves it to detection, as no name at all does.
+            ("dialect: snowflake\n", None),
+            ("dialect: [mysql]\n", None),
+            ("", None),
+        ],
+    )
+    def test_reads_the_declared_dialect(
+        self, tmp_path: Path, declared: str, expected: str | None
+    ) -> None:
+        content = f"/* ---\ntitle: T\n{declared}--- */\nSELECT TOP 1 * FROM t\n"
+        query = scan_file(write(tmp_path, "q.sql", content))
+        assert query is not None
+        assert query.dialect == expected
+
     def test_title_falls_back_to_stem(self, tmp_path: Path) -> None:
         query = scan_file(write(tmp_path, "sem_meta.sql"))
         assert query is not None

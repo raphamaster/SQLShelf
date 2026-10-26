@@ -128,6 +128,15 @@ def test_date_keeps_the_queries_of_that_day() -> None:
     assert len(filter_results([on_day, next_day], "date:yesterday")) == 2
 
 
+def test_dialect_keeps_the_queries_read_as_it() -> None:
+    oracle = _result("a.sql", "A")
+    oracle.dialect = "oracle"
+    plain = _result("b.sql", "B")
+    assert filter_results([oracle, plain], "dialect:PL/SQL") == [oracle]
+    assert filter_results([oracle, plain], "dialect:sql") == [plain]
+    assert filter_results([oracle, plain], "dialect:snowflake") == []
+
+
 def test_the_list_is_capped() -> None:
     many = [_result(f"q{i}.sql", f"Query {i}", mtime=i) for i in range(80)]
     shown = filter_results(many, "query")

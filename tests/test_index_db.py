@@ -143,6 +143,36 @@ class TestIndexAll:
         db.close()
         assert row == ("My Title", "My description", 1, "2026-01-01", "2026-06-11")
 
+    @pytest.mark.parametrize(
+        ("declared", "body", "expected"),
+        [
+            (None, "SELECT SYSDATE FROM dual", "oracle"),
+            (None, "SELECT a FROM t", "sql"),
+            ("mariadb", "SELECT TOP 1 * FROM dbo.t", "mariadb"),
+            ("sql", "SELECT SYSDATE FROM dual", "sql"),
+        ],
+    )
+    def test_dialect_stored(
+        self, project_dir: Path, declared: str | None, body: str, expected: str
+    ) -> None:
+        p = make_sql_file(project_dir, "q.sql", body)
+        db = IndexDB(project_dir)
+        db.index_all([Query(path=p, title="T", body=body, dialect=declared)])
+        row = db._conn.execute("SELECT dialect FROM queries").fetchone()
+        db.close()
+        assert row == (expected,)
+
+    def test_objects_are_read_in_the_dialect(self, project_dir: Path) -> None:
+        # Oracle's SELECT … INTO fills a variable; T-SQL's creates a table.
+        body = "SELECT name INTO v_name FROM customers WHERE ROWNUM = 1"
+        p = make_sql_file(project_dir, "q.sql", body)
+        db = IndexDB(project_dir)
+        db.index_all([Query(path=p, title="T", body=body)])
+        query_id = db.get_query_id(p)
+        assert query_id is not None
+        assert db.get_objects(query_id)["table"] == ["customers"]
+        db.close()
+
     def test_file_stat_and_hash_stored(self, project_dir: Path) -> None:
         p = make_sql_file(project_dir, "q.sql", "SELECT 42")
         db = IndexDB(project_dir)

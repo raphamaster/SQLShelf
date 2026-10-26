@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from .dialects import normalize
 from .frontmatter import read_sql_file
 from .models import Query
 
@@ -46,6 +47,7 @@ def scan_file(path: Path) -> Query | None:
         has_frontmatter=has_frontmatter,
         created_at=str(created_raw) if created_raw is not None else None,
         updated_at=str(updated_raw) if updated_raw is not None else None,
+        dialect=normalize(metadata.get("dialect")),
     )
 
 
