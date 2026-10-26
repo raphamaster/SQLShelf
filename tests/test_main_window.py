@@ -17,8 +17,10 @@ from sqlshelf.core import config as cfg
 from sqlshelf.core.frontmatter import read_sql_file
 from sqlshelf.core.i18n import set_language
 from sqlshelf.core.navigation import NavState
+from sqlshelf.core.query_graph import QueryGraph, build_query_graph
 from sqlshelf.ui import main_window as mw
 from sqlshelf.ui.command_palette import CommandPalette
+from sqlshelf.ui.diagram_view import GraphCache
 from sqlshelf.ui.main_window import MainWindow
 from sqlshelf.ui.theme import apply_theme
 
@@ -564,3 +566,173 @@ def test_ctrl_p_again_keeps_one_palette_and_ctrl_f_closes_it(
 def test_quick_search_needs_a_library(window: MainWindow) -> None:
     QTest.keyClick(window, Qt.Key.Key_P, Qt.KeyboardModifier.ControlModifier)
     assert window._palette is None
+
+
+# ---------------------------------------------------------------------------
+# The Diagram tab
+# ---------------------------------------------------------------------------
+
+
+def _show_diagram(win: MainWindow, rel_path: str) -> None:
+    _select(win, rel_path)
+    _wait_until(lambda: win._diagram_pane.state() == "diagram")
+
+
+def test_the_diagram_tab_draws_the_loaded_query(
+    window: MainWindow, library: Path
+) -> None:
+    _load(window, library)
+    _select(window, "sales.sql")
+    assert window._diagram_pane.state() == "blank"  # the SQL tab reads nothing
+
+    window._editor_strip._diagram_tab.click()
+    assert cfg.get_details_tab() == "diagram"
+    assert window._details_stack.currentWidget() is window._diagram_pane
+    _wait_until(lambda: window._diagram_pane.state() == "diagram")
+    assert window._editor_strip.counts_text() == "1 table"
+    zoom = window._diagram_pane.zoom_percent()
+    assert window._editor_strip.zoom_text() == f"{zoom}%"
+    graph = window._diagram_pane.graph()
+    assert graph is not None
+    assert {n.name for n in graph.nodes if n.kind == "table"} == {"sales"}
+
+    _show_diagram(window, "reports/clients.sql")
+    graph = window._diagram_pane.graph()
+    assert graph is not None
+    assert {n.name for n in graph.nodes if n.kind == "table"} == {"clients"}
+
+    window._editor_strip._sql_tab.click()
+    assert cfg.get_details_tab() == "sql"
+    assert window._details_stack.currentWidget() is window._editor
+
+
+def test_ctrl_shift_d_toggles_the_details_tab(
+    window: MainWindow, library: Path
+) -> None:
+    _load(window, library)
+    _select(window, "sales.sql")
+    chord = Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier
+    QTest.keyClick(window, Qt.Key.Key_D, chord)
+    assert window._editor_strip.tab() == "diagram"
+    _wait_until(lambda: window._diagram_pane.state() == "diagram")
+    QTest.keyClick(window, Qt.Key.Key_D, chord)
+    assert window._editor_strip.tab() == "sql"
+    assert cfg.get_details_tab() == "sql"
+
+
+def test_the_window_opens_on_the_saved_tab(window: MainWindow) -> None:
+    cfg.set_details_tab("diagram")
+
+    second = MainWindow()
+    try:
+        second._startup_update_timer.stop()
+        assert second._editor_strip.tab() == "diagram"
+        assert second._details_stack.currentWidget() is second._diagram_pane
+    finally:
+        second._quitting = True
+        second.close()
+
+
+def test_a_stale_diagram_only_fills_the_cache(
+    window: MainWindow, library: Path
+) -> None:
+    cfg.set_details_tab("diagram")
+    window._set_details_tab("diagram")
+    _load(window, library)
+    _show_diagram(window, "sales.sql")
+    shown = window._diagram_pane.graph()
+
+    other = build_query_graph("SELECT a FROM elsewhere")
+    key = GraphCache.key("SELECT a FROM elsewhere")
+    window._on_diagram_ready(other, key, window._diagram_gen - 1)
+    assert window._diagram_cache.get(key) is other
+    assert window._diagram_pane.graph() is shown
+
+
+def test_going_back_to_a_query_uses_the_cache(
+    window: MainWindow, library: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    window._set_details_tab("diagram")
+    _load(window, library)
+    _show_diagram(window, "sales.sql")
+    first = window._diagram_pane.graph()
+    _show_diagram(window, "reports/clients.sql")
+
+    calls: list[str] = []
+
+    def counting(body: str, dialect: str = "tsql") -> QueryGraph:
+        calls.append(body)
+        return build_query_graph(body, dialect)
+
+    monkeypatch.setattr(mw, "build_query_graph", counting)
+    _show_diagram(window, "sales.sql")
+    assert window._diagram_pane.graph() is first
+    assert window._editor_strip.counts_text() == "1 table"
+    assert calls == []
+
+
+def test_editing_shows_the_sql_but_keeps_the_saved_tab(
+    window: MainWindow, library: Path
+) -> None:
+    window._set_details_tab("diagram")
+    _load(window, library)
+    _show_diagram(window, "sales.sql")
+
+    window._on_edit_shortcut()
+    assert window._edit_mode
+    assert window._editor_strip.tab() == "sql"
+    assert window._details_stack.currentWidget() is window._editor
+    assert cfg.get_details_tab() == "diagram"
+
+
+@pytest.mark.parametrize("by_key", [False, True])
+def test_select_all_from_the_diagram_selects_the_sql(
+    window: MainWindow, library: Path, by_key: bool
+) -> None:
+    window._set_details_tab("diagram")
+    _load(window, library)
+    _show_diagram(window, "sales.sql")
+
+    if by_key:
+        view = window._diagram_pane.view
+        view.setFocus()
+        QTest.keyClick(view, Qt.Key.Key_A, Qt.KeyboardModifier.ControlModifier)
+    else:
+        window._metadata_panel.select_all_requested.emit()
+    assert window._editor_strip.tab() == "sql"
+    assert window._editor.textCursor().selectedText() == "SELECT * FROM sales"
+    assert window._editor.hasFocus()
+
+
+def test_copy_sql_works_from_the_diagram_tab(window: MainWindow, library: Path) -> None:
+    window._set_details_tab("diagram")
+    _load(window, library)
+    _show_diagram(window, "sales.sql")
+    window._metadata_panel._copy_btn.click()
+    assert QApplication.clipboard().text() == "SELECT * FROM sales"
+    assert window._editor_strip.tab() == "diagram"
+
+
+def test_language_and_theme_reach_the_diagram_without_a_new_analysis(
+    window: MainWindow, library: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    window._set_details_tab("diagram")
+    _load(window, library)
+    _show_diagram(window, "sales.sql")
+    graph = window._diagram_pane.graph()
+
+    calls: list[str] = []
+    monkeypatch.setattr(
+        mw, "build_query_graph", lambda body, d="tsql": calls.append(body)
+    )
+    try:
+        window._change_language("pt-BR")
+        assert window._editor_strip.counts_text() == "1 tabela"
+        assert window._editor_strip._diagram_tab.text() == "Diagrama"
+        window._apply_theme_live("dark")
+        window._apply_theme_live("light")
+    finally:
+        window._change_language("en")
+    assert window._diagram_pane.graph() is graph
+    assert window._diagram_pane.state() == "diagram"
+    assert calls == []

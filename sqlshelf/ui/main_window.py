@@ -52,6 +52,7 @@ from ..core.index_db import IndexDB, IndexStats
 from ..core.library_summary import LibrarySummary, summarize_library
 from ..core.models import SearchResult
 from ..core.navigation import NavHistory, NavState, root_of, search_text, with_search
+from ..core.query_graph import QueryGraph, build_query_graph
 from ..core.scanner import display_fields, scan_file, scan_folder
 from ..core.snippets import list_templates
 from ..core.watcher import FolderWatcher
@@ -60,6 +61,7 @@ from .address_bar import AddressBar
 from .code_editor import CodeEditor
 from .command_bar import CommandBar
 from .command_palette import CommandPalette
+from .diagram_view import DiagramPane, GraphCache, graph_counts
 from .editor_strip import EditorStrip
 from .highlighter import SqlHighlighter
 from .metadata_panel import MetadataPanel
@@ -421,6 +423,26 @@ class _ReadBodyWorker(QRunnable):
         except Exception:
             return
         self.signals.done.emit(body, self._rel_path)
+
+
+class _DiagramSignals(QObject):
+    ready = Signal(object, object, int)  # (QueryGraph, cache key, generation)
+
+
+class _DiagramWorker(QRunnable):
+    """Read the graph of a query's SQL for the Diagram tab; sqlglot is slow on
+    long scripts, so it never runs on the GUI thread."""
+
+    def __init__(self, body: str, key: tuple[str, str], gen: int) -> None:
+        super().__init__()
+        self.signals = _DiagramSignals()
+        self._body = body
+        self._key = key
+        self._gen = gen
+
+    def run(self) -> None:
+        graph = build_query_graph(self._body)
+        self.signals.ready.emit(graph, self._key, self._gen)
 
 
 class _RecordAccessWorker(QRunnable):
@@ -956,6 +978,12 @@ class MainWindow(QMainWindow):
         self._load_timer.setInterval(75)
         self._load_timer.timeout.connect(self._dispatch_query_load)
 
+        # The Diagram tab: graphs already read, by text, and the generation a
+        # graph must carry to be drawn; a stale one only fills the cache.
+        self._diagram_cache = GraphCache()
+        self._diagram_gen = 0
+        self._diagram_key: tuple[str, str] | None = None  # what the tab shows
+
         self._build_menu()
         self._build_ui()
         self._build_shortcuts()
@@ -1291,6 +1319,8 @@ class MainWindow(QMainWindow):
         panel.cancel_requested.connect(self._cancel_edit)
 
         self._editor_strip = EditorStrip()
+        strip = self._editor_strip
+        strip.tab_changed.connect(self._set_details_tab)
 
         self._editor = CodeEditor()
         self._editor.setReadOnly(True)
@@ -1301,9 +1331,23 @@ class MainWindow(QMainWindow):
         self._editor.cursorPositionChanged.connect(self._update_cursor_info)
         self._editor.blockCountChanged.connect(self._on_block_count_changed)
 
+        # The SQL and the Diagram tabs share the space under the strip.
+        self._diagram_pane = DiagramPane()
+        pane = self._diagram_pane
+        pane.view.zoom_changed.connect(strip.set_zoom)
+        strip.fit_requested.connect(pane.fit)
+        strip.zoom_in_requested.connect(pane.zoom_in)
+        strip.zoom_out_requested.connect(pane.zoom_out)
+        strip.zoom_reset_requested.connect(pane.reset_zoom)
+        pane.view.select_all_requested.connect(self._editor_select_all)
+        self._details_stack = QStackedWidget()
+        self._details_stack.addWidget(self._editor)
+        self._details_stack.addWidget(pane)
+
         right_layout.addWidget(self._metadata_panel)
         right_layout.addWidget(self._editor_strip)
-        right_layout.addWidget(self._editor, stretch=1)
+        right_layout.addWidget(self._details_stack, stretch=1)
+        self._set_details_tab(cfg.get_details_tab(), save=False)
 
         # ── Empty / onboarding state ─────────────────────────────────────────
         self._onboarding = QWidget()
@@ -1397,6 +1441,9 @@ class MainWindow(QMainWindow):
         esc = QShortcut(QKeySequence(_Qt.Key.Key_Escape), self)
         esc.setContext(_Qt.ShortcutContext.WindowShortcut)
         esc.activated.connect(self._cancel_edit_mode)
+        QShortcut(QKeySequence("Ctrl+Shift+D"), self).activated.connect(
+            self._editor_strip.toggle_tab
+        )
 
     # ------------------------------------------------------------------
     # i18n — live language switching
@@ -1450,6 +1497,7 @@ class MainWindow(QMainWindow):
         # Rebuild the recent menu "(none)" label if needed
         self._rebuild_recent_menu()
         self._editor_strip.retranslate_ui()
+        self._diagram_pane.retranslate_ui()
         # Onboarding
         self._ob_title.setText(tr("onboarding.no_folder"))
         self._ob_sub.setText(tr("onboarding.subtitle"))
@@ -1604,6 +1652,7 @@ class MainWindow(QMainWindow):
         self._query_loaded = False
         self._editor.clear()
         self._editor_strip.clear()
+        self._reset_diagram()
         self._metadata_panel.clear()
         self._current_result = None
         self._current_metadata = {}
@@ -1847,6 +1896,9 @@ class MainWindow(QMainWindow):
         self._query_loaded = False
         self._editor.clear()
         self._editor_strip.clear()
+        self._reset_diagram()
+        if self._editor_strip.tab() == "diagram":
+            self._diagram_pane.begin_analysis()
         self._metadata_panel.set_actions_enabled(False)
         self._metadata_panel.set_query(
             title=result.title,
@@ -1912,6 +1964,7 @@ class MainWindow(QMainWindow):
 
         self._query_loaded = True
         self._metadata_panel.set_actions_enabled(True)
+        self._refresh_diagram()
 
         edit_key, self._edit_after_load = self._edit_after_load, None
         if edit_key == (result.folder, result.rel_path) and not self._edit_mode:
@@ -2211,6 +2264,8 @@ class MainWindow(QMainWindow):
             return
         self._edit_mode = True
         self._editor.setReadOnly(False)
+        # The SQL is what gets edited; the saved tab stays as it was.
+        self._set_details_tab("sql", save=False)
         path = self._folder / self._current_result.rel_path
         meta = self._current_metadata
         title, description, tags = display_fields(path, meta)
@@ -2281,8 +2336,71 @@ class MainWindow(QMainWindow):
         self._cancel_edit_mode()
 
     def _editor_select_all(self) -> None:
+        if self._editor_strip.tab() != "sql":
+            self._set_details_tab("sql")
         self._editor.selectAll()
         self._editor.setFocus()
+
+    # ------------------------------------------------------------------
+    # Details tabs: SQL | Diagram
+    # ------------------------------------------------------------------
+
+    def _set_details_tab(self, tab: str, save: bool = True) -> None:
+        """Show the SQL editor or the diagram; *save* keeps the choice."""
+        if tab not in cfg.DETAILS_TABS:
+            tab = "sql"
+        self._editor_strip.set_tab(tab)
+        diagram = tab == "diagram"
+        self._details_stack.setCurrentWidget(
+            self._diagram_pane if diagram else self._editor
+        )
+        if save:
+            cfg.set_details_tab(tab)
+        if diagram:
+            self._refresh_diagram()
+
+    def _reset_diagram(self) -> None:
+        """Another query, or none: what the tab shows no longer applies."""
+        self._diagram_gen += 1
+        self._diagram_key = None
+        self._diagram_pane.clear()
+        self._editor_strip.set_counts(None)
+
+    def _refresh_diagram(self) -> None:
+        """Draw the loaded SQL on the Diagram tab, from the cache or by reading
+        it off the GUI thread. Nothing happens while the SQL tab is in front.
+
+        The text comes from the editor, so offsets match its positions.
+        """
+        if self._editor_strip.tab() != "diagram" or not self._query_loaded:
+            return
+        body = self._editor.toPlainText()
+        key = GraphCache.key(body)
+        if key == self._diagram_key:
+            return
+        self._diagram_key = key
+        self._diagram_gen += 1
+        graph = self._diagram_cache.get(key)
+        if graph is not None:
+            self._show_diagram(graph)
+            return
+        self._diagram_pane.begin_analysis()
+        self._editor_strip.set_counts(None)
+        worker = _DiagramWorker(body, key, self._diagram_gen)
+        worker.signals.ready.connect(self._on_diagram_ready)
+        QThreadPool.globalInstance().start(worker)
+
+    def _on_diagram_ready(
+        self, graph: QueryGraph, key: tuple[str, str], gen: int
+    ) -> None:
+        self._diagram_cache.put(key, graph)
+        if gen == self._diagram_gen:
+            self._show_diagram(graph)
+
+    def _show_diagram(self, graph: QueryGraph) -> None:
+        self._diagram_pane.show_graph(graph)
+        self._editor_strip.set_counts(graph_counts(graph))
+        self._editor_strip.set_zoom(self._diagram_pane.zoom_percent())
 
     def _current_path(self) -> Path | None:
         if self._current_result is None or self._folder is None:
@@ -2663,6 +2781,8 @@ class MainWindow(QMainWindow):
         self._sidebar.refresh_theme()
         self._metadata_panel.refresh_theme()
         self._editor.refresh_theme()
+        self._editor_strip.refresh_theme()
+        self._diagram_pane.refresh_theme()
         if self._palette is not None:
             self._palette.refresh_theme()
         self._highlighter.refresh_theme()

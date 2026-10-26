@@ -431,7 +431,7 @@ Uma por vez, na branch `feat/query-diagram`, um commit por fatia (Conventional C
   - 50 nós em < 10 ms.
 
 ### D4 — Aba e desenho (ui)
-- [ ] **Entrega:**
+- [x] **Entrega:**
   - tokens e `diagram_group_color`;
   - `diagram_view.py` desenhando molduras, nós, arestas e rótulos;
   - filtros nas linhas (funil, marca `on`, "+N"), contagem no cabeçalho, rodapé `HAVING` e "K filtros" na faixa;

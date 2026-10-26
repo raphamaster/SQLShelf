@@ -50,6 +50,17 @@ DARK: dict[str, str] = {
     "syn_comment": "#8b939c",
     "syn_identifier": "#d7dbe0",
     "syn_operator": "#a3abb4",
+    # Query diagram; dg_dim and the dg_frame_* are opacities, not colours
+    "dg_canvas": "#15171a",
+    "dg_dot": "#262a30",
+    "dg_node": "#1f2228",
+    "dg_row_key": "#23272e",
+    "dg_ink": "#0f1114",
+    "dg_join": "#9aa2ab",
+    "dg_flow": "#5aa7ff",
+    "dg_dim": ".28",
+    "dg_frame_fill": ".07",
+    "dg_frame_border": ".38",
 }
 
 LIGHT: dict[str, str] = {
@@ -89,6 +100,17 @@ LIGHT: dict[str, str] = {
     "syn_comment": "#6a737d",
     "syn_identifier": "#24292f",
     "syn_operator": "#57606a",
+    # Query diagram; dg_dim and the dg_frame_* are opacities, not colours
+    "dg_canvas": "#f4f5f7",
+    "dg_dot": "#dde1e6",
+    "dg_node": "#ffffff",
+    "dg_row_key": "#f6f7f9",
+    "dg_ink": "#121417",
+    "dg_join": "#6b737c",
+    "dg_flow": "#2f74d6",
+    "dg_dim": ".30",
+    "dg_frame_fill": ".10",
+    "dg_frame_border": ".55",
 }
 
 THEMES: dict[str, dict[str, str]] = {"dark": DARK, "light": LIGHT}
@@ -119,6 +141,36 @@ def tag_color(name: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Query diagram groups
+# ---------------------------------------------------------------------------
+
+DIAGRAM_SCHEMA_PALETTE: tuple[str, ...] = ("#4c9aff", "#ff7eb6", "#ff8b6b", "#8fa3bf")
+_DIAGRAM_FIXED: dict[str, str] = {
+    "temp": "#f5a524",
+    "derived": "#b38bff",
+    "result": "#2dd4bf",
+}
+
+
+def diagram_group_color(kind: str, key: str = "") -> str:
+    """The colour of a diagram frame and of its nodes' headers.
+
+    *kind* is the frame kind from ``graph_layout`` and *key* the schema for a
+    schema frame. ``dbo`` and the tables without a schema are always blue;
+    another schema keeps its colour across runs, as tags do. The accent green
+    is never a group colour: it marks selection and focus.
+    """
+    if kind in _DIAGRAM_FIXED:
+        return _DIAGRAM_FIXED[kind]
+    name = key.casefold()
+    if kind != "schema" or name in ("", "dbo"):
+        return DIAGRAM_SCHEMA_PALETTE[0]
+    return DIAGRAM_SCHEMA_PALETTE[
+        zlib.crc32(name.encode("utf-8")) % len(DIAGRAM_SCHEMA_PALETTE)
+    ]
+
+
+# ---------------------------------------------------------------------------
 # Typography and shape
 # ---------------------------------------------------------------------------
 
@@ -144,6 +196,13 @@ RADIUS = 6  # buttons, fields, rows
 RADIUS_PILL = 10
 RADIUS_DIALOG = 12
 
+# Query diagram
+DG_FONT_PX_MONO = 11  # roles, aliases, badges, edge labels
+DG_FONT_PX_PREDICATE = 12  # a filter on a column's row
+DG_FONT_PX_MARK = 10  # the "on" mark before a filter
+DG_RADIUS_FRAME = 10
+DG_RADIUS_MARK = 3
+
 # ---------------------------------------------------------------------------
 # Active palette
 # ---------------------------------------------------------------------------
@@ -155,6 +214,11 @@ _active: dict[str, str] = DARK
 def color(key: str) -> str:
     """Return token *key* from the active palette."""
     return _active[key]
+
+
+def opacity(key: str) -> float:
+    """Token *key* of the active palette read as an opacity (``dg_dim``)."""
+    return float(_active[key])
 
 
 # ---------------------------------------------------------------------------

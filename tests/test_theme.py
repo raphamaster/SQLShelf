@@ -80,6 +80,50 @@ def test_tag_color_comes_from_the_palette(tag: str) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Diagram colours
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("kind", "key", "expected"),
+    [
+        ("schema", "dbo", "#4c9aff"),
+        ("schema", "DBO", "#4c9aff"),
+        ("schema", "", "#4c9aff"),
+        ("tables", "", "#4c9aff"),
+        ("schema", "vendas", "#ff8b6b"),
+        ("schema", "Vendas", "#ff8b6b"),
+        ("schema", "dim", "#ff7eb6"),
+        ("schema", "ref", "#8fa3bf"),
+        ("temp", "", "#f5a524"),
+        ("derived", "", "#b38bff"),
+        ("result", "", "#2dd4bf"),
+    ],
+)
+def test_diagram_group_color_is_stable(kind: str, key: str, expected: str) -> None:
+    # Fixed values: a schema must keep its colour across runs and releases.
+    assert _tk.diagram_group_color(kind, key) == expected
+
+
+@pytest.mark.parametrize("key", ["sys", "stg", "mart", "x" * 200, "relatório"])
+def test_diagram_group_color_is_never_the_accent(key: str) -> None:
+    color = _tk.diagram_group_color("schema", key)
+    assert color in _tk.DIAGRAM_SCHEMA_PALETTE
+    for palette in _tk.THEMES.values():
+        assert color.casefold() != palette["accent"].casefold()
+
+
+@pytest.mark.parametrize("name", ["dark", "light"])
+def test_diagram_opacities_are_fractions(name: str) -> None:
+    try:
+        _tk.set_active_palette(name)
+        for key in ("dg_dim", "dg_frame_fill", "dg_frame_border"):
+            assert 0.0 < _tk.opacity(key) < 1.0
+    finally:
+        _tk.set_active_palette("dark")
+
+
+# ---------------------------------------------------------------------------
 # Contrast (WCAG 2.x)
 # ---------------------------------------------------------------------------
 
