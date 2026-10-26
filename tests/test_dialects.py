@@ -12,6 +12,7 @@ from sqlshelf.core.dialects import (
     normalize,
     parser_for,
     resolve,
+    settle,
 )
 
 
@@ -245,3 +246,15 @@ class TestResolve:
         resolved = resolve(None, "SELECT 1")
         assert resolved.dialect is GENERIC
         assert resolved.source == "default"
+
+    @pytest.mark.parametrize(
+        ("declared", "body"),
+        [
+            ("PL/SQL", "SELECT TOP 1 * FROM dbo.t"),
+            ("sql", "SELECT TOP 1 * FROM dbo.t"),
+            ("sqlite", "SELECT id::text FROM t"),
+            (None, "SELECT 1"),
+        ],
+    )
+    def test_settle_matches_resolve(self, declared: object, body: str) -> None:
+        assert settle(declared, detect(body)) == resolve(declared, body)

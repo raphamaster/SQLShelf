@@ -350,9 +350,14 @@ def detect(body: str) -> Detection:
 def resolve(declared: Any, body: str) -> Resolved:
     """The dialect a query is read as: the one its frontmatter names, if it
     names one of ours, or else the one its syntax shows."""
+    found = Detection(GENERIC) if normalize(declared) is not None else detect(body)
+    return settle(declared, found)
+
+
+def settle(declared: Any, found: Detection) -> Resolved:
+    """``resolve`` for a body already read: *found* is what ``detect`` saw."""
     key = normalize(declared)
     if key is not None:
         return Resolved(get(key), "frontmatter")
-    found = detect(body)
     source: Source = "default" if found.dialect is GENERIC else "detected"
     return Resolved(found.dialect, source, found.evidence)

@@ -173,6 +173,7 @@ def test_status_bar_reports_the_library_state(
     assert status._counts.text().startswith("2 queries")
     assert status._index.text() == "Index up to date"
     assert status._watch.text() == "Watching 1 folder"
+    assert status._dialect.isHidden()  # no query open
 
 
 def test_flash_replaces_the_counts_then_restores_them(
@@ -235,11 +236,50 @@ def test_selecting_a_query_fills_the_strip_and_enables_the_actions(
     _load(window, library)
     panel = window._metadata_panel
     _select(window, "sales.sql")
-    assert window._editor_strip.info_text() == "1 line · UTF-8 · T-SQL"
+    # Nothing in "SELECT * FROM sales" names a dialect.
+    assert window._editor_strip.info_text() == "1 line · UTF-8 · SQL"
     assert panel._title_label.full_text() == "Sales"
     assert panel._file_name_label.full_text() == "sales.sql"
     assert panel._copy_btn.isEnabled()
     assert panel._edit_btn.isEnabled()
+
+
+@pytest.mark.parametrize(
+    ("header", "body", "label", "tooltip"),
+    [
+        (
+            "dialect: PL/SQL\n",
+            "SELECT * FROM sales",
+            "Oracle",
+            "Oracle: declared in the file header",
+        ),
+        ("", "SELECT id::text FROM sales", "PostgreSQL", "PostgreSQL: read from "),
+        ("", "SELECT * FROM sales", "SQL", "No dialect detected"),
+    ],
+)
+def test_the_strip_and_status_bar_show_the_dialect(
+    window: MainWindow,
+    library: Path,
+    header: str,
+    body: str,
+    label: str,
+    tooltip: str,
+) -> None:
+    (library / "sales.sql").write_text(
+        f"/* ---\ntitle: Sales\n{header}--- */\n{body}", encoding="utf-8"
+    )
+    _load(window, library)
+    _select(window, "sales.sql")
+    strip = window._editor_strip
+    status = window._status_bar
+    assert strip.info_text().endswith(f" · {label}")
+    assert strip._info.toolTip().startswith(tooltip)
+    assert not status._dialect.isHidden()
+    assert status._dialect.text() == label
+    assert status._dialect.toolTip() == strip._info.toolTip()
+
+    window._reset_editor()  # as when a search finds nothing
+    assert status._dialect.isHidden()
 
 
 def test_copy_sql_copies_the_body_without_frontmatter(

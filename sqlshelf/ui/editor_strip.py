@@ -1,9 +1,9 @@
 """The thin bar above the SQL editor: the SQL | Diagram tabs and what goes
 with the active one.
 
-On the SQL tab it shows the file's line count and encoding and, while the
-metadata is edited, that the SQL is editable and where the cursor is
-("Ln 10, Col 27"). On the Diagram tab it shows what the diagram counts
+On the SQL tab it shows the file's line count, encoding and dialect and,
+while the metadata is edited, that the SQL is editable and where the cursor
+is ("Ln 10, Col 27"). On the Diagram tab it shows what the diagram counts
 ("4 tables · 3 joins · 2 filters"), the statement drawn when the text has
 several, and the fit, zoom and ⋯ controls.
 """
@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..core.dialects import Resolved
 from ..core.i18n import ntr, tr
 from ..core.query_graph import StatementInfo
 from . import icons
@@ -34,19 +35,29 @@ from .diagram_view import (
 from .widgets import BarSeparator, IconButton
 
 STRIP_HEIGHT = 32
-DIALECT = "T-SQL"
 TABS = ("sql", "diagram")
 _CONTROL = 24  # height of the diagram controls
 _MENU_TEXT = 220  # widest text on a menu button, then "…"
 
 
-def strip_info(lines: int, encoding: str) -> str:
+def strip_info(lines: int, encoding: str, dialect: str) -> str:
     """ "12 lines · UTF-8 · T-SQL", leaving the encoding out when unknown."""
     parts = [ntr("editor.lines_one", "editor.lines_other", lines)]
     if encoding:
         parts.append(encoding)
-    parts.append(DIALECT)
+    parts.append(dialect)
     return " · ".join(parts)
+
+
+def dialect_tooltip(resolved: Resolved) -> str:
+    """Where the dialect a query is read as comes from."""
+    label = resolved.dialect.label
+    if resolved.source == "frontmatter":
+        return tr("dialect.declared", dialect=label)
+    if resolved.source == "detected":
+        evidence = ", ".join(resolved.evidence)
+        return tr("dialect.detected", dialect=label, evidence=evidence)
+    return tr("dialect.default")
 
 
 def _tab_icon(name: str) -> QIcon:
@@ -208,6 +219,7 @@ class EditorStrip(QWidget):
         self._tab = "sql"
         self._lines: int | None = None
         self._encoding = ""
+        self._dialect: Resolved | None = None
         self._editing = False
         self._cursor_pos: tuple[int, int] | None = None
         self._counts: DiagramCounts | None = None
@@ -353,14 +365,24 @@ class EditorStrip(QWidget):
 
     # -- SQL tab --------------------------------------------------------------
 
-    def set_info(self, lines: int, encoding: str) -> None:
+    def set_info(self, lines: int, encoding: str, dialect: Resolved) -> None:
         self._lines = lines
         self._encoding = encoding
-        self._info.setText(strip_info(lines, encoding))
+        self._dialect = dialect
+        self._render_info()
 
     def set_lines(self, lines: int) -> None:
-        """The line count changed while editing; the encoding stays."""
-        self.set_info(lines, self._encoding)
+        """The line count changed while editing; the encoding and the dialect
+        stay as loaded."""
+        self._lines = lines
+        self._render_info()
+
+    def _render_info(self) -> None:
+        if self._lines is None or self._dialect is None:
+            return
+        label = self._dialect.dialect.label
+        self._info.setText(strip_info(self._lines, self._encoding, label))
+        self._info.setToolTip(dialect_tooltip(self._dialect))
 
     def set_editing(self, editing: bool) -> None:
         """Show "editable" and the cursor position, or hide them again."""
@@ -380,7 +402,9 @@ class EditorStrip(QWidget):
     def clear(self) -> None:
         self._lines = None
         self._encoding = ""
+        self._dialect = None
         self._info.clear()
+        self._info.setToolTip("")
         self.set_counts(None)
         self.set_stale(False)
         self.set_statements([], 0)
@@ -474,8 +498,7 @@ class EditorStrip(QWidget):
         self._rearrange.setText(tr("diagram.rearrange"))
         self._results.setText(tr("diagram.show_result"))
         retranslate_exports(self._exports)
-        if self._lines is not None:
-            self._info.setText(strip_info(self._lines, self._encoding))
+        self._render_info()
         if self._cursor_pos is not None:
             self.set_cursor(*self._cursor_pos)
         self.set_counts(self._counts)

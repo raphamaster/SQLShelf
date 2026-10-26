@@ -42,7 +42,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..core import config as cfg
-from ..core.dialects import GENERIC, Detection, detect, normalize
+from ..core.dialects import GENERIC, Detection, detect, normalize, settle
 from ..core.encoding import encoding_label, read_text
 from ..core.folder_tree import folder_prefix
 from ..core.frontmatter import (
@@ -1721,6 +1721,7 @@ class MainWindow(QMainWindow):
         self._current_metadata = {}
         self._current_detected = Detection(GENERIC)
         self._status_bar.set_selected(0)
+        self._status_bar.set_dialect(None)
 
     # ------------------------------------------------------------------
     # UI refresh
@@ -1958,6 +1959,7 @@ class MainWindow(QMainWindow):
         # the index knows, without touching the disk.
         self._current_metadata = {}
         self._current_detected = Detection(GENERIC)
+        self._status_bar.set_dialect(None)
         self._query_loaded = False
         self._editor.clear()
         self._editor_strip.clear()
@@ -2026,7 +2028,9 @@ class MainWindow(QMainWindow):
         )
         self._metadata_panel.set_favorite(loaded.is_favorite)
         lines = self._editor.blockCount() if loaded.body else 0
-        self._editor_strip.set_info(lines, loaded.encoding)
+        dialect = settle(loaded.metadata.get("dialect"), loaded.detected)
+        self._editor_strip.set_info(lines, loaded.encoding, dialect)
+        self._status_bar.set_dialect(dialect)
 
         self._query_loaded = True
         self._metadata_panel.set_actions_enabled(True)
