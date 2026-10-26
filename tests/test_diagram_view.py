@@ -446,7 +446,9 @@ def test_fit_shows_everything_but_never_above_100(view: DiagramView) -> None:
     assert ZOOM_MIN <= view.zoom() < 1.0
     assert zooms[-1] == view.zoom_percent()
     shown = view.mapToScene(view.viewport().rect()).boundingRect()
-    assert shown.contains(view.diagram().sceneRect().adjusted(1, 1, -1, -1))
+    pixel = 1 / view.zoom()  # the scroll position is whole pixels
+    scene = view.diagram().sceneRect()
+    assert shown.contains(scene.adjusted(pixel, pixel, -pixel, -pixel))
 
     view.resize(3000, 2000)
     view.show_graph(FILTERED)
@@ -563,6 +565,7 @@ def test_theme_switch_repaints_without_rebuilding(pane: DiagramPane) -> None:
     app = _app()
     pane.show_graph(FILTERED)
     scene = pane.view.diagram()
+    scene.grid = False  # a dot can land on the pixel read below
     node = scene.nodes["vendas.pedidos"]
     try:
         apply_theme(app, "light")
@@ -982,6 +985,7 @@ def test_expand_shows_every_column() -> None:
 
 def test_the_same_query_read_again_keeps_what_the_user_did(view: DiagramView) -> None:
     view.show_graph(SALES)
+    fitted = view.zoom()  # depends on the fonts
     scene = view.diagram()
     scene.move_node("dbo.regiao", QPointF(30, 30))
     scene.toggle_group("result")
@@ -997,7 +1001,7 @@ def test_the_same_query_read_again_keeps_what_the_user_did(view: DiagramView) ->
     view.show_graph(SALES)  # another query
     assert not (scene.moved or scene.collapsed)
     assert scene.selected is None
-    assert view.zoom() < 0.5
+    assert view.zoom() == fitted != 0.5
 
 
 # ---------------------------------------------------------------------------
