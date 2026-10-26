@@ -9,6 +9,7 @@ import pytest
 from PySide6.QtWidgets import QApplication
 
 from sqlshelf.core.i18n import set_language
+from sqlshelf.core.query_graph import Span, StatementInfo
 from sqlshelf.ui.diagram_view import DiagramCounts
 from sqlshelf.ui.editor_strip import STRIP_HEIGHT, EditorStrip, strip_info
 
@@ -197,3 +198,81 @@ def test_zoom_controls_emit(strip: EditorStrip) -> None:
     assert fired == ["fit", "in", "out", "reset"]
     strip.set_zoom(75)
     assert strip.zoom_text() == "75%"
+
+
+STATEMENTS = [
+    StatementInfo(1, "SELECT", "SELECT … INTO #a & b", 1, Span(0, 10), "ok"),
+    StatementInfo(2, "UPDATE", "UPDATE dbo.T", 3, Span(12, 30), "ok"),
+    StatementInfo(3, "SELECT", "SELECT FROM WHERE ((", 5, Span(32, 50), "skipped"),
+]
+
+
+def test_statement_selector(strip: EditorStrip) -> None:
+    strip.set_statements(STATEMENTS, 0)
+    assert strip._statement_button.isHidden()  # on the SQL tab
+    strip.set_tab("diagram")
+    assert not strip._statement_button.isHidden()
+    actions = [a for a in strip.statement_menu().actions() if not a.isSeparator()]
+    assert [a.text() for a in actions] == [
+        "All (3)",
+        "1 · SELECT … INTO #a && b",
+        "2 · UPDATE dbo.T",
+        "3 · SELECT FROM WHERE ((",
+    ]
+    assert [a.isEnabled() for a in actions] == [True, True, True, False]
+    assert [a.isChecked() for a in actions] == [True, False, False, False]
+    assert strip.statement_text() == "All (3)"
+
+    picked: list[int] = []
+    strip.statement_changed.connect(picked.append)
+    actions[2].trigger()
+    assert picked == [2]
+    assert strip.current_statement() == 2
+    assert strip.statement_text() == "2 · UPDATE dbo.T"
+    assert [a.isChecked() for a in actions] == [False, False, True, False]
+    actions[2].trigger()  # the same one again
+    assert picked == [2]
+    assert actions[2].isChecked()
+
+    strip.set_statements(STATEMENTS[:1], 0)
+    assert strip._statement_button.isHidden()  # one statement: nothing to pick
+
+
+def test_statement_selector_follows_the_language(strip: EditorStrip) -> None:
+    strip.set_statements(STATEMENTS[:2], 0)
+    set_language("pt-BR")
+    strip.retranslate_ui()
+    assert strip.statement_text() == "Todas (2)"
+    assert strip.statement_menu().actions()[0].text() == "Todas (2)"
+
+
+def test_stale_shows_on_the_diagram_tab(strip: EditorStrip) -> None:
+    strip.set_statements(STATEMENTS, 2)
+    strip.set_stale(True)
+    assert strip.is_stale()
+    assert strip._stale_label.isHidden()
+    strip.set_tab("diagram")
+    assert not strip._stale_label.isHidden()
+    assert strip._stale_label.text() == "outdated"
+    strip.clear()
+    assert not strip.is_stale()
+    assert strip._stale_label.isHidden()
+    assert strip.current_statement() == 0
+    assert strip._statement_button.isHidden()
+
+
+def test_more_menu(strip: EditorStrip) -> None:
+    rearranged: list[bool] = []
+    toggled: list[bool] = []
+    strip.rearrange_requested.connect(lambda: rearranged.append(True))
+    strip.results_toggled.connect(toggled.append)
+    texts = [a.text() for a in strip.more_menu().actions()]
+    assert texts == ["Rearrange", "Show result"]
+    actions = strip.more_actions()
+    actions["rearrange"].trigger()
+    actions["results"].trigger()
+    assert rearranged == [True]
+    assert toggled == [False]
+    strip.set_show_results(True)
+    assert actions["results"].isChecked()
+    assert toggled == [False]  # quietly

@@ -288,3 +288,23 @@ class CodeEditor(QPlainTextEdit):
         self._occurrence_timer.stop()
         self._recompute_occurrences()
         return True
+
+    def select_range(self, start: int, end: int) -> None:
+        """Select the text from *start* to *end* (offsets in the plain text,
+        as Python counts them) and bring it into view."""
+        text = self.toPlainText()
+
+        def position(offset: int) -> int:
+            # The document counts UTF-16 units; an emoji is two of them.
+            offset = min(max(offset, 0), len(text))
+            return len(text[:offset].encode("utf-16-le", "surrogatepass")) // 2
+
+        last = self.document().characterCount() - 1
+        cursor = QTextCursor(self.document())
+        cursor.setPosition(min(position(start), last))
+        cursor.setPosition(min(position(end), last), QTextCursor.MoveMode.KeepAnchor)
+        self.setTextCursor(cursor)
+        self.ensureCursorVisible()
+        self.setFocus()
+        self._occurrence_timer.stop()
+        self._recompute_occurrences()

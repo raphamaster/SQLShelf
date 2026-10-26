@@ -442,7 +442,7 @@ Uma por vez, na branch `feat/query-diagram`, um commit por fatia (Conventional C
 - **Aceite:** telas 06 e 08 sem tooltip, e os itens 1 a 4 da tela 09; troca de tema ao vivo.
 
 ### D5 — Interação (ui)
-- [ ] **Entrega:**
+- [x] **Entrega:**
   - seleção com esmaecimento;
   - hover e tooltip (arestas, colunas filtradas e rodapé `HAVING`, item 5 da tela 09);
   - duplo clique → SQL no `Span`;

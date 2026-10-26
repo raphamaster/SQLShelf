@@ -9,7 +9,7 @@ from pathlib import Path
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
-from PySide6.QtCore import QEventLoop, Qt, QTimer
+from PySide6.QtCore import QEventLoop, QPointF, Qt, QTimer
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
@@ -736,3 +736,116 @@ def test_language_and_theme_reach_the_diagram_without_a_new_analysis(
     assert window._diagram_pane.graph() is graph
     assert window._diagram_pane.state() == "diagram"
     assert calls == []
+
+
+def _tables(win: MainWindow) -> set[str]:
+    graph = win._diagram_pane.displayed()
+    assert graph is not None
+    return {n.name for n in graph.nodes if n.kind == "table"}
+
+
+def test_go_to_sql_selects_the_table_in_the_editor(
+    window: MainWindow, library: Path
+) -> None:
+    window._set_details_tab("diagram")
+    _load(window, library)
+    _show_diagram(window, "sales.sql")
+    go = window._diagram_pane.view.node_menu("sales").actions()[0]
+    assert go.text() == "Go to SQL"
+    go.trigger()
+    assert window._editor_strip.tab() == "sql"
+    assert window._details_stack.currentWidget() is window._editor
+    assert window._editor.textCursor().selectedText() == "sales"
+
+
+def test_search_in_all_queries_from_a_table(window: MainWindow, library: Path) -> None:
+    window._set_details_tab("diagram")
+    _load(window, library)
+    _show_diagram(window, "sales.sql")
+    menu = window._diagram_pane.view.node_menu("sales")
+    search = next(a for a in menu.actions() if a.text() == "Search in all queries")
+    search.trigger()
+    assert window._nav.current == NavState("search", library, "table:sales")
+
+
+TWO_STATEMENTS = (
+    "SELECT id FROM clients;\n"
+    "SELECT o.id FROM orders o JOIN clients c ON c.id = o.client_id;"
+)
+
+
+def test_the_statement_selector_narrows_the_diagram(
+    window: MainWindow, library: Path
+) -> None:
+    (library / "reports" / "clients.sql").write_text(TWO_STATEMENTS, encoding="utf-8")
+    window._set_details_tab("diagram")
+    _load(window, library)
+    _show_diagram(window, "reports/clients.sql")
+    strip = window._editor_strip
+    assert not strip._statement_button.isHidden()
+    assert _tables(window) == {"clients", "orders"}
+
+    actions = [a for a in strip.statement_menu().actions() if not a.isSeparator()]
+    actions[1].trigger()
+    assert window._diagram_pane.statement() == 1
+    assert _tables(window) == {"clients"}
+    assert strip.counts_text() == "1 table"
+    actions[2].trigger()
+    assert _tables(window) == {"clients", "orders"}
+    assert strip.counts_text() == "2 tables · 1 join"
+
+    strip.more_actions()["results"].trigger()
+    graph = window._diagram_pane.displayed()
+    assert graph is not None
+    assert all(n.kind != "result" for n in graph.nodes)
+
+    _show_diagram(window, "sales.sql")
+    assert strip.current_statement() == 0
+    assert window._diagram_pane.statement() == 0
+    assert strip._statement_button.isHidden()
+
+
+def test_editing_redraws_the_diagram_and_keeps_the_last_good_one(
+    window: MainWindow, library: Path
+) -> None:
+    window._set_details_tab("diagram")
+    _load(window, library)
+    _show_diagram(window, "sales.sql")
+    first = window._diagram_pane.graph()
+    window._on_edit_shortcut()
+    window._set_details_tab("diagram", save=False)
+    scene = window._diagram_pane.view._scene
+    scene.move_node("sales", QPointF(40, 30))
+    moved = QPointF(scene.moved["sales"])
+
+    window._editor.setPlainText(
+        "SELECT * FROM sales s JOIN regions r ON r.id = s.region_id"
+    )
+    _wait_until(lambda: _tables(window) == {"sales", "regions"})
+    assert scene.moved.get("sales") == moved  # the drawing kept its place
+    assert not window._editor_strip.is_stale()
+    good = window._diagram_pane.graph()
+
+    window._editor.setPlainText("SELECT * FROM sales s JOIN (")
+    _wait_until(window._editor_strip.is_stale)
+    assert window._diagram_pane.graph() is good
+
+    window._cancel_edit_mode()
+    assert not window._editor_strip.is_stale()
+    _wait_until(lambda: window._query_loaded and window._diagram_pane.graph() is first)
+    assert window._editor.toPlainText() == "SELECT * FROM sales"
+
+
+def test_a_large_query_waits_for_analyze_anyway(
+    window: MainWindow, library: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(mw, "is_large", lambda body: True)
+    window._set_details_tab("diagram")
+    _load(window, library)
+    _select(window, "sales.sql")
+    _wait_until(lambda: window._diagram_pane.state() == "large")
+    assert window._editor_strip.counts_text() == ""
+
+    window._diagram_pane._large_button.click()
+    _wait_until(lambda: window._diagram_pane.state() == "diagram")
+    assert _tables(window) == {"sales"}

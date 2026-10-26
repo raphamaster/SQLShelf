@@ -479,6 +479,11 @@ def app_stylesheet(palette: Mapping[str, str]) -> str:
             font-size: {_tk.FONT_PX_SMALL}px;
             font-weight: 600;
         }}
+        QLabel#EditorStripStale {{
+            color: {c["warning"]};
+            font-size: {_tk.FONT_PX_SMALL}px;
+            font-weight: 600;
+        }}
         QToolButton#EditorTab {{
             background: transparent;
             color: {c["text2"]};
@@ -515,6 +520,15 @@ def app_stylesheet(palette: Mapping[str, str]) -> str:
         QToolButton#StripButton:pressed, QToolButton#StripZoom:pressed {{
             background-color: {c["sel_soft"]};
         }}
+        QToolButton#StripButton::menu-indicator {{
+            image: none;
+            width: 0px;
+        }}
+        QToolButton#StripButton QLabel {{
+            background: transparent;
+            color: {c["text2"]};
+            font-size: {_tk.FONT_PX_SMALL}px;
+        }}
         QGraphicsView#DiagramView {{
             background-color: {c["dg_canvas"]};
             border: none;
@@ -536,6 +550,32 @@ def app_stylesheet(palette: Mapping[str, str]) -> str:
             background: transparent;
             color: {c["text3"]};
             font-size: {_tk.FONT_PX_SMALL}px;
+        }}
+        QWidget#DiagramNotices {{
+            background-color: {c["dg_canvas"]};
+        }}
+        QFrame#DiagramNotice {{
+            background-color: {c["panel"]};
+            border: 1px solid {c["border"]};
+            border-radius: {r}px;
+        }}
+        QFrame#DiagramNotice QLabel {{
+            background: transparent;
+            border: none;
+            color: {c["text"]};
+            font-size: {_tk.FONT_PX_SMALL}px;
+        }}
+        QToolButton#DiagramNoticeButton {{
+            background: transparent;
+            color: {c["accent_text"]};
+            border: none;
+            border-radius: {r_sm}px;
+            padding: 2px 6px;
+            font-size: {_tk.FONT_PX_SMALL}px;
+            font-weight: 600;
+        }}
+        QToolButton#DiagramNoticeButton:hover {{
+            background-color: {c["hover"]};
         }}
 
         QWidget#EditBanner {{

@@ -42,6 +42,7 @@ DARK: dict[str, str] = {
     "line_no": "#848c95",
     "cur_line": "rgba(255,255,255,.05)",
     "star": "#f5b524",
+    "warning": "#f5a524",
     # SQL syntax
     "syn_keyword": "#6cb6ff",
     "syn_function": "#e7c07b",
@@ -92,6 +93,7 @@ LIGHT: dict[str, str] = {
     "line_no": "#656d76",
     "cur_line": "rgba(0,0,0,.04)",
     "star": "#f5b524",
+    "warning": "#a65f00",
     # SQL syntax
     "syn_keyword": "#0b5cad",
     "syn_function": "#8a5a00",
