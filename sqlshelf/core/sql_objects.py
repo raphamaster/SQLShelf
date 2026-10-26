@@ -43,7 +43,7 @@ def _parse(sql_body: str, dialect: str, strict: bool):
         return None
 
 
-def _pick_dialect(sql_body: str, default: str) -> str:
+def pick_dialect(sql_body: str, default: str) -> str:
     """Backticks mean BigQuery-style identifiers, which T-SQL cannot tokenise:
     parsing ``FROM `proj.dataset.tbl` u`` as tsql yields a table named '`'.
     Everything else stays on the configured dialect — BigQuery is a poor
@@ -112,7 +112,7 @@ def extract_objects(sql_body: str, dialect: str = "tsql") -> dict[str, set[str]]
     # separators, CLR blocks or sqlcmd syntax and never parse cleanly, yet
     # still name plenty of real tables. _is_valid_name drops the debris that
     # error recovery leaves behind.
-    tree = _parse(sql_body, _pick_dialect(sql_body, dialect), strict=False)
+    tree = _parse(sql_body, pick_dialect(sql_body, dialect), strict=False)
     if tree is None:
         return _empty()
     return _collect(tree)

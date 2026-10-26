@@ -417,7 +417,7 @@ Uma por vez, na branch `feat/query-diagram`, um commit por fatia (Conventional C
 - **Testes** (`test_sql_segments.py`): os casos de 1 a 6 da tabela abaixo; `GO` com contagem e comentário; `CASE … END` e `ELSE` de `CASE`; `WITH (NOLOCK)` e `WITH CHECK`; `UPDATE STATISTICS`; `body[s.start:s.end] == s.text` em todos.
 
 ### D2 — Grafo (core)
-- [ ] **Entrega:** `query_graph.py` completo (modelo, regras 2 a 6, `for_statement`).
+- [x] **Entrega:** `query_graph.py` completo (modelo, regras 2 a 6, `for_statement`).
 - **Testes** (`test_query_graph.py`): todos os casos da tabela abaixo, com `pytest.mark.parametrize`; os de filtro (17 a 20) conferem `predicate`, `clause`, `in_or` e `span` de cada filtro.
 
 ### D3 — Layout (core)
