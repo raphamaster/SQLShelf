@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [1.3.0] - 2026-10-26
 
 ### Added
 - **Query diagram** — a Diagram tab next to SQL in the details panel (Ctrl+Shift+D) draws the selected query from its text alone, without touching the database: tables grouped by schema, temp tables, CTEs and derived tables, and the result, each with the columns the query uses and what it does with them (join, where, group by, the expression of an output column). Joins show their kind on the line between the two columns, data flows are dashed, and each filter sits on its column with the short condition in the editor's syntax colours; a node counts its filters, a `HAVING` sits under the result and a node with more than eight columns ends in a "+N more" row. The strip shows how many tables, joins and filters there are, with Fit, zoom and the zoom level; drag to pan, Ctrl+wheel to zoom. The analysis runs in the background and the last 32 are kept, so moving through the list never waits on it. The tab you pick is remembered; Edit, Select all and Copy SQL still act on the SQL
