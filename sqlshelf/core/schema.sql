@@ -16,7 +16,9 @@ CREATE TABLE queries (
     content_hash    TEXT    NOT NULL,
     has_frontmatter INTEGER NOT NULL DEFAULT 1,
     created_at      TEXT,
-    updated_at      TEXT
+    updated_at      TEXT,
+    -- A key of dialects.DIALECTS: declared in the frontmatter, else detected.
+    dialect         TEXT    NOT NULL DEFAULT 'sql'
 );
 
 CREATE TABLE tags (

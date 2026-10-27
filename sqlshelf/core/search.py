@@ -4,10 +4,12 @@ import re
 import sqlite3
 from datetime import datetime
 
+from .dialects import normalize
 from .models import SearchResult
 
 # Matches prefixes like table:Customers  col:OrderId  tag:finance  date:15/06/2026
-_PREFIX_RE = re.compile(r"(?:^|\s)(table|col|tag|date):(\S+)")
+# dialect:oracle
+_PREFIX_RE = re.compile(r"(?:^|\s)(table|col|tag|date|dialect):(\S+)")
 
 # Subqueries appended to every SELECT for the new display fields.
 # GROUP_CONCAT has no defined order, and the list shows only the first table —
@@ -25,9 +27,11 @@ _IS_FAV_SUBQ = (
     "  (SELECT 1 FROM favorites f WHERE f.rel_path=q.rel_path)"
     " THEN 1 ELSE 0 END"
 )
+# The columns after the first six of every result row, in _rows_to_results order.
+_ROW_TAIL = f"q.updated_at, {_TABLES_SUBQ}, {_IS_FAV_SUBQ}, q.file_mtime, q.dialect"
 
 
-OPERATORS = ("table", "col", "tag", "date")
+OPERATORS = ("table", "col", "tag", "date", "dialect")
 
 
 def split_tokens(text: str) -> tuple[list[tuple[str, str]], str]:
@@ -57,7 +61,8 @@ def parse_query(text: str) -> tuple[dict[str, list[str]], str]:
     """Split 'table:X col:Y date:DD/MM/YYYY free text' into (filters, free_text).
 
     Returns:
-        filters: dict with keys 'table', 'col', 'tag', 'date', each a list of values.
+        filters: dict with keys 'table', 'col', 'tag', 'date', 'dialect', each a
+            list of values.
         free_text: remaining text after stripping all prefix:value tokens.
     """
     filters: dict[str, list[str]] = {op: [] for op in OPERATORS}
@@ -78,6 +83,12 @@ def _parse_date_filter(date_str: str) -> tuple[int, int] | None:
         return start, end
     except ValueError:
         return None
+
+
+def _dialect_value(text: str) -> str:
+    """The dialect key ``dialect:text`` matches: ``plsql`` and ``PL/SQL`` both
+    find Oracle. A name no dialect answers to matches nothing."""
+    return normalize(text) or text.casefold()
 
 
 def _build_fts_query(text: str) -> str:
@@ -103,7 +114,7 @@ def search(conn: sqlite3.Connection, text: str) -> list[SearchResult]:
     Supports:
     - Empty string → all queries, alphabetical.
     - Free text → FTS5 MATCH with bm25 ranking.
-    - table:X, col:X, tag:X → relational filters.
+    - table:X, col:X, tag:X, dialect:X → relational filters.
     - Combinations of any of the above.
     """
     text = text.strip()
@@ -151,6 +162,10 @@ def search(conn: sqlite3.Connection, text: str) -> list[SearchResult]:
             where_parts.append("q.file_mtime BETWEEN ? AND ?")
             params.extend([start_ts, end_ts])
 
+    for name in filters["dialect"]:
+        where_parts.append("q.dialect = ?")
+        params.append(_dialect_value(name))
+
     if use_fts:
         fts_expr = _build_fts_query(free_text)
         if not fts_expr:
@@ -170,10 +185,7 @@ def search(conn: sqlite3.Connection, text: str) -> list[SearchResult]:
             SELECT q.id, q.rel_path, q.title, COALESCE(q.description, ''),
                    '',
                    bm25(queries_fts),
-                   q.updated_at,
-                   {_TABLES_SUBQ},
-                   {_IS_FAV_SUBQ},
-                   q.file_mtime
+                   {_ROW_TAIL}
             FROM queries q
             JOIN queries_fts ON queries_fts.rowid = q.id
             {where_clause}
@@ -183,10 +195,7 @@ def search(conn: sqlite3.Connection, text: str) -> list[SearchResult]:
         sql = f"""
             SELECT q.id, q.rel_path, q.title, COALESCE(q.description, ''),
                    '', 0.0,
-                   q.updated_at,
-                   {_TABLES_SUBQ},
-                   {_IS_FAV_SUBQ},
-                   q.file_mtime
+                   {_ROW_TAIL}
             FROM queries q
             {where_clause}
             ORDER BY q.file_mtime DESC, q.title
@@ -203,7 +212,7 @@ def search(conn: sqlite3.Connection, text: str) -> list[SearchResult]:
 def _all_queries(conn: sqlite3.Connection) -> list[SearchResult]:
     rows = conn.execute(
         f"SELECT q.id, q.rel_path, q.title, COALESCE(q.description, ''), '', 0.0,"
-        f" q.updated_at, {_TABLES_SUBQ}, {_IS_FAV_SUBQ}, q.file_mtime"
+        f" {_ROW_TAIL}"
         " FROM queries q ORDER BY q.file_mtime DESC, q.title"
     ).fetchall()
     return _rows_to_results(conn, rows)
@@ -241,6 +250,7 @@ def _rows_to_results(conn: sqlite3.Connection, rows: list[tuple]) -> list[Search
             tables_str,
             is_fav,
             file_mtime,
+            dialect,
         ) = row
         tables = [t for t in (tables_str or "").split(",") if t]
         results.append(
@@ -256,6 +266,7 @@ def _rows_to_results(conn: sqlite3.Connection, rows: list[tuple]) -> list[Search
                 updated_at=updated_at,
                 is_favorite=bool(is_fav),
                 file_mtime=file_mtime or 0,
+                dialect=dialect or "sql",
             )
         )
     return results

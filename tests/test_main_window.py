@@ -14,6 +14,7 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
 from sqlshelf.core import config as cfg
+from sqlshelf.core.dialects import get
 from sqlshelf.core.frontmatter import read_sql_file
 from sqlshelf.core.i18n import set_language
 from sqlshelf.core.navigation import NavState
@@ -173,6 +174,7 @@ def test_status_bar_reports_the_library_state(
     assert status._counts.text().startswith("2 queries")
     assert status._index.text() == "Index up to date"
     assert status._watch.text() == "Watching 1 folder"
+    assert status._dialect.isHidden()  # no query open
 
 
 def test_flash_replaces_the_counts_then_restores_them(
@@ -235,11 +237,51 @@ def test_selecting_a_query_fills_the_strip_and_enables_the_actions(
     _load(window, library)
     panel = window._metadata_panel
     _select(window, "sales.sql")
-    assert window._editor_strip.info_text() == "1 line · UTF-8 · T-SQL"
+    # Nothing in "SELECT * FROM sales" names a dialect.
+    assert window._editor_strip.info_text() == "1 line · UTF-8 · SQL"
     assert panel._title_label.full_text() == "Sales"
     assert panel._file_name_label.full_text() == "sales.sql"
     assert panel._copy_btn.isEnabled()
     assert panel._edit_btn.isEnabled()
+
+
+@pytest.mark.parametrize(
+    ("header", "body", "label", "tooltip"),
+    [
+        (
+            "dialect: PL/SQL\n",
+            "SELECT * FROM sales",
+            "Oracle",
+            "Oracle: declared in the file header",
+        ),
+        ("", "SELECT id::text FROM sales", "PostgreSQL", "PostgreSQL: read from "),
+        ("", "SELECT * FROM sales", "SQL", "No dialect detected"),
+    ],
+)
+def test_the_strip_status_bar_and_colours_follow_the_dialect(
+    window: MainWindow,
+    library: Path,
+    header: str,
+    body: str,
+    label: str,
+    tooltip: str,
+) -> None:
+    (library / "sales.sql").write_text(
+        f"/* ---\ntitle: Sales\n{header}--- */\n{body}", encoding="utf-8"
+    )
+    _load(window, library)
+    _select(window, "sales.sql")
+    strip = window._editor_strip
+    status = window._status_bar
+    assert strip.info_text().endswith(f" · {label}")
+    assert strip._info.toolTip().startswith(tooltip)
+    assert not status._dialect.isHidden()
+    assert status._dialect.text() == label
+    assert status._dialect.toolTip() == strip._info.toolTip()
+    assert get(window._highlighter.dialect()).label == label
+
+    window._reset_editor()  # as when a search finds nothing
+    assert status._dialect.isHidden()
 
 
 def test_copy_sql_copies_the_body_without_frontmatter(
@@ -323,8 +365,32 @@ def test_saving_writes_the_edits_and_keeps_the_other_fields(
     assert meta["custom"] == "keep"
     assert str(meta["created"]) == "2026-01-01"
     assert "updated" in meta
+    assert "dialect" not in meta  # automatic writes nothing
     assert body == "SELECT * FROM sales"
     assert panel._title_label.full_text() == "Monthly sales"
+
+
+def test_the_form_offers_the_detected_dialect_and_saves_a_choice(
+    window: MainWindow, library: Path
+) -> None:
+    sales = library / "sales.sql"
+    sales.write_text("SELECT SYSDATE FROM dual WHERE ROWNUM <= 5", encoding="utf-8")
+    _load(window, library)
+    _edit(window)
+    combo = window._metadata_panel._dialect_combo
+    assert combo.currentText() == "Automatic (detected: Oracle)"
+
+    combo.setCurrentIndex(combo.findData("postgres"))
+    window.save_current()
+    _wait_until(lambda: not window._saving and window._query_loaded)
+    assert read_sql_file(sales)[0]["dialect"] == "postgres"
+
+    _edit(window)
+    assert combo.currentText() == "PostgreSQL"
+    combo.setCurrentIndex(0)
+    window.save_current()
+    _wait_until(lambda: not window._saving and window._query_loaded)
+    assert "dialect" not in read_sql_file(sales)[0]
 
 
 def test_a_failed_save_stays_in_edit_mode(
@@ -613,6 +679,28 @@ def test_the_diagram_tab_draws_the_loaded_query(
     assert window._details_stack.currentWidget() is window._editor
 
 
+def test_the_diagram_reads_the_declared_dialect(
+    window: MainWindow, library: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    read_as: list[str | None] = []
+
+    def spy(body: str, dialect: str | None = None) -> QueryGraph:
+        read_as.append(dialect)
+        return build_query_graph(body, dialect)
+
+    monkeypatch.setattr(mw, "build_query_graph", spy)
+    (library / "sales.sql").write_text(
+        "/* ---\ntitle: Sales\ndialect: PL/SQL\n--- */\nSELECT * FROM sales",
+        encoding="utf-8",
+    )
+    window._set_details_tab("diagram")
+    _load(window, library)
+    _show_diagram(window, "sales.sql")
+    _show_diagram(window, "reports/clients.sql")
+    # Without a declaration the dialect is left to the body.
+    assert read_as == ["oracle", None]
+
+
 def test_ctrl_shift_d_toggles_the_details_tab(
     window: MainWindow, library: Path
 ) -> None:
@@ -667,7 +755,7 @@ def test_going_back_to_a_query_uses_the_cache(
 
     calls: list[str] = []
 
-    def counting(body: str, dialect: str = "tsql") -> QueryGraph:
+    def counting(body: str, dialect: str | None = None) -> QueryGraph:
         calls.append(body)
         return build_query_graph(body, dialect)
 

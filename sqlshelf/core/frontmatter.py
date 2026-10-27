@@ -7,6 +7,7 @@ from typing import Any
 
 import yaml
 
+from .dialects import normalize
 from .encoding import read_text, write_text
 
 FRONTMATTER_PATTERN = re.compile(r"^/\*\s*---\s*\n(.*?)\n---\s*\*/\s*\n?", re.DOTALL)
@@ -55,10 +56,15 @@ def apply_edits(
     description: str,
     tags: list[str],
     author: str,
+    dialect: str,
 ) -> dict[str, Any]:
     """*metadata* with the edit form's fields; every other key keeps its place.
 
     An empty author removes the key rather than writing ``author: ''``.
+    *dialect* is a key of ``dialects.DIALECTS``, or empty to leave the dialect
+    to detection. A ``dialect`` already naming it stays as written, so
+    ``PL/SQL`` is not rewritten as ``oracle``; one the app does not know is
+    never removed.
     """
     meta = dict(metadata)
     meta["title"] = title
@@ -68,6 +74,12 @@ def apply_edits(
         meta["author"] = author
     else:
         meta.pop("author", None)
+    declared = normalize(meta.get("dialect"))
+    if not dialect:
+        if declared is not None:
+            del meta["dialect"]
+    elif declared != dialect:
+        meta["dialect"] = dialect
     return meta
 
 

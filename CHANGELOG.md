@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.4.0] - 2026-10-26
+
+### Added
+- **SQL dialects** — besides T-SQL, queries in PostgreSQL, MySQL, MariaDB, Oracle (PL/SQL) and BigQuery are read in their own dialect. The dialect is read from the syntax: `GO` lines, `[brackets]`, `DECLARE @`, `TOP` and `#temp` for T-SQL; `::` casts, `$$` bodies, `ILIKE` and `ON CONFLICT` for PostgreSQL; backtick names, `LIMIT 5, 10`, `AUTO_INCREMENT` and `ON DUPLICATE KEY` for MySQL (and `WITH SYSTEM VERSIONING`, `ENGINE=Aria` or `/*M!` for MariaDB); `FROM DUAL`, `ROWNUM`, `NVL`, `VARCHAR2`, `CONNECT BY` and slash lines for Oracle; `` `project.dataset.table` ``, `SAFE_CAST`, `STRUCT<…>` and `INT64` for BigQuery. Comments and strings say nothing, so `-- LIMIT 5, 10` or `'GO'` change no guess. A query with no clear sign is generic SQL and is read as T-SQL, as every query was before
+- **Choosing a query's dialect** — the edit form has a Dialect field: Automatic, which shows what the syntax reads as, each dialect, or Generic SQL. A choice is written to the metadata block as `dialect:` and always wins over the syntax; Automatic removes it. The block accepts the usual names (`PL/SQL`, `SQL Server`, `pg`, `bq`…) and keeps the spelling it has; a name the app does not know is left alone
+- **Each dialect, read as itself** — tables and columns are indexed with that dialect's parser, and statements are split by its rules: Oracle's `/` lines and `q'[…]'` strings, MySQL's `DELIMITER`, PostgreSQL's `$$` bodies, each dialect's procedural blocks and dynamic SQL. The query diagram is drawn in the dialect the metadata names, or else the one the syntax shows
+- **`dialect:` search operator** — `dialect:oracle` keeps the queries read as Oracle, in the search box and in quick search; it takes the same names as the metadata block, so `dialect:plsql` and `dialect:sqlserver` work too. The search help and the empty-list hint mention it
+- **Dialect in the editor and the status bar** — both name the dialect the open query is read as, instead of a fixed "T-SQL", with a tooltip saying why: declared in the file header, read from the syntax (with the signs that gave it away), or none detected
+- **Colours per dialect** — the editor and the grid thumbnails colour each query in its dialect: `#` comments and `"…"` strings in MySQL and BigQuery, backtick names, Oracle's `q'[…]'` strings and each dialect's own keywords (`LIMIT`, `RETURNING`, `QUALIFY`, `CONNECT BY`…). A quoted name is drawn as a name, so `[order]` and `` `order` `` no longer show a keyword
+
+### Changed
+- **Index rebuilt once** — the index stores each query's dialect; it moves to schema version 6 and rebuilds itself the first time a folder is opened
+
+### Fixed
+- **T-SQL after `END` or `PRINT`** — a statement right after an `END` or a `PRINT` line was read as part of it and left out; it is now indexed and drawn in the diagram
+
+### Docs
+- `docs/sql-dialects.md` describes how the dialect is chosen, what each part of the app does with it, and the cases that must not regress
+
 ## [1.3.0] - 2026-10-26
 
 ### Added

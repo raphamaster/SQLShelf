@@ -51,7 +51,7 @@ sqlshelf/
 | Índice | SQLite + FTS5 via `sqlite3` (stdlib) | Sem driver externo |
 | Frontmatter | `PyYAML` | Parser YAML maduro |
 | Watcher | `watchdog` | Multiplataforma, debounce manual |
-| Extração de objetos SQL | `sqlglot` | Pure Python, bom suporte a T-SQL, sem fallback regex necessário |
+| Extração de objetos SQL | `sqlglot` | Pure Python, lê T-SQL, PostgreSQL, MySQL, Oracle e BigQuery (MariaDB pelo parser MySQL), sem fallback regex necessário |
 | Testes | `pytest` | Padrão de fato |
 | Lint/format | `ruff` + `black` | Configuração mínima, rápidos |
 | Type check | `mypy` | Roda sobre `sqlshelf/`, `main.py` e `tests/` |
@@ -90,6 +90,7 @@ Regras:
 - YAML malformado nunca derruba a indexação: `metadata = {}`, body = conteúdo inteiro, `has_frontmatter = False`.
 - Gravação sempre em UTF-8. Leitura detecta UTF-8/UTF-16/Windows-1252 (Fase 1, item 10).
 - Ao salvar edições, o bloco de frontmatter é reescrito de forma íntegra — nunca perder campos não editados pela UI.
+- `dialect:` é opcional (`tsql`, `postgres`, `mysql`, `mariadb`, `oracle`, `bigquery`, ou apelidos como `PL/SQL`, `SQL Server`, `pg`). Sem ele, o dialeto é lido pela sintaxe; ver `docs/sql-dialects.md`.
 
 ---
 
@@ -223,7 +224,7 @@ Notas:
 | `tag:relatorio` | filtro por tag |
 | `table:Doc tag:relatorio erros` | interseção dos filtros + FTS no texto livre |
 
-`sqlshelf/core/search.py` faz o parsing da string de busca, separando prefixos `table:`/`col:`/`tag:` do texto livre, e monta a query SQL combinando filtros relacionais com `MATCH`.
+`sqlshelf/core/search.py` faz o parsing da string de busca, separando prefixos `table:`/`col:`/`tag:`/`date:`/`dialect:` do texto livre, e monta a query SQL combinando filtros relacionais com `MATCH`.
 
 ---
 
@@ -248,7 +249,7 @@ def extract_objects(sql_body: str, dialect: str = "tsql") -> dict[str, set[str]]
     return {"table": tables, "column": columns, "procedure": set(), "function": set()}
 ```
 
-- `dialect="tsql"` cobre `CROSS APPLY`, CTEs, funções de janela, `TOP`, hints.
+- O dialeto vem de cada query (`dialects.resolve()`: `dialect:` do frontmatter ou a sintaxe; sem sinal claro, T-SQL). `tsql` cobre `CROSS APPLY`, CTEs, funções de janela, `TOP`, hints; os demais dialetos usam o parser correspondente do sqlglot (`Dialect.parser`).
 - Em caso de `ParseError`: retorna conjuntos vazios, indexador marca `has_parse_error = True` na linha de `queries` (campo adicional opcional) e sinaliza `⚠` na UI — nunca propaga exceção para o usuário.
 - Resultado alimenta `query_objects` e a coluna `objects` do FTS.
 
@@ -297,7 +298,7 @@ def extract_objects(sql_body: str, dialect: str = "tsql") -> dict[str, set[str]]
 |---|---|
 | Encoding legado (Win-1252) quebra índice/busca | `encoding.py` desde o item 10 da Fase 1; gravação sempre UTF-8 |
 | Frontmatter corrompido por edição externa | Parser tolerante (já no esqueleto): indexa só o body, `has_frontmatter=False`, sinaliza ⚠ |
-| `sqlglot` não parsear T-SQL não-padrão | `ParseError` tratado, `has_parse_error=True`, sem exceção ao usuário |
+| `sqlglot` não parsear T-SQL não-padrão, ou a query ser lida no dialeto errado | `ParseError` tratado, `has_parse_error=True`, sem exceção ao usuário; o usuário corrige o dialeto no formulário (`dialect:`) |
 | Escopo crescer antes do MVP rodar | Regra de ouro: nada de Fase 2+ antes de uso real por 1 semana |
 | Pastas grandes (milhares de arquivos) | Indexação incremental por `mtime`+hash; `QThread`/`QRunnable` para scan sem travar a UI |
 | Performance da UI com listas grandes | `QListWidget` simples até ~1000 itens; migrar para `QListView` + model próprio se necessário |

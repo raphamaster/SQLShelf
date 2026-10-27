@@ -18,6 +18,9 @@ class Query:
     updated_at: str | None = None
     tables: list[str] = field(default_factory=list)
     columns: list[str] = field(default_factory=list)
+    # The dialect key the frontmatter declares (see dialects.normalize); None
+    # leaves it to detection.
+    dialect: str | None = None
 
 
 @dataclass
@@ -47,3 +50,4 @@ class SearchResult:
     updated_at: str | None = None
     is_favorite: bool = False
     file_mtime: int = 0
+    dialect: str = "sql"

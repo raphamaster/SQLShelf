@@ -683,3 +683,79 @@ def test_variable_assignment_has_no_result() -> None:
 
     assert [n.id for n in graph.nodes] == ["dbo.p"]
     assert _column(graph.nodes[0], "id").roles == {"select"}
+
+
+# --- Dialects -------------------------------------------------------------------
+
+
+def test_postgres_upsert_is_one_insert() -> None:
+    body = (
+        "INSERT INTO sales.totals (id, total)\n"
+        "SELECT o.id, o.total::numeric FROM sales.orders o\n"
+        "ON CONFLICT (id) DO UPDATE SET total = excluded.total;"
+    )
+    graph = build_query_graph(body, "postgres")
+
+    assert [(s.kind, s.status) for s in graph.statements] == [("INSERT", "ok")]
+    assert _flows(graph) == {("sales.orders", "sales.totals", "INSERT")}
+
+
+def test_mysql_backticks_and_duplicate_key() -> None:
+    body = (
+        "INSERT INTO t (a) SELECT `x`.`a` FROM `shop`.`src` x\n"
+        "ON DUPLICATE KEY UPDATE a = 2;"
+    )
+    graph = build_query_graph(body, "mysql")
+
+    assert [(s.kind, s.status) for s in graph.statements] == [("INSERT", "ok")]
+    assert _flows(graph) == {("shop.src", "t", "INSERT")}
+
+
+def test_oracle_select_into_fills_a_variable() -> None:
+    body = (
+        "DECLARE\n"
+        "  v NUMBER;\n"
+        "BEGIN\n"
+        "  SELECT COUNT(*) INTO v FROM hr.employees e WHERE e.dept_id = 10;\n"
+        "END;\n"
+        "/"
+    )
+    graph = build_query_graph(body, "oracle")
+
+    assert [n.id for n in graph.nodes] == ["hr.employees"]
+    assert [(s.kind, s.status) for s in graph.statements] == [("SELECT", "ok")]
+
+
+def test_oracle_q_quote_keeps_spans() -> None:
+    body = "SELECT q'[it's]' AS x, e.name FROM hr.employees e WHERE ROWNUM <= 10"
+    graph = build_query_graph(body, "oracle")
+
+    node = _node(graph, "hr.employees")
+    assert [body[s.start : s.end] for s in node.spans] == ["hr.employees"]
+
+
+def test_dialect_read_from_the_body() -> None:
+    graph = build_query_graph("SELECT o.id::text FROM public.orders o")
+
+    assert [n.id for n in graph.nodes] == ["public.orders", "result:1"]
+
+
+@pytest.mark.parametrize(
+    "body,dialect",
+    [
+        ("DO $$ BEGIN EXECUTE 'DELETE FROM ' || tbl; END $$;", "postgres"),
+        ("BEGIN EXECUTE IMMEDIATE 'TRUNCATE TABLE t'; END;", "oracle"),
+        ("BEGIN DBMS_SQL.PARSE(c, q, DBMS_SQL.NATIVE); END;", "oracle"),
+        ("PREPARE s FROM @q; EXECUTE s;", "mysql"),
+        ("PREPARE s FROM @q; EXECUTE s;", "mariadb"),
+        ("EXECUTE IMMEDIATE 'SELECT 1';", "bigquery"),
+    ],
+)
+def test_dynamic_sql_of_each_dialect(body: str, dialect: str) -> None:
+    assert build_query_graph(body, dialect).notes == ["dynamic_sql"]
+
+
+@pytest.mark.parametrize("dialect", ["postgres", "oracle", "mysql", "bigquery"])
+def test_dynamic_sql_word_in_a_string_or_comment(dialect: str) -> None:
+    body = "-- EXECUTE IMMEDIATE\nSELECT 'PREPARE s FROM x; EXECUTE s' AS word FROM t"
+    assert build_query_graph(body, dialect).notes == []

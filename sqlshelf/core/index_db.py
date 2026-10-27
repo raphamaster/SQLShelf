@@ -75,6 +75,7 @@ class _PreparedQuery:
     file_size: int
     content_hash: str
     objects: dict[str, set[str]] = field(default_factory=dict)
+    dialect: str = "sql"
 
 
 class IndexDB:
@@ -91,7 +92,7 @@ class IndexDB:
       ``_prepare`` — and writes are committed in small batches.
     """
 
-    SCHEMA_VERSION = "5"
+    SCHEMA_VERSION = "6"
 
     def __init__(self, project_root: Path) -> None:
         self._project_root = project_root
@@ -169,6 +170,7 @@ class IndexDB:
             "has_frontmatter",
             "created_at",
             "updated_at",
+            "dialect",
         }
         return required.issubset(cols)
 
@@ -333,6 +335,7 @@ class IndexDB:
 
     def _prepare(self, query: Query) -> _PreparedQuery | None:
         """Do every expensive part of indexing one file, with no lock held."""
+        from .dialects import resolve
         from .sql_objects import extract_objects
 
         try:
@@ -345,13 +348,15 @@ class IndexDB:
         except OSError:
             return None
 
+        dialect = resolve(query.dialect, query.body).key
         return _PreparedQuery(
             query=query,
             rel_path=rel_path,
             file_mtime=int(stat.st_mtime),
             file_size=stat.st_size,
             content_hash=content_hash,
-            objects=extract_objects(query.body),
+            objects=extract_objects(query.body, dialect),
+            dialect=dialect,
         )
 
     def _prepare_all(
@@ -585,12 +590,12 @@ class IndexDB:
             )
 
     def get_favorites(self) -> list[SearchResult]:
-        from .search import _IS_FAV_SUBQ, _TABLES_SUBQ
+        from .search import _ROW_TAIL
 
         with self._read_lock:
             rows = self._read_conn.execute(
                 f"SELECT q.id, q.rel_path, q.title, COALESCE(q.description, ''), '', 0.0,"
-                f" q.updated_at, {_TABLES_SUBQ}, {_IS_FAV_SUBQ}, q.file_mtime"
+                f" {_ROW_TAIL}"
                 " FROM queries q"
                 " JOIN favorites f ON f.rel_path = q.rel_path"
                 " ORDER BY q.title"
@@ -632,12 +637,12 @@ class IndexDB:
         self, limit: int = 20, prefix: str = ""
     ) -> list[SearchResult]:
         """Recently viewed queries under *prefix* ("" = the whole project)."""
-        from .search import _IS_FAV_SUBQ, _TABLES_SUBQ
+        from .search import _ROW_TAIL
 
         with self._read_lock:
             rows = self._read_conn.execute(
                 f"SELECT q.id, q.rel_path, q.title, COALESCE(q.description, ''), '', 0.0,"
-                f" q.updated_at, {_TABLES_SUBQ}, {_IS_FAV_SUBQ}, q.file_mtime"
+                f" {_ROW_TAIL}"
                 " FROM queries q"
                 " JOIN recently_viewed rv ON rv.rel_path = q.rel_path"
                 f" WHERE {_UNDER_PREFIX}"
@@ -730,8 +735,8 @@ class IndexDB:
             INSERT INTO queries
                 (rel_path, title, description, body,
                  file_mtime, file_size, content_hash,
-                 has_frontmatter, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 has_frontmatter, created_at, updated_at, dialect)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 item.rel_path,
@@ -744,6 +749,7 @@ class IndexDB:
                 int(query.has_frontmatter),
                 query.created_at,
                 query.updated_at,
+                item.dialect,
             ),
         )
         query_id: int = cursor.lastrowid  # type: ignore[assignment]

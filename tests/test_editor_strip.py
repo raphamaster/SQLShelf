@@ -8,10 +8,18 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import pytest
 from PySide6.QtWidgets import QApplication
 
+from sqlshelf.core.dialects import resolve
 from sqlshelf.core.i18n import set_language
 from sqlshelf.core.query_graph import Span, StatementInfo
 from sqlshelf.ui.diagram_view import DiagramCounts
-from sqlshelf.ui.editor_strip import STRIP_HEIGHT, EditorStrip, strip_info
+from sqlshelf.ui.editor_strip import (
+    STRIP_HEIGHT,
+    EditorStrip,
+    dialect_tooltip,
+    strip_info,
+)
+
+TSQL = resolve("tsql", "")
 
 
 def _app() -> QApplication:
@@ -39,7 +47,24 @@ def strip() -> Iterator[EditorStrip]:
 )
 def test_strip_info(lines: int, encoding: str, expected: str) -> None:
     set_language("en")
-    assert strip_info(lines, encoding) == expected
+    assert strip_info(lines, encoding, "T-SQL") == expected
+
+
+@pytest.mark.parametrize(
+    ("declared", "body", "expected"),
+    [
+        ("PL/SQL", "SELECT 1", "Oracle: declared in the file header"),
+        (
+            None,
+            "SELECT name FROM dual WHERE ROWNUM < 5",
+            "Oracle: read from the syntax (DUAL, ROWNUM)",
+        ),
+        (None, "SELECT 1", "No dialect detected: read as generic SQL"),
+    ],
+)
+def test_dialect_tooltip(declared: str | None, body: str, expected: str) -> None:
+    set_language("en")
+    assert dialect_tooltip(resolve(declared, body)) == expected
 
 
 def test_strip_starts_empty_on_the_sql_tab(strip: EditorStrip) -> None:
@@ -54,17 +79,20 @@ def test_strip_starts_empty_on_the_sql_tab(strip: EditorStrip) -> None:
 
 
 def test_set_info_then_clear(strip: EditorStrip) -> None:
-    strip.set_info(6, "UTF-8")
-    assert strip.info_text() == "6 lines · UTF-8 · T-SQL"
+    strip.set_info(6, "UTF-8", resolve(None, "SELECT id::text FROM t"))
+    assert strip.info_text() == "6 lines · UTF-8 · PostgreSQL"
+    assert strip._info.toolTip() == "PostgreSQL: read from the syntax (::)"
     strip.clear()
     assert strip.info_text() == ""
+    assert strip._info.toolTip() == ""
 
 
 def test_retranslate_keeps_the_loaded_facts(strip: EditorStrip) -> None:
-    strip.set_info(6, "Windows-1252")
+    strip.set_info(6, "Windows-1252", TSQL)
     set_language("pt-BR")
     strip.retranslate_ui()
     assert strip.info_text() == "6 linhas · Windows-1252 · T-SQL"
+    assert strip._info.toolTip() == "T-SQL: declarado no cabeçalho do arquivo"
 
 
 def test_retranslate_leaves_an_empty_strip_empty(strip: EditorStrip) -> None:
@@ -74,7 +102,7 @@ def test_retranslate_leaves_an_empty_strip_empty(strip: EditorStrip) -> None:
 
 
 def test_editing_shows_editable_and_the_cursor(strip: EditorStrip) -> None:
-    strip.set_info(6, "UTF-8")
+    strip.set_info(6, "UTF-8", TSQL)
     assert strip.mode_text() == ""
     assert strip.cursor_text() == ""
 
@@ -138,7 +166,7 @@ def test_toggle_tab_flips_and_emits(strip: EditorStrip) -> None:
 
 
 def test_each_tab_shows_its_own_facts(strip: EditorStrip) -> None:
-    strip.set_info(6, "UTF-8")
+    strip.set_info(6, "UTF-8", TSQL)
     strip.set_editing(True)
     strip.set_cursor(1, 1)
     assert not strip._info.isHidden()

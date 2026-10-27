@@ -42,6 +42,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..core import config as cfg
+from ..core.dialects import GENERIC, Detection, detect, normalize, settle
 from ..core.encoding import encoding_label, read_text
 from ..core.folder_tree import folder_prefix
 from ..core.frontmatter import (
@@ -348,6 +349,7 @@ class _LoadedQuery:
     is_favorite: bool
     encoding: str  # display name, "" when the file could not be read
     mtime: float | None
+    detected: Detection  # what the syntax shows, whatever the frontmatter says
 
 
 def _read_query_file(path: Path) -> tuple[dict, str, str, float | None]:
@@ -407,6 +409,7 @@ class _LoadQueryWorker(QRunnable):
             is_favorite=is_favorite,
             encoding=encoding,
             mtime=mtime,
+            detected=detect(body),
         )
         self.signals.finished.emit(payload, self._gen)
 
@@ -438,7 +441,10 @@ class _DiagramSignals(QObject):
 
 class _DiagramWorker(QRunnable):
     """Read the graph of a query's SQL for the Diagram tab; sqlglot is slow on
-    long scripts, so it never runs on the GUI thread."""
+    long scripts, so it never runs on the GUI thread.
+
+    *key* is ``GraphCache.key(body, dialect)``: its dialect is the one the
+    query declares, or "" to read it off the body."""
 
     def __init__(self, body: str, key: tuple[str, str], gen: int) -> None:
         super().__init__()
@@ -448,7 +454,7 @@ class _DiagramWorker(QRunnable):
         self._gen = gen
 
     def run(self) -> None:
-        graph = build_query_graph(self._body)
+        graph = build_query_graph(self._body, self._key[1] or None)
         self.signals.ready.emit(graph, self._key, self._gen)
 
 
@@ -963,6 +969,7 @@ class MainWindow(QMainWindow):
 
         self._current_result: SearchResult | None = None
         self._current_metadata: dict = {}
+        self._current_detected = Detection(GENERIC)
         self._edit_mode = False
         # True while an edited query is being written in the background.
         self._saving = False
@@ -1715,7 +1722,9 @@ class MainWindow(QMainWindow):
         self._metadata_panel.clear()
         self._current_result = None
         self._current_metadata = {}
+        self._current_detected = Detection(GENERIC)
         self._status_bar.set_selected(0)
+        self._status_bar.set_dialect(None)
 
     # ------------------------------------------------------------------
     # UI refresh
@@ -1952,6 +1961,8 @@ class MainWindow(QMainWindow):
         # is being loaded in the background. Until then the panel shows what
         # the index knows, without touching the disk.
         self._current_metadata = {}
+        self._current_detected = Detection(GENERIC)
+        self._status_bar.set_dialect(None)
         self._query_loaded = False
         self._editor.clear()
         self._editor_strip.clear()
@@ -2002,6 +2013,10 @@ class MainWindow(QMainWindow):
             return
         result = loaded.result
         self._current_metadata = loaded.metadata
+        self._current_detected = loaded.detected
+        dialect = settle(loaded.metadata.get("dialect"), loaded.detected)
+        # Before the text arrives, so it is coloured once.
+        self._highlighter.set_dialect(dialect.key)
         self._editor.setPlainText(loaded.body)
         # The file is fresher than the index: after a save the list keeps its
         # selection without announcing it, so this is what shows the new values.
@@ -2019,7 +2034,8 @@ class MainWindow(QMainWindow):
         )
         self._metadata_panel.set_favorite(loaded.is_favorite)
         lines = self._editor.blockCount() if loaded.body else 0
-        self._editor_strip.set_info(lines, loaded.encoding)
+        self._editor_strip.set_info(lines, loaded.encoding, dialect)
+        self._status_bar.set_dialect(dialect)
 
         self._query_loaded = True
         self._metadata_panel.set_actions_enabled(True)
@@ -2328,12 +2344,15 @@ class MainWindow(QMainWindow):
         path = self._folder / self._current_result.rel_path
         meta = self._current_metadata
         title, description, tags = display_fields(path, meta)
+        detected = self._current_detected.dialect
         self._metadata_panel.start_editing(
             title,
             description,
             tags,
             author=str(meta.get("author") or ""),
             created=meta.get("created"),
+            dialect=normalize(meta.get("dialect")) or "",
+            detected="" if detected is GENERIC else detected.label,
         )
         self._editor_strip.set_editing(True)
         self._update_cursor_info()
@@ -2476,7 +2495,7 @@ class MainWindow(QMainWindow):
         if not self._query_loaded:
             return
         body = self._editor.toPlainText()
-        key = GraphCache.key(body)
+        key = GraphCache.key(body, normalize(self._current_metadata.get("dialect")))
         panes = [p for p in self._diagram_panes() if self._diagram_keys.get(p) != key]
         if not panes:
             return
@@ -2695,6 +2714,7 @@ class MainWindow(QMainWindow):
             description=edits.description,
             tags=edits.tags,
             author=edits.author,
+            dialect=edits.dialect,
         )
         self._saving = True
         self._metadata_panel.set_saving(True)

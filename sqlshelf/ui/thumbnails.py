@@ -22,6 +22,7 @@ from PySide6.QtGui import (
     QTextDocument,
 )
 
+from ..core.dialects import GENERIC
 from ..core.preview import read_preview
 from . import tokens as _tk
 from .highlighter import SqlHighlighter
@@ -43,9 +44,11 @@ _READ_POOL.setMaxThreadCount(2)
 _Key = tuple[str, int]  # (path, modification time)
 
 
-def render_thumbnail(text: str, font: QFont, dpr: float = 1.0) -> QPixmap:
+def render_thumbnail(
+    text: str, font: QFont, dpr: float = 1.0, dialect: str = GENERIC.key
+) -> QPixmap:
     """The page of *text*: ``THUMB_WIDTH`` × ``THUMB_HEIGHT`` logical px, drawn
-    like the editor and faded out at the bottom."""
+    like the editor, coloured as *dialect*, and faded out at the bottom."""
     pixmap = QPixmap(round(THUMB_WIDTH * dpr), round(THUMB_HEIGHT * dpr))
     pixmap.setDevicePixelRatio(dpr)
     page = qcolor(_tk.color("code"))
@@ -56,7 +59,7 @@ def render_thumbnail(text: str, font: QFont, dpr: float = 1.0) -> QPixmap:
     document.setDocumentMargin(0)
     document.setPlainText(text)
     # Highlighting is otherwise deferred to the event loop.
-    SqlHighlighter(document).rehighlight()
+    SqlHighlighter(document, dialect).rehighlight()
 
     context = QAbstractTextDocumentLayout.PaintContext()
     palette = QPalette()
@@ -104,28 +107,31 @@ class ThumbnailCache(QObject):
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
         self._texts: OrderedDict[_Key, str] = OrderedDict()
-        self._pixmaps: OrderedDict[tuple[_Key, float], QPixmap] = OrderedDict()
+        self._pixmaps: OrderedDict[tuple[_Key, float, str], QPixmap] = OrderedDict()
         self._pending: set[_Key] = set()
         self._font: QFont | None = None
 
-    def thumbnail(self, path: Path, mtime: int, dpr: float = 1.0) -> QPixmap | None:
-        """The thumbnail of *path* as of *mtime*; None while it is being read."""
+    def thumbnail(
+        self, path: Path, mtime: int, dpr: float = 1.0, dialect: str = GENERIC.key
+    ) -> QPixmap | None:
+        """The thumbnail of *path* as of *mtime*, coloured as *dialect*; None
+        while it is being read."""
         key = (str(path), mtime)
         text = self._texts.get(key)
         if text is None:
             self._request(key, path)
             return None
         self._texts.move_to_end(key)
-        pixmap = self._pixmaps.get((key, dpr))
+        pixmap = self._pixmaps.get((key, dpr, dialect))
         if pixmap is None:
             if self._font is None:
                 self._font = mono_font(_FONT_PX)
-            pixmap = render_thumbnail(text, self._font, dpr)
-            self._pixmaps[(key, dpr)] = pixmap
+            pixmap = render_thumbnail(text, self._font, dpr, dialect)
+            self._pixmaps[(key, dpr, dialect)] = pixmap
             while len(self._pixmaps) > _PIXMAP_CACHE:
                 self._pixmaps.popitem(last=False)
         else:
-            self._pixmaps.move_to_end((key, dpr))
+            self._pixmaps.move_to_end((key, dpr, dialect))
         return pixmap
 
     def refresh_theme(self) -> None:

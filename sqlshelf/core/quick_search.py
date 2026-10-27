@@ -1,8 +1,8 @@
 """What the quick search (Ctrl+P) lists for the typed text.
 
 The palette filters the queries it already loaded instead of asking the index
-on every key, so typing never waits on SQLite. ``table:``, ``tag:`` and
-``date:`` narrow the list as in the search box; ``col:`` is ignored, because
+on every key, so typing never waits on SQLite. ``table:``, ``tag:``, ``date:``
+and ``dialect:`` narrow the list as in the search box; ``col:`` is ignored, because
 the loaded rows carry no columns. Every other word must appear in the title,
 the path or a tag, ignoring case and accents, even inside a word: "dos" finds
 "Pedidos".
@@ -14,7 +14,7 @@ import re
 
 from .grouping import display_name
 from .models import SearchResult
-from .search import OPERATORS, _parse_date_filter, parse_query
+from .search import OPERATORS, _dialect_value, _parse_date_filter, parse_query
 from .text_match import find_span, fold
 
 # More rows than this only make the palette slower to fill; typing narrows it.
@@ -41,6 +41,8 @@ def _passes(result: SearchResult, filters: dict[str, list[str]]) -> bool:
         span = _parse_date_filter(date_text)
         if span is not None and not span[0] <= result.file_mtime <= span[1]:
             return False
+    if any(_dialect_value(d) != result.dialect for d in filters["dialect"]):
+        return False
     return True
 
 

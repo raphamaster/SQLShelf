@@ -21,7 +21,7 @@ Known keys:
 
 | Key | Example value | Description |
 |-----|--------------|-------------|
-| `schema_version` | `"2"` | Integer version used for migration decisions |
+| `schema_version` | `"6"` | Integer version used for migration decisions |
 | `project_root`   | `"C:/Users/Raphael/queries"` | Absolute path to the project folder at index creation time |
 | `last_full_scan` | `"2026-06-23T14:00:00+00:00"` | ISO 8601 UTC timestamp of the last full reindex |
 
@@ -44,6 +44,7 @@ One row per `.sql` file found in the project folder. The file on disk is always 
 | `has_frontmatter`| INTEGER | NOT NULL, DEFAULT 1 | `1` if the file contained a valid `/* --- … --- */` YAML block, `0` otherwise |
 | `created_at`     | TEXT    |          | ISO 8601 date from frontmatter `created` field (nullable) |
 | `updated_at`     | TEXT    |          | ISO 8601 date from frontmatter `updated` field (nullable) |
+| `dialect`        | TEXT    | NOT NULL, DEFAULT `'sql'` | The SQL dialect the query is read in: `tsql`, `postgres`, `mysql`, `mariadb`, `oracle`, `bigquery`, or `sql` when nothing shows. The frontmatter `dialect` field wins; otherwise it is detected from the syntax (`dialects.resolve`) |
 
 **Incremental indexing logic** (`index_db.py`): on scan, if `file_mtime` matches the stored value the row is skipped entirely. If mtime changed, the SHA-256 is recomputed — if the hash also matches, only `file_mtime` is updated (touch without content change). Otherwise the row is deleted and re-inserted.
 
@@ -189,11 +190,10 @@ queries_fts ← trigger (not FK)
 
 `IndexDB._apply_schema()` runs at startup:
 
-1. If the `meta` table does not exist → create the full schema from `schema.sql` and set `schema_version = '2'`.
-2. If the schema is missing required columns → drop the database file entirely and recreate (safe because the index is regenerable).
-3. If `schema_version = '1'` → run `_migrate_v1_to_v2()`, which adds the `favorites` and `recently_viewed` tables.
+1. If the `meta` table does not exist → create the full schema from `schema.sql` and store `SCHEMA_VERSION`.
+2. If the stored `schema_version` differs from `SCHEMA_VERSION`, or the `queries` table is missing a required column → delete the database file and recreate it; the next scan reindexes every file.
 
-To add a new migration: increment `SCHEMA_VERSION`, add an `elif v == "2": _migrate_v2_to_v3()` branch, and implement the method.
+The index is regenerable from the `.sql` files, so "delete and reindex" is the only migration. To change the schema: edit `schema.sql`, bump `SCHEMA_VERSION`, and add any new `queries` column to the required set in `_is_schema_compatible()`.
 
 ---
 
@@ -209,6 +209,7 @@ The `search.py` module translates user-typed text into SQL before hitting the da
 | `col:CustomerId` | `query_objects WHERE object_type='column' AND object_name='CustomerId'` |
 | `tag:finance` | `query_tags JOIN tags WHERE name='finance'` |
 | `date:DD/MM/YYYY` | `queries WHERE file_mtime BETWEEN start AND end` (full day, local time) |
+| `dialect:oracle` | `queries WHERE dialect='oracle'`; the value takes the frontmatter names, so `dialect:PL/SQL` is the same filter |
 | combinations | All filters joined with `AND`; FTS added when free text is present |
 
 Ranking uses FTS5's `bm25()`. `SearchResult.snippet` is part of the model but is no longer populated: generating it with `snippet()` re-tokenises the body of every matching row and accounted for roughly 95% of the time a text search took, while no part of the UI displays it.

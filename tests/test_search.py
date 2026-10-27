@@ -57,7 +57,7 @@ class TestParseQuery:
     def test_empty_string(self) -> None:
         filters, free = parse_query("")
         assert free == ""
-        assert filters == {"table": [], "col": [], "tag": [], "date": []}
+        assert filters == {"table": [], "col": [], "tag": [], "date": [], "dialect": []}
 
     def test_free_text_only(self) -> None:
         filters, free = parse_query("invoice amount")
@@ -105,6 +105,7 @@ class TestTokens:
             ("a table:x b", [("table", "x")], "a b"),
             ("tag:a tag:b", [("tag", "a"), ("tag", "b")], ""),
             ("date:15/06/2026 col:Id", [("date", "15/06/2026"), ("col", "Id")], ""),
+            ("dialect:PL/SQL x", [("dialect", "PL/SQL")], "x"),
             # A value runs to the next space, quotes and all.
             ('table:"Order Details"', [("table", '"Order')], 'Details"'),
             ('"exact phrase" tag:x', [("tag", "x")], '"exact phrase"'),
@@ -319,6 +320,66 @@ class TestDateSearch:
         results = db.search("date:15/06/2026 tag:report")
         assert len(results) == 1
         assert results[0].title == "Tagged query"
+
+
+class TestDialectSearch:
+    @pytest.fixture
+    def db(self, tmp_path: Path) -> IndexDB:
+        queries = [
+            # Detected from the syntax.
+            Query(
+                path=make_sql_file(tmp_path, "ora.sql"),
+                title="Oracle",
+                body="SELECT SYSDATE FROM dual",
+            ),
+            # Declared in the frontmatter, against what the syntax shows.
+            Query(
+                path=make_sql_file(tmp_path, "pg.sql"),
+                title="Postgres",
+                body="SELECT TOP 1 * FROM dbo.t",
+                dialect="postgres",
+            ),
+            Query(
+                path=make_sql_file(tmp_path, "maria.sql"),
+                title="MariaDB",
+                body="SELECT 1",
+                dialect="mariadb",
+            ),
+            # Nothing to go on.
+            Query(path=make_sql_file(tmp_path, "plain.sql"), title="Plain"),
+        ]
+        db = IndexDB(tmp_path)
+        db.index_all(queries)
+        return db
+
+    @pytest.mark.parametrize(
+        ("text", "titles"),
+        [
+            ("dialect:oracle", ["Oracle"]),
+            ("dialect:PL/SQL", ["Oracle"]),
+            ("dialect:postgresql", ["Postgres"]),
+            ("dialect:tsql", []),  # the frontmatter wins over the TOP and dbo.
+            ("dialect:mysql", []),  # MariaDB is a dialect of its own
+            ("dialect:mariadb", ["MariaDB"]),
+            ("dialect:sql", ["Plain"]),
+            ("dialect:snowflake", []),
+            ("dialect:oracle sysdate", ["Oracle"]),
+            ("dialect:oracle dialect:postgres", []),
+        ],
+    )
+    def test_filters_by_dialect(
+        self, db: IndexDB, text: str, titles: list[str]
+    ) -> None:
+        assert sorted(r.title for r in db.search(text)) == titles
+
+    def test_results_carry_the_dialect(self, db: IndexDB) -> None:
+        dialects = {r.title: r.dialect for r in db.search("")}
+        assert dialects == {
+            "Oracle": "oracle",
+            "Postgres": "postgres",
+            "MariaDB": "mariadb",
+            "Plain": "sql",
+        }
 
 
 class TestSearchSurvivesSpecialCharacters:

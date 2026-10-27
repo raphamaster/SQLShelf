@@ -4,7 +4,8 @@ Read mode (docs/redesign-ui.md, F5): a file icon, the title and file name
 with a star; Copy SQL, Edit and Open in SSMS plus a ⋯ menu; then the
 description and a label | value grid with tags, tables, location and the
 modification date. Edit mode (F6): an "Editing" banner with Cancel and Save,
-then title, description, tags, author and the read-only creation date.
+then title, description, tags, the dialect, author and the read-only
+creation date.
 Colours come from the global stylesheet through object names, so
 ``refresh_theme`` only re-requests the icons.
 """
@@ -32,6 +33,7 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import (
     QAbstractButton,
+    QComboBox,
     QFrame,
     QGridLayout,
     QHBoxLayout,
@@ -48,6 +50,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..core.dialects import DIALECTS, GENERIC
 from ..core.i18n import tr
 from . import icons
 from . import tokens as _tk
@@ -73,6 +76,7 @@ class QueryEdits:
     description: str
     tags: list[str]
     author: str
+    dialect: str  # a key of dialects.DIALECTS, "sql", or "" for automatic
 
 
 def _opens_in_ssms() -> bool:
@@ -612,6 +616,14 @@ class MetadataPanel(QWidget):
         # Tab moves on to the tags; a description is prose, not code.
         self._desc_edit.setTabChangesFocus(True)
         self._tag_field = TagField()
+        # The first item leaves the dialect to detection; the rest name one.
+        self._dialect_combo = QComboBox()
+        self._dialect_combo.setObjectName("EditDialect")
+        self._dialect_combo.addItem("", "")
+        for dialect in DIALECTS.values():
+            self._dialect_combo.addItem(dialect.label, dialect.key)
+        self._dialect_combo.addItem("", GENERIC.key)
+        self._detected_label = ""
         self._author_edit = QLineEdit()
         self._author_edit.setObjectName("EditAuthor")
         self._created_edit = QLineEdit()
@@ -637,6 +649,7 @@ class MetadataPanel(QWidget):
         form.addLayout(field("title", self._title_edit))
         form.addLayout(field("description", self._desc_edit))
         form.addLayout(field("tags", self._tag_field))
+        form.addLayout(field("dialect", self._dialect_combo))
         people = QHBoxLayout()
         people.setContentsMargins(0, 0, 0, 0)
         people.setSpacing(12)
@@ -866,11 +879,22 @@ class MetadataPanel(QWidget):
         tags: list[str],
         author: str = "",
         created: Any = None,
+        dialect: str = "",
+        detected: str = "",
     ) -> None:
-        """Fill the form with the query's metadata and show it."""
+        """Fill the form with the query's metadata and show it.
+
+        *dialect* is the key the frontmatter declares, "" for none; *detected*
+        the label of the dialect the syntax shows, "" when it shows none.
+        """
         self._title_edit.setText(title)
         self._desc_edit.setPlainText(description)
         self._tag_field.set_tags(tags)
+        self._detected_label = detected
+        self._update_automatic_item()
+        self._dialect_combo.setCurrentIndex(
+            max(0, self._dialect_combo.findData(dialect))
+        )
         self._author_edit.setText(author)
         self._created_edit.setText(created_text(created))
         self.set_saving(False)
@@ -899,7 +923,16 @@ class MetadataPanel(QWidget):
             description=self._desc_edit.toPlainText().strip(),
             tags=self._tag_field.tags(),
             author=self._author_edit.text().strip(),
+            dialect=self._dialect_combo.currentData() or "",
         )
+
+    def _update_automatic_item(self) -> None:
+        text = (
+            tr("dialect.automatic", dialect=self._detected_label)
+            if self._detected_label
+            else tr("dialect.automatic_none")
+        )
+        self._dialect_combo.setItemText(0, text)
 
     def retranslate_ui(self) -> None:
         self._copy_btn.setText(tr("details.copy_sql"))
@@ -937,6 +970,11 @@ class MetadataPanel(QWidget):
             label.setText(tr(f"details.label_{key}"))
         self._desc_edit.setPlaceholderText(tr("details.description_placeholder"))
         self._author_edit.setPlaceholderText(tr("details.author_placeholder"))
+        self._update_automatic_item()
+        self._dialect_combo.setItemText(
+            self._dialect_combo.count() - 1, tr("dialect.generic")
+        )
+        self._dialect_combo.setToolTip(tr("details.dialect_tooltip"))
         self._tag_field.retranslate_ui()
 
     def refresh_theme(self) -> None:
@@ -960,5 +998,8 @@ class MetadataPanel(QWidget):
         self._title_edit.clear()
         self._desc_edit.clear()
         self._tag_field.set_tags([])
+        self._detected_label = ""
+        self._update_automatic_item()
+        self._dialect_combo.setCurrentIndex(0)
         self._author_edit.clear()
         self._created_edit.clear()

@@ -1,4 +1,5 @@
-"""Status bar: list counts on the left, index and watcher state on the right.
+"""Status bar: list counts on the left; index and watcher state, then the
+open query's dialect, on the right.
 
 Indexing progress lives here instead of in a modal dialog, so the window
 stays usable while a folder is indexed.
@@ -15,11 +16,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..core.dialects import Resolved
 from ..core.i18n import ntr, tr
+from .editor_strip import dialect_tooltip
 
 BAR_HEIGHT = 28
 FLASH_MS = 5000
-DIALECT = "T-SQL"  # a name, not a translatable string
 
 
 def _dot_separator() -> QLabel:
@@ -49,6 +51,7 @@ class StatusBar(QStatusBar):
         self._has_library = False
         self._indexing: tuple[str, int, int] | None = None
         self._watching = 0
+        self._dialect_shown: Resolved | None = None
         self._flash_text = ""
         self._flash_timer = QTimer(self)
         self._flash_timer.setSingleShot(True)
@@ -77,7 +80,7 @@ class StatusBar(QStatusBar):
         self._watch = QLabel()
         self._watch.setObjectName("StatusText")
         self._dialect_sep = _dot_separator()
-        self._dialect = QLabel(DIALECT)
+        self._dialect = QLabel()
         self._dialect.setObjectName("StatusText")
         for widget in (
             self._dot,
@@ -122,6 +125,11 @@ class StatusBar(QStatusBar):
 
     def set_watching(self, folders: int) -> None:
         self._watching = folders
+        self._render()
+
+    def set_dialect(self, dialect: Resolved | None) -> None:
+        """The open query's dialect; None, with no query open, hides it."""
+        self._dialect_shown = dialect
         self._render()
 
     def flash(self, message: str, timeout: int = FLASH_MS) -> None:
@@ -179,4 +187,9 @@ class StatusBar(QStatusBar):
             self._watch.setText(
                 ntr("status.watching_one", "status.watching_other", self._watching)
             )
-        self._dialect_sep.setVisible(watching or show_index)
+        dialect = self._dialect_shown
+        self._dialect.setVisible(dialect is not None)
+        self._dialect_sep.setVisible(dialect is not None and (watching or show_index))
+        if dialect is not None:
+            self._dialect.setText(dialect.dialect.label)
+            self._dialect.setToolTip(dialect_tooltip(dialect))
