@@ -4,6 +4,8 @@
 
 from pathlib import Path
 
+from PyInstaller.utils.hooks import collect_submodules
+
 block_cipher = None
 
 datas = [
@@ -22,6 +24,9 @@ a = Analysis(
         "PySide6.QtGui",
         "PySide6.QtWidgets",
         "sqlglot",
+        # sqlglot imports each dialect by name when it is first asked for, so
+        # the analysis never sees postgres, oracle or bigquery on its own.
+        *collect_submodules("sqlglot.dialects"),
         "yaml",
         "watchdog.observers",
         "watchdog.observers.polling",
