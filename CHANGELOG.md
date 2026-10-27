@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [1.4.0] - 2026-10-26
 
 ### Added
 - **SQL dialects** — besides T-SQL, queries in PostgreSQL, MySQL, MariaDB, Oracle (PL/SQL) and BigQuery are read in their own dialect. The dialect is read from the syntax: `GO` lines, `[brackets]`, `DECLARE @`, `TOP` and `#temp` for T-SQL; `::` casts, `$$` bodies, `ILIKE` and `ON CONFLICT` for PostgreSQL; backtick names, `LIMIT 5, 10`, `AUTO_INCREMENT` and `ON DUPLICATE KEY` for MySQL (and `WITH SYSTEM VERSIONING`, `ENGINE=Aria` or `/*M!` for MariaDB); `FROM DUAL`, `ROWNUM`, `NVL`, `VARCHAR2`, `CONNECT BY` and slash lines for Oracle; `` `project.dataset.table` ``, `SAFE_CAST`, `STRUCT<…>` and `INT64` for BigQuery. Comments and strings say nothing, so `-- LIMIT 5, 10` or `'GO'` change no guess. A query with no clear sign is generic SQL and is read as T-SQL, as every query was before
