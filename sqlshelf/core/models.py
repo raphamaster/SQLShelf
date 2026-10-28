@@ -51,3 +51,6 @@ class SearchResult:
     is_favorite: bool = False
     file_mtime: int = 0
     dialect: str = "sql"
+    # Set by a free-text search: 0 when the title holds every searched word,
+    # 1 when the description does, 2 when only the SQL or its tables do.
+    match_tier: int = 0

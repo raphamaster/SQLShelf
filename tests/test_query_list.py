@@ -108,6 +108,29 @@ def test_oldest_first_reverses_the_date_groups(widget: QueryListWidget) -> None:
     assert [key for key, _ in _top_groups(widget)] == ["date:older", "date:today"]
 
 
+def test_relevance_puts_the_closest_match_first(widget: QueryListWidget) -> None:
+    by_body, by_name, by_description = (
+        _result("body.sql"),
+        _result("name.sql", OLD),
+        _result("description.sql"),
+    )
+    by_body.match_tier, by_body.rank = 2, -9.0
+    by_name.match_tier, by_name.rank = 0, -1.0
+    by_description.match_tier, by_description.rank = 1, -2.0
+    widget.set_sort("relevance")
+    widget.set_results([by_body, by_name, by_description])
+
+    assert [r.rel_path for r in widget._results] == [
+        "name.sql",
+        "description.sql",
+        "body.sql",
+    ]
+    # The best match is old, so its date group leads.
+    assert _top_groups(widget) == [("date:older", 1), ("date:today", 2)]
+    assert _current(widget) == "name.sql"
+    assert widget._header._sorted_column() == -1
+
+
 def test_folder_groups_follow_the_sort(widget: QueryListWidget) -> None:
     widget.set_group("folder")
     widget.set_results(

@@ -30,6 +30,15 @@ _IS_FAV_SUBQ = (
 # The columns after the first six of every result row, in _rows_to_results order.
 _ROW_TAIL = f"q.updated_at, {_TABLES_SUBQ}, {_IS_FAV_SUBQ}, q.file_mtime, q.dialect"
 
+# bm25() weighted per queries_fts column: title, description, body, objects.
+# Unweighted, a script that repeats an alias like `p_cdc` thirty times
+# outranked one named "Pedidos_CDC".
+_BM25 = "bm25(queries_fts, 10.0, 4.0, 1.0, 2.0)"
+# A free-text match ranks first by the column holding every searched word, in
+# this order. bm25 alone cannot do it: term frequency saturates, so a body
+# full of `p_cdc` still scores about as high as one word in the title.
+_TIER_COLUMNS = ("title", "description")
+
 
 OPERATORS = ("table", "col", "tag", "date", "dialect")
 
@@ -108,12 +117,34 @@ def _build_fts_query(text: str) -> str:
     return " ".join(tokens)
 
 
+def relevance_key(result: SearchResult) -> tuple[int, float, int]:
+    """Sort key that puts the closest matches of a search first.
+
+    Queries whose name holds every searched word come first, then those whose
+    description does, then the rest, each tier by bm25 rank (lower is better).
+    Without free text every rank is 0, so the most recently modified come first.
+    """
+    return (result.match_tier, result.rank, -result.file_mtime)
+
+
+def _column_matches(conn: sqlite3.Connection, column: str, fts_expr: str) -> set[int]:
+    """Ids of the queries whose *column* matches every phrase of *fts_expr*."""
+    try:
+        rows = conn.execute(
+            "SELECT rowid FROM queries_fts WHERE queries_fts MATCH ?",
+            (f"{column} : ({fts_expr})",),
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return set()
+    return {rowid for (rowid,) in rows}
+
+
 def search(conn: sqlite3.Connection, text: str) -> list[SearchResult]:
     """Execute a search query and return ranked SearchResult objects.
 
     Supports:
     - Empty string → all queries, alphabetical.
-    - Free text → FTS5 MATCH with bm25 ranking.
+    - Free text → FTS5 MATCH, ordered by :func:`relevance_key`.
     - table:X, col:X, tag:X, dialect:X → relational filters.
     - Combinations of any of the above.
     """
@@ -184,12 +215,12 @@ def search(conn: sqlite3.Connection, text: str) -> list[SearchResult]:
         sql = f"""
             SELECT q.id, q.rel_path, q.title, COALESCE(q.description, ''),
                    '',
-                   bm25(queries_fts),
+                   {_BM25},
                    {_ROW_TAIL}
             FROM queries q
             JOIN queries_fts ON queries_fts.rowid = q.id
             {where_clause}
-            ORDER BY bm25(queries_fts)
+            ORDER BY {_BM25}
         """
     else:
         sql = f"""
@@ -206,7 +237,16 @@ def search(conn: sqlite3.Connection, text: str) -> list[SearchResult]:
     except sqlite3.OperationalError:
         return []
 
-    return _rows_to_results(conn, rows)
+    results = _rows_to_results(conn, rows)
+    if use_fts and results:
+        tiers = [_column_matches(conn, column, fts_expr) for column in _TIER_COLUMNS]
+        for result in results:
+            result.match_tier = next(
+                (i for i, ids in enumerate(tiers) if result.query_id in ids),
+                len(tiers),
+            )
+        results.sort(key=relevance_key)
+    return results
 
 
 def _all_queries(conn: sqlite3.Connection) -> list[SearchResult]:

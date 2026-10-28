@@ -272,10 +272,12 @@
 
   "dialog.open_folder": "Select Queries Folder",
 
+  "sort.relevance": "Relevance (closest first)",
   "sort.name_asc": "Name (A → Z)",
   "sort.name_desc": "Name (Z → A)",
   "sort.mtime_desc": "Modified (newest first)",
   "sort.mtime_asc": "Modified (oldest first)",
+  "sort.short_relevance": "Relevance",
   "sort.short_name_asc": "Name A–Z",
   "sort.short_name_desc": "Name Z–A",
   "sort.short_mtime_desc": "Newest",

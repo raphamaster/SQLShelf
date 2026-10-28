@@ -13,7 +13,9 @@ from .widgets import BarButton, BarSeparator, IconButton
 BAR_HEIGHT = 46
 
 # Each sort key has a long label for the menu and a short one for the button.
+# Menu order; a separator follows relevance and each pair after it.
 _SORT_LABELS = {
+    "relevance": ("sort.relevance", "sort.short_relevance"),
     "name_asc": ("sort.name_asc", "sort.short_name_asc"),
     "name_desc": ("sort.name_desc", "sort.short_name_desc"),
     "mtime_desc": ("sort.mtime_desc", "sort.short_mtime_desc"),
@@ -58,13 +60,15 @@ class CommandBar(QWidget):
         self._sort_group = QActionGroup(self)
         self._sort_acts: dict[str, QAction] = {}
         for index, key in enumerate(_SORT_LABELS):
-            if index == 2:
+            if index == 3:
                 self._sort_menu.addSeparator()
             act = self._sort_menu.addAction("")
             act.setCheckable(True)
             act.triggered.connect(lambda _=False, k=key: self.sort_requested.emit(k))
             self._sort_group.addAction(act)
             self._sort_acts[key] = act
+            if index == 0:
+                self._relevance_sep = self._sort_menu.addSeparator()
         self._sort_btn = BarButton("sort", "", value="", menu=self._sort_menu)
 
         self._group_menu = QMenu(self)
@@ -134,9 +138,15 @@ class CommandBar(QWidget):
         self.set_sort(self._sort)
         self.set_group(self._group)
         self.set_view(cfg.get_view_mode())
+        self.set_searching(False)
         self.retranslate_ui()
 
     # ------------------------------------------------------------------
+
+    def set_searching(self, searching: bool) -> None:
+        """Offer the relevance order only while a search is shown."""
+        self._sort_acts["relevance"].setVisible(searching)
+        self._relevance_sep.setVisible(searching)
 
     def set_sort(self, key: str) -> None:
         if key not in self._sort_acts:

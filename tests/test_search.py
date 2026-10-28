@@ -7,12 +7,13 @@ from pathlib import Path
 import pytest
 
 from sqlshelf.core.index_db import IndexDB
-from sqlshelf.core.models import Query
+from sqlshelf.core.models import Query, SearchResult
 from sqlshelf.core.search import (
     _build_fts_query,
     _parse_date_filter,
     join_tokens,
     parse_query,
+    relevance_key,
     split_tokens,
 )
 
@@ -222,6 +223,98 @@ class TestSearch:
         results_lower = db_with_data.search("table:invoices")
         results_upper = db_with_data.search("table:INVOICES")
         assert len(results_lower) == len(results_upper)
+
+
+class TestRelevance:
+    """Regression: searching "cdc" listed a script that only uses the alias
+    `p_cdc` above the query named "Pedidos_CDC"."""
+
+    @pytest.fixture
+    def db(self, tmp_path: Path) -> IndexDB:
+        alias_heavy = "SELECT p_cdc.id, c_cdc.valor FROM pl_cdc p_cdc" + (
+            " JOIN pl_cdc c_cdc ON c_cdc.id = p_cdc.id" * 15
+        )
+        queries = [
+            Query(
+                path=make_sql_file(tmp_path, "ops.sql", alias_heavy),
+                title="OPS-90690_Falha_Pagamento_BigQuery",
+                body=alias_heavy,
+            ),
+            Query(
+                path=make_sql_file(tmp_path, "pedidos.sql"),
+                title="Pedidos_CDC",
+                body="SELECT * FROM dbo.Pedidos",
+            ),
+            Query(
+                path=make_sql_file(tmp_path, "carga.sql"),
+                title="Carga diaria",
+                description="Reprocessa o CDC de vendas",
+                body="SELECT * FROM dbo.Vendas",
+            ),
+            Query(
+                path=make_sql_file(tmp_path, "pedidos_itens.sql"),
+                title="Pedidos itens",
+                body="SELECT * FROM dbo.Itens -- cdc",
+            ),
+        ]
+        db = IndexDB(tmp_path)
+        db.index_all(queries)
+        return db
+
+    def test_name_then_description_then_sql(self, db: IndexDB) -> None:
+        results = db.search("cdc")
+        assert [(r.title, r.match_tier) for r in results] == [
+            ("Pedidos_CDC", 0),
+            ("Carga diaria", 1),
+            ("OPS-90690_Falha_Pagamento_BigQuery", 2),
+            ("Pedidos itens", 2),
+        ]
+
+    def test_every_word_must_be_in_the_name(self, db: IndexDB) -> None:
+        results = db.search("pedidos cdc")
+        assert [(r.title, r.match_tier) for r in results] == [
+            ("Pedidos_CDC", 0),
+            ("Pedidos itens", 2),
+        ]
+
+    def test_a_prefix_matches_the_name(self, db: IndexDB) -> None:
+        assert db.search("pedid")[0].title == "Pedidos_CDC"
+
+    def test_filters_alone_keep_the_browse_order(self, db: IndexDB) -> None:
+        results = db.search("table:Pedidos")
+        assert [(r.title, r.match_tier) for r in results] == [("Pedidos_CDC", 0)]
+
+
+def _ranked(name: str, tier: int, rank: float, mtime: int) -> SearchResult:
+    return SearchResult(
+        query_id=0,
+        rel_path=f"{name}.sql",
+        title=name,
+        description="",
+        snippet="",
+        rank=rank,
+        file_mtime=mtime,
+        match_tier=tier,
+    )
+
+
+def test_relevance_key_orders_tier_then_rank_then_newest() -> None:
+    results = [
+        _ranked("body_best", 2, -9.0, 100),
+        _ranked("description", 1, -0.5, 100),
+        _ranked("name_weak", 0, -1.0, 100),
+        _ranked("name_strong", 0, -5.0, 100),
+        _ranked("body_old", 2, -2.0, 100),
+        _ranked("body_new", 2, -2.0, 200),
+    ]
+    assert [r.title for r in sorted(results, key=relevance_key)] == [
+        "name_strong",
+        "name_weak",
+        "description",
+        "body_best",
+        "body_new",
+        "body_old",
+    ]
 
 
 class TestParseDateFilter:

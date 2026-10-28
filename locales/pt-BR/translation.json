@@ -272,10 +272,12 @@
 
   "dialog.open_folder": "Selecionar Pasta de Consultas",
 
+  "sort.relevance": "Relevância (mais próximos primeiro)",
   "sort.name_asc": "Nome (A → Z)",
   "sort.name_desc": "Nome (Z → A)",
   "sort.mtime_desc": "Modificado (mais recente)",
   "sort.mtime_asc": "Modificado (mais antigo)",
+  "sort.short_relevance": "Relevância",
   "sort.short_name_asc": "Nome A–Z",
   "sort.short_name_desc": "Nome Z–A",
   "sort.short_mtime_desc": "Mais recentes",

@@ -62,6 +62,7 @@ from ..core.grouping import (
 )
 from ..core.i18n import tr
 from ..core.models import SearchResult
+from ..core.search import relevance_key
 from ..core.text_match import highlight_terms, match_spans
 from . import icons
 from . import tokens as _tk
@@ -74,8 +75,14 @@ _SORT_NAME_ASC = "name_asc"
 _SORT_NAME_DESC = "name_desc"
 _SORT_MTIME_DESC = "mtime_desc"
 _SORT_MTIME_ASC = "mtime_asc"
-# Menu order; the separator in the Sort menu goes between the two pairs.
-SORT_KEYS = (_SORT_NAME_ASC, _SORT_NAME_DESC, _SORT_MTIME_DESC, _SORT_MTIME_ASC)
+_SORT_RELEVANCE = "relevance"  # closest matches first, while searching
+SORT_KEYS = (
+    _SORT_RELEVANCE,
+    _SORT_NAME_ASC,
+    _SORT_NAME_DESC,
+    _SORT_MTIME_DESC,
+    _SORT_MTIME_ASC,
+)
 
 GROUP_MODES = ("date", "folder", "none")
 VIEW_MODES = ("details", "content", "grid")
@@ -231,7 +238,8 @@ def _paint_table_chips(
 
 class _ListHeader(QHeaderView):
     """Column labels in ``text3``; the sorted column in ``text``, semibold,
-    with a chevron for the direction. Only Name and Modified sort."""
+    with a chevron for the direction. Only Name and Modified sort; sorted by
+    relevance, no column is marked."""
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(Qt.Orientation.Horizontal, parent)
@@ -244,6 +252,8 @@ class _ListHeader(QHeaderView):
         self.sort_key = _SORT_MTIME_DESC
 
     def _sorted_column(self) -> int:
+        if self.sort_key == _SORT_RELEVANCE:
+            return -1
         return COL_NAME if self.sort_key.startswith("name") else COL_MODIFIED
 
     def paintSection(  # noqa: N802
@@ -912,7 +922,9 @@ class QueryListWidget(QWidget):
     # ------------------------------------------------------------------
 
     def _sort_results(self) -> None:
-        if self._sort == _SORT_NAME_ASC:
+        if self._sort == _SORT_RELEVANCE:
+            self._results.sort(key=relevance_key)
+        elif self._sort == _SORT_NAME_ASC:
             self._results.sort(key=lambda r: r.title.lower())
         elif self._sort == _SORT_NAME_DESC:
             self._results.sort(key=lambda r: r.title.lower(), reverse=True)
@@ -931,6 +943,7 @@ class QueryListWidget(QWidget):
                 datetime.now(),
                 first_weekday,
                 oldest_first=self._sort == _SORT_MTIME_ASC,
+                ranked=self._sort == _SORT_RELEVANCE,
             )
             return [(f"date:{key}", items) for key, items in groups]
         if self._group == "folder":

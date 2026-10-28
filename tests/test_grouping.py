@@ -122,6 +122,20 @@ def test_group_by_date_skips_empty_buckets_and_keeps_order() -> None:
     assert [key for key, _ in reversed_groups] == ["older", "today"]
 
 
+def test_ranked_date_groups_follow_their_best_result() -> None:
+    # Sorted by relevance: the best match is old, so "older" leads.
+    results = [
+        _result("best.sql", _ts(2026, 9, 1, 8, 0)),
+        _result("next.sql", _ts(2026, 10, 22, 9, 0)),
+        _result("last.sql", _ts(2026, 8, 1, 8, 0)),
+    ]
+    groups = group_by_date(results, THURSDAY, MONDAY, ranked=True)
+    assert [(key, [r.rel_path for r in items]) for key, items in groups] == [
+        ("older", ["best.sql", "last.sql"]),
+        ("today", ["next.sql"]),
+    ]
+
+
 @pytest.mark.parametrize(
     ("root", "rel_path", "label"),
     [
