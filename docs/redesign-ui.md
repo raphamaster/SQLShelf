@@ -38,6 +38,8 @@ O qt-material impõe botões em caixa alta e contornos verdes — exatamente o q
 | `text2` | texto secundário | `#b3b9c1` | `#474e57` |
 | `text3` | rótulos, contagens, placeholders | `#8b939c` | `#646b73` |
 | `accent` | fundo do botão primário, foco, progresso | `#0ADE99` | `#0ADE99` |
+| `accent_hover` | botão primário em hover | `#3be5ad` | `#09ca8b` |
+| `accent_pressed` | botão primário pressionado | `#09bd82` | `#08b37b` |
 | `accent_ink` | texto sobre `accent` | `#052a1d` | `#052a1d` |
 | `accent_text` | links e ícones de destaque sobre fundo | `#2fe3a8` | `#04794f` |
 | `mark` | destaque de termo buscado | `rgba(10,222,153,.30)` | `rgba(10,222,153,.35)` |

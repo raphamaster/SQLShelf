@@ -184,6 +184,14 @@ def app_stylesheet(palette: Mapping[str, str]) -> str:
             border-color: {c["accent"]};
             font-weight: 600;
         }}
+        QPushButton[primary="true"]:hover {{
+            background-color: {c["accent_hover"]};
+            border-color: {c["accent_hover"]};
+        }}
+        QPushButton[primary="true"]:pressed {{
+            background-color: {c["accent_pressed"]};
+            border-color: {c["accent_pressed"]};
+        }}
         QToolButton {{
             background-color: transparent;
             color: {c["text"]};
@@ -427,6 +435,14 @@ def app_stylesheet(palette: Mapping[str, str]) -> str:
             color: {c["accent_ink"]};
             border-color: {c["accent"]};
             font-weight: 600;
+        }}
+        QPushButton#PanelButton[primary="true"]:hover {{
+            background-color: {c["accent_hover"]};
+            border-color: {c["accent_hover"]};
+        }}
+        QPushButton#PanelButton[primary="true"]:pressed {{
+            background-color: {c["accent_pressed"]};
+            border-color: {c["accent_pressed"]};
         }}
         QPushButton#PanelButton[primary="true"]:disabled {{
             background-color: {c["sel"]};
@@ -806,6 +822,12 @@ def app_stylesheet(palette: Mapping[str, str]) -> str:
         }}
         QPushButton#BarButton[primary="true"] {{
             background-color: {c["accent"]};
+        }}
+        QPushButton#BarButton[primary="true"]:hover {{
+            background-color: {c["accent_hover"]};
+        }}
+        QPushButton#BarButton[primary="true"]:pressed {{
+            background-color: {c["accent_pressed"]};
         }}
         QPushButton#BarButton[primary="true"] QLabel {{
             color: {c["accent_ink"]};
