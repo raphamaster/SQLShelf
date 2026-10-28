@@ -58,6 +58,7 @@ from ..core.models import SearchResult
 from ..core.navigation import NavHistory, NavState, root_of, search_text, with_search
 from ..core.query_graph import QueryGraph, build_query_graph
 from ..core.scanner import display_fields, scan_file, scan_folder
+from ..core.search import relevance_key
 from ..core.snippets import list_templates
 from ..core.watcher import FolderWatcher
 from . import tokens as _tk
@@ -294,11 +295,9 @@ class _SearchWorker(QRunnable):
                             result.folder = folder
                             results.append(result)
                 if self._browse_folder is None:
-                    # FTS results: rank by relevance; otherwise most recently modified.
-                    if any(result.rank != 0.0 for result in results):
-                        results.sort(key=lambda result: result.rank)
-                    else:
-                        results.sort(key=lambda result: result.file_mtime, reverse=True)
+                    # Merge the folders' lists: closest matches first, or the
+                    # most recently modified without free text.
+                    results.sort(key=relevance_key)
         except Exception:
             results = []
         self.signals.results_ready.emit(results, self._gen)
@@ -1847,6 +1846,7 @@ class MainWindow(QMainWindow):
             self._scope_bar.set_scope(state.folder, self._scope_option())
             self._scope_bar.set_count(None)
         self._scope_bar.setVisible(searching)
+        self._apply_sort()
         self._apply_group()
         self._sidebar.show_state(state)
         self._address_bar.set_state(
@@ -1909,8 +1909,19 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _on_sort_requested(self, key: str) -> None:
+        # A search remembers its own order, relevance unless changed here.
+        if _is_search(self._nav.current):
+            cfg.set_search_sort_key(key)
+        else:
+            cfg.set_sort_key(key)
+        self._apply_sort()
+
+    def _apply_sort(self) -> None:
+        """Sort the list as the user last chose for browsing, or for searching."""
+        searching = _is_search(self._nav.current)
+        key = cfg.get_search_sort_key() if searching else cfg.get_sort_key()
+        self._command_bar.set_searching(searching)
         self._query_list.set_sort(key)
-        cfg.set_sort_key(key)
         self._command_bar.set_sort(key)
 
     def _on_group_requested(self, mode: str) -> None:

@@ -8,10 +8,13 @@ from pathlib import Path
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
+from PySide6.QtCore import QPoint
 from PySide6.QtGui import QPalette
-from PySide6.QtWidgets import QApplication
+from PySide6.QtTest import QTest
+from PySide6.QtWidgets import QApplication, QPushButton
 
 from sqlshelf.ui import tokens as _tk
+from sqlshelf.ui.metadata_panel import _panel_button
 from sqlshelf.ui.theme import (
     app_stylesheet,
     apply_theme,
@@ -19,6 +22,7 @@ from sqlshelf.ui.theme import (
     qcolor,
     qss_color,
 )
+from sqlshelf.ui.widgets import BarButton
 
 # ---------------------------------------------------------------------------
 # Tokens
@@ -151,6 +155,13 @@ def test_text_contrast_is_at_least_aa(theme: str, fg: str, bg: str) -> None:
     assert _contrast(palette[fg], palette[bg]) >= 4.5
 
 
+@pytest.mark.parametrize("theme", ["dark", "light"])
+@pytest.mark.parametrize("bg", ["accent", "accent_hover", "accent_pressed"])
+def test_primary_button_text_contrast(theme: str, bg: str) -> None:
+    palette = _tk.THEMES[theme]
+    assert _contrast(palette["accent_ink"], palette[bg]) >= 4.5
+
+
 # ---------------------------------------------------------------------------
 # Qt conversion and the global stylesheet
 # ---------------------------------------------------------------------------
@@ -243,3 +254,40 @@ def test_build_palette_dims_disabled_text(theme: str) -> None:
     palette = build_palette(_tk.THEMES[theme])
     disabled = palette.color(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text)
     assert disabled == qcolor(_tk.THEMES[theme]["text3"])
+
+
+def _fill(button: QPushButton) -> str:
+    QApplication.processEvents()
+    return button.grab().toImage().pixelColor(6, button.height() // 2).name()
+
+
+@pytest.mark.parametrize("theme", ["dark", "light"])
+@pytest.mark.parametrize("kind", ["bar", "panel"])
+def test_primary_buttons_react_to_hover_and_press(theme: str, kind: str) -> None:
+    """Regression: "New query" and "Copy SQL" kept one colour under the mouse."""
+    app = _app()
+    apply_theme(app, theme)
+    button = (
+        BarButton("plus", "New query", primary=True)
+        if kind == "bar"
+        else _panel_button(primary=True)
+    )
+    button.resize(140, 32)
+    button.show()
+    away, inside = QPoint(300, 300), QPoint(20, 16)
+    palette = {k: v.lower() for k, v in _tk.THEMES[theme].items()}
+    try:
+        QTest.mouseMove(button, away)
+        assert _fill(button) == palette["accent"]
+        QTest.mouseMove(button, inside)
+        assert _fill(button) == palette["accent_hover"]
+        button.setDown(True)
+        assert _fill(button) == palette["accent_pressed"]
+        button.setDown(False)
+        QTest.mouseMove(button, away)
+        assert _fill(button) == palette["accent"]
+    finally:
+        button.close()
+        button.deleteLater()
+        _tk.set_active_palette("dark")
+        app.setStyleSheet("")

@@ -166,6 +166,8 @@ def set_minimize_to_tray(enabled: bool) -> None:
 VIEW_MODES = ("details", "content", "grid")
 GROUP_MODES = ("date", "folder", "none")
 SORT_KEYS = ("name_asc", "name_desc", "mtime_desc", "mtime_asc")
+# Relevance only means something while searching.
+SEARCH_SORT_KEYS = ("relevance", *SORT_KEYS)
 DETAILS_TABS = ("sql", "diagram")
 
 
@@ -248,6 +250,18 @@ def set_sort_key(key: str) -> None:
     """Persist the query-list sort order; unknown values are ignored."""
     if key in SORT_KEYS:
         _set_key("sort_key", key)
+
+
+def get_search_sort_key() -> str:
+    """Return the sort order while searching (default: closest matches first)."""
+    key = _load().get("search_sort_key", "relevance")
+    return key if key in SEARCH_SORT_KEYS else "relevance"
+
+
+def set_search_sort_key(key: str) -> None:
+    """Persist the sort order used while searching; unknown values are ignored."""
+    if key in SEARCH_SORT_KEYS:
+        _set_key("search_sort_key", key)
 
 
 def get_show_menu_bar() -> bool:

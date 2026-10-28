@@ -33,6 +33,8 @@ DARK: dict[str, str] = {
     "text3": "#8b939c",
     # Accent
     "accent": "#0ADE99",
+    "accent_hover": "#3be5ad",
+    "accent_pressed": "#09bd82",
     "accent_ink": "#052a1d",
     "accent_text": "#2fe3a8",
     "mark": "rgba(10,222,153,.30)",
@@ -84,6 +86,8 @@ LIGHT: dict[str, str] = {
     "text3": "#646b73",
     # Accent
     "accent": "#0ADE99",
+    "accent_hover": "#09ca8b",
+    "accent_pressed": "#08b37b",
     "accent_ink": "#052a1d",
     "accent_text": "#04794f",
     "mark": "rgba(10,222,153,.35)",

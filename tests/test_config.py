@@ -22,6 +22,7 @@ def test_layout_defaults() -> None:
     assert cfg.get_group_mode() == "date"
     assert cfg.get_search_group_mode() == "folder"
     assert cfg.get_sort_key() == "mtime_desc"
+    assert cfg.get_search_sort_key() == "relevance"
     assert cfg.get_show_menu_bar() is False
     assert cfg.get_details_tab() == "sql"
     assert cfg.get_diagram_window_geometry() is None
@@ -35,6 +36,7 @@ def test_layout_round_trip() -> None:
     cfg.set_group_mode("folder")
     cfg.set_search_group_mode("none")
     cfg.set_sort_key("name_asc")
+    cfg.set_search_sort_key("mtime_asc")
     cfg.set_show_menu_bar(True)
     cfg.set_details_tab("diagram")
     cfg.set_diagram_window_geometry("AdnQywADAAA=")
@@ -46,6 +48,7 @@ def test_layout_round_trip() -> None:
     assert cfg.get_group_mode() == "folder"
     assert cfg.get_search_group_mode() == "none"
     assert cfg.get_sort_key() == "name_asc"
+    assert cfg.get_search_sort_key() == "mtime_asc"
     assert cfg.get_show_menu_bar() is True
     assert cfg.get_details_tab() == "diagram"
     assert cfg.get_diagram_window_geometry() == "AdnQywADAAA="
@@ -66,12 +69,18 @@ def test_every_view_mode_round_trips(mode: str) -> None:
         (cfg.set_group_mode, cfg.get_group_mode, "date"),
         (cfg.set_search_group_mode, cfg.get_search_group_mode, "folder"),
         (cfg.set_sort_key, cfg.get_sort_key, "mtime_desc"),
+        (cfg.set_search_sort_key, cfg.get_search_sort_key, "relevance"),
         (cfg.set_details_tab, cfg.get_details_tab, "sql"),
     ],
 )
 def test_unknown_choices_are_ignored(setter, getter, default) -> None:
     setter("bogus")
     assert getter() == default
+
+
+def test_relevance_is_only_a_search_order() -> None:
+    cfg.set_sort_key("relevance")
+    assert cfg.get_sort_key() == "mtime_desc"
 
 
 @pytest.mark.parametrize(

@@ -111,3 +111,17 @@ def test_the_grid_button_has_a_tooltip_in_every_language(bar: CommandBar) -> Non
     set_language("es")
     bar.retranslate_ui()
     assert bar._grid.toolTip() == "Ver en cuadrícula"
+
+
+def test_relevance_is_offered_only_while_searching(bar: CommandBar) -> None:
+    relevance = bar._sort_acts["relevance"]
+    assert not relevance.isVisible()
+
+    bar.set_searching(True)
+    bar.set_sort("relevance")
+    assert relevance.isVisible() and relevance.isChecked()
+    assert relevance.text() == "Relevance (closest first)"
+    assert bar._sort_btn._value.text() == "Relevance"
+
+    bar.set_searching(False)
+    assert not relevance.isVisible()

@@ -57,17 +57,23 @@ def group_by_date(
     first_weekday: int,
     *,
     oldest_first: bool = False,
+    ranked: bool = False,
 ) -> list[tuple[str, list[SearchResult]]]:
     """Split *results* into date buckets, keeping their order within each.
 
     Empty buckets are left out. *oldest_first* reverses the bucket order, for
-    the list sorted by oldest modification first.
+    the list sorted by oldest modification first. *ranked* orders the buckets
+    by their first result instead, for the list sorted by relevance, so the
+    best match stays on top.
     """
-    buckets: dict[str, list[SearchResult]] = {key: [] for key in DATE_BUCKETS}
+    buckets: dict[str, list[SearchResult]] = {}
     for result in results:
-        buckets[date_bucket(result.file_mtime, now, first_weekday)].append(result)
+        key = date_bucket(result.file_mtime, now, first_weekday)
+        buckets.setdefault(key, []).append(result)
+    if ranked:
+        return list(buckets.items())
     order = reversed(DATE_BUCKETS) if oldest_first else DATE_BUCKETS
-    return [(key, buckets[key]) for key in order if buckets[key]]
+    return [(key, buckets[key]) for key in order if key in buckets]
 
 
 def group_label(group_key: str) -> str:

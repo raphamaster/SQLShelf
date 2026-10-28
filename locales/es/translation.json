@@ -272,10 +272,12 @@
 
   "dialog.open_folder": "Seleccionar Carpeta de Consultas",
 
+  "sort.relevance": "Relevancia (más cercanos primero)",
   "sort.name_asc": "Nombre (A → Z)",
   "sort.name_desc": "Nombre (Z → A)",
   "sort.mtime_desc": "Modificado (más reciente)",
   "sort.mtime_asc": "Modificado (más antiguo)",
+  "sort.short_relevance": "Relevancia",
   "sort.short_name_asc": "Nombre A–Z",
   "sort.short_name_desc": "Nombre Z–A",
   "sort.short_mtime_desc": "Más recientes",

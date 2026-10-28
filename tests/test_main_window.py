@@ -521,6 +521,39 @@ def test_a_search_groups_by_folder_and_keeps_its_own_grouping(
     assert window._command_bar._group == "date"
 
 
+def test_a_search_lists_the_closest_match_first_and_keeps_its_own_sort(
+    window: MainWindow, tmp_path: Path
+) -> None:
+    root = tmp_path / "cdc"
+    root.mkdir()
+    named = root / "Pedidos_CDC.sql"
+    named.write_text("SELECT * FROM dbo.Pedidos", encoding="utf-8")
+    # Older than the script below, which only names its aliases p_cdc.
+    os.utime(named, (1_600_000_000, 1_600_000_000))
+    (root / "OPS-90690.sql").write_text(
+        "SELECT p_cdc.id FROM pl_cdc p_cdc"
+        + " JOIN pl_cdc c_cdc ON c_cdc.id = p_cdc.id" * 15,
+        encoding="utf-8",
+    )
+    window.load_folder(root)
+    _wait_until(lambda: window._index_jobs == 0 and window._query_list.count() == 2)
+    assert window._query_list.sort_key() == "mtime_desc"
+
+    _search(window, "cdc")
+    _wait_until(lambda: window._query_list._results[0].rel_path == "Pedidos_CDC.sql")
+    assert window._query_list.sort_key() == "relevance"
+    assert window._command_bar._sort == "relevance"
+    assert window._command_bar._sort_acts["relevance"].isVisible()
+
+    window._on_sort_requested("name_desc")
+    assert cfg.get_search_sort_key() == "name_desc"
+    assert cfg.get_sort_key() == "mtime_desc"
+
+    window._on_clear_search()
+    assert window._query_list.sort_key() == "mtime_desc"
+    assert not window._command_bar._sort_acts["relevance"].isVisible()
+
+
 def test_the_grid_view_is_chosen_from_the_command_bar_and_remembered(
     window: MainWindow, library: Path
 ) -> None:
