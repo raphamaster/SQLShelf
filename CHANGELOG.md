@@ -1,5 +1,14 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+- **Search results, closest first** — a search lists the queries whose name holds every searched word first, then those whose description does, then those that only have it in the SQL or its tables; within each, the name and the description weigh more than the SQL. A script that repeats an alias like `p_cdc` no longer outranks the query named "Pedidos_CDC"
+- **Relevance sort** — the Sort menu offers "Relevance (closest first)" while a search is shown, and a search starts with it. A search remembers its own sort, apart from the one used to browse folders. Date and folder groups follow the best result they hold
+
+### Fixed
+- **Primary buttons react to the mouse** — "New query", "Copy SQL" and "Save" now lighten under the mouse and darken while pressed, in both themes
+
 ## [1.4.0] - 2026-10-26
 
 ### Added
