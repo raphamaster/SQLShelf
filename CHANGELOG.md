@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [1.4.1] - 2026-10-28
 
 ### Changed
 - **Search results, closest first** — a search lists the queries whose name holds every searched word first, then those whose description does, then those that only have it in the SQL or its tables; within each, the name and the description weigh more than the SQL. A script that repeats an alias like `p_cdc` no longer outranks the query named "Pedidos_CDC"
