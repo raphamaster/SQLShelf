@@ -3,32 +3,25 @@
 > Gerenciador desktop open-source de consultas SQL: organize, descreva, categorize e encontre suas queries por conteúdo, tabela ou campo — sem perder a propriedade dos arquivos.
 
 **Identidade do projeto:**
-- Nome: **SQLShelf** · repo: `github.com/raphaelfranco/sqlshelf`
-- Licença: Apache 2.0
+- Nome: **SQLShelf** · repo: `github.com/raphamaster/SQLShelf`
+- Licença: GNU GPL v3.0 (arquivo `LICENSE`)
 - Plataformas: Windows (alvo principal), Linux e macOS funcionam pelo mesmo código (PySide6 é cross-platform)
 - Pasta de índice por projeto do usuário: `.sqlshelf/index.db`
 - Config global: `~/.sqlshelf/config.json`
 
 ---
 
-## 0. Ponto de partida
+## 0. Estado atual
 
-Já existe um **esqueleto funcional validado**: janela PySide6 com sidebar, lista de queries e editor com highlight SQL, lendo uma pasta de arquivos `.sql` com frontmatter YAML. Arquivos do esqueleto:
+As **Fases 1 e 2 estão entregues** (seção 7), exceto os templates parametrizáveis, cujo código existe mas está fora do menu; a Fase 1 saiu na 1.0.0. Depois delas, o trabalho veio em trilhas com especificação própria, fora deste backlog:
 
-```
-main.py
-requirements.txt
-sqlshelf/
-├── core/
-│   ├── models.py        # dataclass Query
-│   ├── frontmatter.py   # parser do bloco /* --- ... --- */
-│   └── scanner.py        # varre pasta, monta lista de Query
-└── ui/
-    ├── highlighter.py     # QSyntaxHighlighter para SQL via regex
-    └── main_window.py     # janela principal, splitter de 3 painéis
-```
+| Trilha | Documento | Versões |
+|---|---|---|
+| Redesenho de UI (tema por tokens, barras, sidebar, lista, painel, busca) | `docs/redesign-ui.md` | 1.1.0 – 1.2.0 |
+| Diagrama da consulta | `docs/query-diagram.md` | 1.3.0 |
+| Dialetos SQL (PostgreSQL, MySQL, MariaDB, Oracle, BigQuery) | `docs/sql-dialects.md` | 1.4.0 |
 
-**Este esqueleto é o item 1 do backlog da Fase 1 — já entregue.** Cole-o no novo repositório e continue a partir do item 2.
+O schema do índice está descrito em `docs/database-schema.md`; o que mudou em cada versão, no `CHANGELOG.md`.
 
 ---
 
@@ -47,7 +40,7 @@ sqlshelf/
 | Linguagem | **Python 3.12** | Já conhecido; sem curva de linguagem nova |
 | UI | **PySide6** (Qt 6) | `pip install`, sem build step, sem processo separado |
 | Editor SQL | `QPlainTextEdit` + `QSyntaxHighlighter` | Built-in no PySide6, zero dependência extra |
-| Tema | `qt-material` | Tema escuro moderno com 1 linha de código |
+| Tema | Fusion + `QPalette` + QSS gerado de tokens (`ui/tokens.py` → `ui/theme.py`) | Sem dependência; substituiu o `qt-material` na 1.1.0 (ver `docs/redesign-ui.md`) |
 | Índice | SQLite + FTS5 via `sqlite3` (stdlib) | Sem driver externo |
 | Frontmatter | `PyYAML` | Parser YAML maduro |
 | Watcher | `watchdog` | Multiplataforma, debounce manual |
@@ -55,7 +48,7 @@ sqlshelf/
 | Testes | `pytest` | Padrão de fato |
 | Lint/format | `ruff` + `black` | Configuração mínima, rápidos |
 | Type check | `mypy` | Roda sobre `sqlshelf/`, `main.py` e `tests/` |
-| Empacotamento (Fase 2) | `PyInstaller` | Quando for distribuir |
+| Empacotamento | `PyInstaller` + Inno Setup (Windows) / AppImage (Linux) | Instalador e zip portátil, gerados pelo GitHub Actions a cada tag `v*`; local: `build_app.ps1` |
 
 **Princípio geral:** preferir stdlib e bibliotecas puro-Python. Evitar pacotes com extensões compiladas (exceto PySide6, que já fornece wheels pré-compiladas para todas as plataformas).
 
@@ -97,45 +90,27 @@ Regras:
 ## 4. Estrutura do projeto
 
 ```
-sqlshelf/
-├── main.py                       # entry point — python main.py
-├── requirements.txt
-├── pyproject.toml                # config do ruff/black/mypy/pytest
-├── README.md
-├── LICENSE                        # MIT
-├── .gitignore                     # inclui .sqlshelf/, venv/, __pycache__/
+SQLShelf/
+├── main.py                        # entry point — python main.py
+├── requirements.txt               # PySide6, PyYAML, watchdog, sqlglot, pytest
+├── requirements-dev.txt           # ruff, black, mypy
+├── pyproject.toml                 # config do ruff/black/mypy/pytest
+├── sqlshelf.spec                  # PyInstaller
+├── build_app.ps1                  # build local do Windows (pasta + zip portátil)
+├── README.md · CHANGELOG.md · CLAUDE.md
+├── LICENSE                        # GPL v3
+├── installer/                     # Inno Setup e version_info do executável
+├── locales/                       # en, pt-BR, es
+├── images/                        # logo, ícone do app e screenshots do README
+├── .github/workflows/             # testes em cada push/PR; release em cada tag v*
 ├── sqlshelf/
-│   ├── __init__.py
 │   ├── core/                      # lógica de negócio — SEM import de PySide6
-│   │   ├── __init__.py
-│   │   ├── models.py              # Query, Project, SearchResult (dataclasses)
-│   │   ├── frontmatter.py         # parse/serialize do bloco YAML
-│   │   ├── encoding.py            # detecção UTF-8 / UTF-16 / Windows-1252
-│   │   ├── scanner.py             # varredura de pasta
-│   │   ├── sql_objects.py         # sqlglot → tabelas/colunas/procs
-│   │   ├── index_db.py            # conexão SQLite, schema, FTS5, migrações
-│   │   ├── search.py              # parsing table:/col:/tag: + bm25
-│   │   ├── watcher.py             # watchdog + debounce
-│   │   ├── config.py              # ~/.sqlshelf/config.json
-│   │   └── schema.sql             # DDL do índice (FTS5 + triggers)
-│   └── ui/
-│       ├── __init__.py
-│       ├── main_window.py         # janela principal
-│       ├── highlighter.py         # QSyntaxHighlighter
-│       ├── sidebar.py             # árvore de pastas + tags
-│       ├── query_list.py          # lista/resultados
-│       ├── search_bar.py          # busca com sintaxe especial
-│       ├── metadata_panel.py      # título, tags, descrição, objetos
-│       └── new_query_dialog.py    # "colar e salvar"
-├── tests/
-│   ├── test_frontmatter.py
-│   ├── test_encoding.py
-│   ├── test_sql_objects.py
-│   ├── test_search.py
-│   └── test_index_db.py
-└── docs/
-    └── escopo-sqlshelf-python-pyside6.md
+│   └── ui/                        # widgets, janela, workers
+├── tests/                         # pytest; os testes de UI rodam offscreen
+└── docs/                          # esta especificação e as trilhas
 ```
+
+A lista de módulos de `core/` e `ui/`, com o papel de cada um, está no `CLAUDE.md`.
 
 **`sqlshelf/core/` não importa nada de `PySide6`.** Toda lógica é testável isoladamente com `pytest`, sem precisar de display/Qt.
 
@@ -143,85 +118,23 @@ sqlshelf/
 
 ## 5. Schema do índice SQLite (com FTS5)
 
-```sql
--- .sqlshelf/index.db — regenerável a qualquer momento a partir dos arquivos
+O DDL atual (`sqlshelf/core/schema.sql`), tabela por tabela, com triggers, índices e a regra de versão, está em **`docs/database-schema.md`** — a referência única, para não manter duas cópias. Em resumo:
 
-CREATE TABLE meta (
-    key   TEXT PRIMARY KEY,
-    value TEXT
-); -- schema_version, project_root, last_full_scan
-
-CREATE TABLE queries (
-    id           INTEGER PRIMARY KEY,
-    rel_path     TEXT NOT NULL UNIQUE,
-    title        TEXT NOT NULL,
-    description  TEXT,
-    body         TEXT NOT NULL,
-    file_mtime   INTEGER NOT NULL,
-    file_size    INTEGER NOT NULL,
-    content_hash TEXT NOT NULL,       -- SHA256
-    has_frontmatter INTEGER NOT NULL DEFAULT 1,
-    created_at   TEXT,
-    updated_at   TEXT
-);
-
-CREATE TABLE tags (
-    id   INTEGER PRIMARY KEY,
-    name TEXT NOT NULL COLLATE NOCASE UNIQUE
-);
-
-CREATE TABLE query_tags (
-    query_id INTEGER NOT NULL REFERENCES queries(id) ON DELETE CASCADE,
-    tag_id   INTEGER NOT NULL REFERENCES tags(id)    ON DELETE CASCADE,
-    PRIMARY KEY (query_id, tag_id)
-);
-
-CREATE TABLE query_objects (
-    query_id    INTEGER NOT NULL REFERENCES queries(id) ON DELETE CASCADE,
-    object_type TEXT NOT NULL CHECK (object_type IN ('table','column','procedure','function')),
-    object_name TEXT NOT NULL COLLATE NOCASE,
-    PRIMARY KEY (query_id, object_type, object_name)
-);
-CREATE INDEX ix_query_objects_name ON query_objects (object_name, object_type);
-
-CREATE VIRTUAL TABLE queries_fts USING fts5(
-    title,
-    description,
-    body,
-    objects,
-    tokenize = "unicode61 remove_diacritics 2"
-);
-
-CREATE TRIGGER queries_ai AFTER INSERT ON queries BEGIN
-    INSERT INTO queries_fts(rowid, title, description, body, objects)
-    VALUES (new.id, new.title, new.description, new.body, '');
-END;
-CREATE TRIGGER queries_ad AFTER DELETE ON queries BEGIN
-    INSERT INTO queries_fts(queries_fts, rowid, title, description, body, objects)
-    VALUES ('delete', old.id, old.title, old.description, old.body, '');
-END;
-CREATE TRIGGER queries_au AFTER UPDATE ON queries BEGIN
-    INSERT INTO queries_fts(queries_fts, rowid, title, description, body, objects)
-    VALUES ('delete', old.id, old.title, old.description, old.body, '');
-    INSERT INTO queries_fts(rowid, title, description, body, objects)
-    VALUES (new.id, new.title, new.description, new.body, '');
-END;
-```
-
-Notas:
-- `remove_diacritics 2` → "relatorio" encontra "relatório".
-- Coluna `objects` preenchida pelo indexador com nomes de `query_objects` daquela query.
+- `queries` (uma linha por `.sql`, com `dialect`), `tags` + `query_tags`, `query_objects` (tabelas, colunas, aliases, procedures, funções), `favorites`, `recently_viewed`, `access_log` e `meta`.
+- `queries_fts` (FTS5) sobre `title`, `description`, `body` e `objects`, com tokenizer `unicode61 remove_diacritics 2` → "relatorio" encontra "relatório". A linha é escrita pelo indexador, que é quem conhece os nomes extraídos; só a exclusão fica num trigger.
 - Em Python, `sqlite3.connect()` com SQLite ≥ 3.43 (Python 3.12 já embute uma versão compatível) suporta FTS5 nativamente — sem extensão extra.
-- `schema.sql` é lido via `importlib.resources` e aplicado na primeira abertura; versão em `meta('schema_version')` controla migrações incrementais.
+- `schema.sql` é lido via `importlib.resources` e aplicado na primeira abertura; se `meta('schema_version')` for diferente da versão do código, o índice é apagado e refeito (a única migração).
 
 **Sintaxe de busca:**
 
 | Entrada | Comportamento |
 |---|---|
-| `cross apply versão` | FTS5 em title+description+body+objects, ranking `bm25()` |
+| `cross apply versão` | FTS5 em title+description+body+objects; primeiro as que têm todas as palavras no nome, depois na descrição, depois o resto, cada nível por `bm25()` com pesos por coluna |
 | `table:Documentos` | filtro NOCASE em `query_objects` (type=table) |
 | `col:DataCriacao` | filtro NOCASE em `query_objects` (type=column) |
 | `tag:relatorio` | filtro por tag |
+| `date:15/06/2026` | modificadas naquele dia (hora local) |
+| `dialect:oracle` | filtro pelo dialeto da query; aceita os apelidos do frontmatter (`plsql`, `sqlserver`, `pg`…) |
 | `table:Doc tag:relatorio erros` | interseção dos filtros + FTS no texto livre |
 
 `sqlshelf/core/search.py` faz o parsing da string de busca, separando prefixos `table:`/`col:`/`tag:`/`date:`/`dialect:` do texto livre, e monta a query SQL combinando filtros relacionais com `MATCH`.
@@ -230,27 +143,12 @@ Notas:
 
 ## 6. Extração de objetos via sqlglot
 
-```python
-import sqlglot
-from sqlglot import exp
-
-def extract_objects(sql_body: str, dialect: str = "tsql") -> dict[str, set[str]]:
-    try:
-        tree = sqlglot.parse_one(sql_body, dialect=dialect)
-    except sqlglot.ParseError:
-        return {"table": set(), "column": set(), "procedure": set(), "function": set()}
-
-    tables = {t.name for t in tree.find_all(exp.Table)}
-    columns = {c.name for c in tree.find_all(exp.Column)}
-    # CTEs entram em lista de exclusão (não são tabelas físicas)
-    ctes = {c.alias for c in tree.find_all(exp.CTE)}
-    tables -= ctes
-
-    return {"table": tables, "column": columns, "procedure": set(), "function": set()}
-```
+`sqlshelf/core/sql_objects.py` → `extract_objects(sql_body, dialect=None)` devolve tabelas, colunas, aliases, procedures e funções:
 
 - O dialeto vem de cada query (`dialects.resolve()`: `dialect:` do frontmatter ou a sintaxe; sem sinal claro, T-SQL). `tsql` cobre `CROSS APPLY`, CTEs, funções de janela, `TOP`, hints; os demais dialetos usam o parser correspondente do sqlglot (`Dialect.parser`).
-- Em caso de `ParseError`: retorna conjuntos vazios, indexador marca `has_parse_error = True` na linha de `queries` (campo adicional opcional) e sinaliza `⚠` na UI — nunca propaga exceção para o usuário.
+- A leitura é leniente (`ErrorLevel.IGNORE`): mais da metade dos scripts T-SQL reais tem `GO`, blocos CLR ou sintaxe sqlcmd e nunca parseia limpo, mas ainda cita tabelas reais. O texto é lido lote a lote (`sql_segments.split_batches`) e cada instrução DML é lida de novo sozinha (`split_statements`), porque código procedural esconde as instruções que contém.
+- CTEs, variáveis `@x`, palavras de bloco (`END`, `DECLARE`…) e o alias de `UPDATE t … FROM Tabela t` ficam fora das tabelas; nomes com cara de lixo da recuperação de erro são descartados.
+- Nunca lança: o que não deu para ler fica de fora, sem aviso nem exceção para o usuário.
 - Resultado alimenta `query_objects` e a coluna `objects` do FTS.
 
 ---
@@ -263,7 +161,7 @@ def extract_objects(sql_body: str, dialect: str = "tsql") -> dict[str, set[str]]
 1. ✅ **Bootstrap** (entregue): janela, sidebar, lista, editor com highlight, scanner de pasta com frontmatter tolerante.
 2. ✅ **Índice SQLite + FTS5**: `index_db.py` — criação do `.sqlshelf/index.db`, aplicação do `schema.sql`, indexação inicial a partir do `scanner.py` (inserção em `queries`, `tags`, `query_tags`).
 3. ✅ **Indexação incremental**: comparar `file_mtime`; calcular `content_hash` (SHA256) só se mudou; reindexar apenas o necessário.
-4. ✅ **Busca**: `search_bar.py` + `search.py` — sintaxe `table:`/`col:`/`tag:`, resultados com `snippet()` e ranking `bm25()`, populando `query_list.py`.
+4. ✅ **Busca**: `search_bar.py` + `search.py` — sintaxe `table:`/`col:`/`tag:`, resultados com `snippet()` e ranking `bm25()`, populando `query_list.py`. *(Depois: `snippet()` removido por desempenho na 1.0.10; ranking por nível + `bm25()` com pesos na 1.4.1.)*
 5. ✅ **Extração de objetos**: `sql_objects.py` (sqlglot) alimentando `query_objects`; `metadata_panel.py` exibe "Esta query usa: tabelas X, Y / colunas Z".
 6. ✅ **Edição e salvamento**: tornar o editor editável com toggle; salvar preserva frontmatter (reescreve só os campos alterados via `frontmatter.py`); reindexa o arquivo salvo.
 7. ✅ **Nova query ("colar e salvar")**: `new_query_dialog.py` — colar SQL, preencher título/tags/descrição, escolher subpasta, cria o `.sql` com frontmatter.
@@ -274,12 +172,12 @@ def extract_objects(sql_body: str, dialect: str = "tsql") -> dict[str, set[str]]
 12. ✅ **Ações de sistema**: botões "Open in SSMS", "Reveal Folder", "Copy" via `subprocess`/`os.startfile`.
 
 ### Fase 2 — Refinamento
-- Favoritos e "abertas recentemente".
-- Duplicar query como base para nova demanda; copiar sem frontmatter.
-- Snippets/templates parametrizáveis.
-- Atalho `Ctrl+P` (paleta de comandos/busca rápida).
-- Busca reversa: clicar em tabela → queries que a referenciam.
-- Empacotamento com PyInstaller (Windows primeiro) + GitHub Actions.
+- ✅ Favoritos e "abertas recentemente".
+- ✅ Duplicar query como base para nova demanda (`Ctrl+D`); copiar sem frontmatter.
+- ⏸ Snippets/templates parametrizáveis: `core/snippets.py` (`{{param}}`, pasta `~/.sqlshelf/templates`) e `ui/template_dialog.py` existem, mas a opção "New from Template" saiu do menu Arquivo e hoje não é alcançável pela UI.
+- ✅ Atalho `Ctrl+P` (busca rápida; refeita no redesenho, F8).
+- ✅ Busca reversa: botão direito numa tabela → "Buscar em todas as consultas" (painel de detalhes e diagrama).
+- ✅ Empacotamento com PyInstaller + GitHub Actions: instalador Inno Setup e zip portátil no Windows, AppImage e zip portátil no Linux.
 
 ### Fase 3 — Estruturas de banco
 - Importar DDL/schema (`INFORMATION_SCHEMA` ou script SSMS) para catálogo por projeto.
@@ -297,11 +195,11 @@ def extract_objects(sql_body: str, dialect: str = "tsql") -> dict[str, set[str]]
 | Risco | Mitigação |
 |---|---|
 | Encoding legado (Win-1252) quebra índice/busca | `encoding.py` desde o item 10 da Fase 1; gravação sempre UTF-8 |
-| Frontmatter corrompido por edição externa | Parser tolerante (já no esqueleto): indexa só o body, `has_frontmatter=False`, sinaliza ⚠ |
-| `sqlglot` não parsear T-SQL não-padrão, ou a query ser lida no dialeto errado | `ParseError` tratado, `has_parse_error=True`, sem exceção ao usuário; o usuário corrige o dialeto no formulário (`dialect:`) |
+| Frontmatter corrompido por edição externa | Parser tolerante (já no esqueleto): o arquivo é indexado como se não tivesse frontmatter (`metadata={}`, body inteiro, `has_frontmatter=False`) |
+| `sqlglot` não parsear T-SQL não-padrão, ou a query ser lida no dialeto errado | Leitura leniente, por lote e por instrução, sem exceção ao usuário; o usuário corrige o dialeto no formulário (`dialect:`) |
 | Escopo crescer antes do MVP rodar | Regra de ouro: nada de Fase 2+ antes de uso real por 1 semana |
 | Pastas grandes (milhares de arquivos) | Indexação incremental por `mtime`+hash; `QThread`/`QRunnable` para scan sem travar a UI |
-| Performance da UI com listas grandes | `QListWidget` simples até ~1000 itens; migrar para `QListView` + model próprio se necessário |
+| Performance da UI com listas grandes | Lista em `QTreeView` + model próprio desde o redesenho (F4); a Grade é pintada à mão, com miniaturas lidas em segundo plano |
 
 ---
 
@@ -335,8 +233,10 @@ charliermarsh.ruff
 
 ## 10. Decisões de design da UI
 
-- **Layout:** `QSplitter` horizontal de 3 painéis — sidebar (pastas/tags), lista de queries, editor+metadados — já presente no esqueleto.
-- **Tema:** `qt-material`, tema `dark_teal` por padrão; configurável depois.
-- **Tipografia:** fonte monoespaçada (Cascadia Code, com fallback `QFont.StyleHint.Monospace`) no editor e nomes de objetos.
-- **Feedback de indexação:** status bar inferior ("N queries indexed"), atualizado pelo watcher e pela indexação inicial.
-- **Atalhos:** `Ctrl+F` foca busca, `Ctrl+S` salva, `Ctrl+N` nova query, `Ctrl+E` toggle modo edição.
+Desde a 1.1.0 a UI segue `docs/redesign-ui.md`, que é a referência para tudo que é visual. Em resumo:
+
+- **Layout:** `QSplitter` horizontal de 3 painéis — sidebar (biblioteca, pastas, tags), lista de queries, painel de detalhes (metadados + abas SQL | Diagrama) —, com barra de endereço e barra de comandos em cima; a `QMenuBar` fica oculta e os menus vão no ☰.
+- **Tema:** Fusion + `QPalette` + QSS gerado dos tokens (`ui/tokens.py` → `ui/theme.py`), escuro e claro, com troca ao vivo.
+- **Tipografia:** Cascadia Mono 13 px no editor e nos nomes de objetos, com fallback para Consolas e depois para a fonte mono do sistema.
+- **Feedback de indexação:** barra de status com o estado do índice, barra de progresso durante a indexação e quantas pastas estão sendo observadas; sem diálogo modal.
+- **Atalhos:** a tabela completa está no `README.md`.
