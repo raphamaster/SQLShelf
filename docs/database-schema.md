@@ -2,7 +2,7 @@
 
 The index lives at `<project_root>/.sqlshelf/index.db`. It is a fully regenerable SQLite 3 file; deleting it and reopening the project rebuilds everything from the `.sql` files on disk. Never store anything in this database that does not also exist on disk.
 
-Current schema version: **2** (stored in `meta`).
+Current schema version: **6** (stored in `meta`; `IndexDB.SCHEMA_VERSION` in `index_db.py`).
 
 ---
 
@@ -76,13 +76,15 @@ Primary key: `(query_id, tag_id)`.
 
 ### `query_objects`
 
-SQL objects (tables, columns, procedures, functions) extracted from the query body via `sqlglot` with dialect `tsql`. CTEs are excluded from the table set.
+SQL objects (tables, columns, aliases, procedures, functions) extracted from the query body via `sqlglot`, with the parser of the query's dialect (`queries.dialect`; see `docs/sql-dialects.md`). CTEs are excluded from the table set.
 
 | Column | Type | Constraints | Description |
 |--------|------|-------------|-------------|
 | `query_id`   | INTEGER | NOT NULL, FK → `queries(id)` CASCADE DELETE | Owning query |
-| `object_type`| TEXT    | NOT NULL, CHECK IN (`'table'`,`'column'`,`'procedure'`,`'function'`) | Kind of SQL object |
+| `object_type`| TEXT    | NOT NULL, CHECK IN (`'table'`,`'column'`,`'alias'`,`'procedure'`,`'function'`) | Kind of SQL object |
 | `object_name`| TEXT    | NOT NULL, COLLATE NOCASE | Identifier as it appears in the SQL AST |
+
+`alias` rows hold the table aliases of the query (`FROM Orders AS o` → `o`). They are stored so that navigating the list never parses the SQL again; they are not tables, and `table:` does not match them.
 
 Primary key: `(query_id, object_type, object_name)`.
 
@@ -111,9 +113,24 @@ Ring-buffer of the 20 most recently opened queries (oldest entry deleted automat
 
 ---
 
+### `access_log`
+
+One row per access event, read by the Reports dialog (_Help → Reports_) to rank the most-accessed queries and tags. Written by `IndexDB.record_access()`. Like `favorites`, it references `rel_path` as plain text, so the history survives a full reindex.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id`          | INTEGER | PRIMARY KEY autoincrement | Surrogate key |
+| `rel_path`    | TEXT    | NOT NULL | POSIX-style path relative to the project root |
+| `action`      | TEXT    | NOT NULL, CHECK IN (`'open'`,`'copy'`,`'open_in_ssms'`) | What the user did with the query |
+| `accessed_at` | TEXT    | NOT NULL | ISO 8601 UTC timestamp of the event |
+
+Indexes: `ix_access_log_rel_path (rel_path)` and `ix_access_log_accessed_at (accessed_at)`.
+
+---
+
 ### `queries_fts` (virtual table)
 
-FTS5 full-text index over `queries`. Kept in sync with `queries` via triggers.
+FTS5 full-text index over `queries`. Each row is written by `_insert_prepared()` in `index_db.py` together with its `queries` row, and removed by the `queries_ad` trigger (see [Triggers](#triggers)).
 
 ```sql
 CREATE VIRTUAL TABLE queries_fts USING fts5(
@@ -169,6 +186,8 @@ code that knows the extracted object names.
 | (implicit UNIQUE) | `queries` | `rel_path` | Lookup / upsert by file path |
 | (implicit UNIQUE) | `tags` | `name` | Deduplication on insert |
 | `ix_query_objects_name` | `query_objects` | `object_name, object_type` | `table:X` and `col:X` filter scans |
+| `ix_access_log_rel_path` | `access_log` | `rel_path` | Per-query access counts |
+| `ix_access_log_accessed_at` | `access_log` | `accessed_at` | Time-ordered reads of the log |
 
 ---
 
@@ -182,7 +201,7 @@ queries ──< query_tags   (CASCADE DELETE)
 queries_fts ← trigger (not FK)
 ```
 
-`favorites` and `recently_viewed` reference `rel_path` as plain text (no FK) so they survive a full reindex drop-and-recreate cycle.
+`favorites`, `recently_viewed` and `access_log` reference `rel_path` as plain text (no FK) so they survive a full reindex.
 
 ---
 
@@ -204,7 +223,7 @@ The `search.py` module translates user-typed text into SQL before hitting the da
 | Syntax | Translates to |
 |--------|---------------|
 | *(empty)* | `SELECT … FROM queries ORDER BY file_mtime DESC, title` |
-| free text | `queries_fts MATCH '"token1"* "token2"*'` ordered by `bm25()` |
+| free text | `queries_fts MATCH '"token1"* "token2"*'`, ordered by relevance (see below) |
 | `table:Orders` | `query_objects WHERE object_type='table' AND object_name='Orders'` |
 | `col:CustomerId` | `query_objects WHERE object_type='column' AND object_name='CustomerId'` |
 | `tag:finance` | `query_tags JOIN tags WHERE name='finance'` |
@@ -212,4 +231,16 @@ The `search.py` module translates user-typed text into SQL before hitting the da
 | `dialect:oracle` | `queries WHERE dialect='oracle'`; the value takes the frontmatter names, so `dialect:PL/SQL` is the same filter |
 | combinations | All filters joined with `AND`; FTS added when free text is present |
 
-Ranking uses FTS5's `bm25()`. `SearchResult.snippet` is part of the model but is no longer populated: generating it with `snippet()` re-tokenises the body of every matching row and accounted for roughly 95% of the time a text search took, while no part of the UI displays it.
+### Ranking
+
+A free-text search is ordered by `relevance_key()` in `search.py`, closest matches first:
+
+1. **Tier** (`SearchResult.match_tier`) — `0` when the `title` column holds every searched word, `1` when `description` does, `2` otherwise (the words are only in the SQL or its object names). Each tier is one extra `MATCH` restricted to that column (`title : (…)`).
+2. **Rank** (`SearchResult.rank`) — `bm25(queries_fts, 10.0, 4.0, 1.0, 2.0)`, weighting `title`, `description`, `body` and `objects` in that order. Lower is better.
+3. **Most recently modified** — `file_mtime`, newest first, to break ties.
+
+`bm25()` alone was not enough: term frequency saturates, so a script that repeats an alias like `p_cdc` thirty times scored about as high as one word in the title, and came before the query named "Pedidos_CDC".
+
+Searches without free text have rank `0` and tier `0`, so they come out newest first. The query list offers this order as "Relevance (closest first)" only while a search is shown; a search starts with it and remembers its own sort (`search_sort_key` in `config.json`), apart from the one used to browse folders. Results merged from several library folders use the same key.
+
+`SearchResult.snippet` is part of the model but is no longer populated: generating it with `snippet()` re-tokenises the body of every matching row and accounted for roughly 95% of the time a text search took, while no part of the UI displays it.

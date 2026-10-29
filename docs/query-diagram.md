@@ -26,7 +26,7 @@ Os textos das imagens estão em PT-BR; no código, as strings de origem continua
 
 | Módulo | Camada | Responsabilidade |
 |---|---|---|
-| `sqlshelf/core/sql_segments.py` | core | Lotes por `GO` e segmentação do T-SQL procedural em instruções DML |
+| `sqlshelf/core/sql_segments.py` | core | Lotes e segmentação do código procedural em instruções DML, no jeito de cada dialeto (`GO`, `/`, `DELIMITER`, corpos `$$`; ver `docs/sql-dialects.md`) |
 | `sqlshelf/core/query_graph.py` | core | sqlglot → `QueryGraph` (nós, arestas, instruções, avisos). Nunca lança exceção |
 | `sqlshelf/core/graph_layout.py` | core | Grupos, camadas, ordem e coordenadas. Recebe os tamanhos dos nós prontos |
 | `sqlshelf/ui/diagram_view.py` | ui | `QGraphicsView` + itens (nó, moldura, aresta, rótulo), tema, interação |
@@ -41,7 +41,7 @@ Os textos das imagens estão em PT-BR; no código, as strings de origem continua
 - Contador de geração descarta resultados velhos, igual aos outros workers do `main_window.py`.
 - Cache LRU de 32 grafos, chave `(sha256 do body, dialeto)`.
 - Nada é analisado enquanto a aba SQL estiver ativa.
-- O dialeto segue o de `sql_objects.py`: `tsql`, ou `bigquery` quando há crase. Extrair `_pick_dialect` para uso comum.
+- O dialeto é o mesmo do índice: o declarado em `dialect:` ou, sem ele, o que `build_query_graph(body, dialect)` detecta no corpo (no worker). *(Até a 1.3.x era `tsql`, ou `bigquery` quando havia crase; desde a 1.4.0 vem de `core/dialects.py`, ver `docs/sql-dialects.md`.)*
 
 ## Modelo — `query_graph.py`
 
@@ -139,7 +139,7 @@ Verificado com sqlglot 30.x:
 Por isso, antes do parse:
 
 1. Separar lotes por linhas `GO` (com contagem opcional e comentário), guardando os offsets.
-2. Em cada lote, tokenizar com o tokenizer `tsql` e recortar as instruções DML com uma máquina de estados:
+2. Em cada lote, tokenizar com o tokenizer do dialeto (`tsql` até a 1.3.x) e recortar as instruções DML com uma máquina de estados:
    - Profundidade de parênteses e de `CASE … END`.
    - Inicia em `SELECT/WITH/INSERT/UPDATE/DELETE/MERGE` na profundidade 0.
    - Termina em `;` ou em palavra de controle (`DECLARE SET IF ELSE WHILE BEGIN END RETURN EXEC DROP CREATE ALTER…`).
@@ -478,7 +478,7 @@ Uma por vez, na branch `feat/query-diagram`, um commit por fatia (Conventional C
 | 12 | `EXEC(@sql)` e `EXEC sp_executesql @sql` | nota `dynamic_sql`, nenhum nó |
 | 13 | Uma instrução válida + `INSERT INTO #r EXEC dbo.usp …` + uma inválida | as válidas intactas; `INSERT … EXEC` `approximate` com nó `#r`; a inválida `skipped` com a linha certa |
 | 14 | Colunas sem qualificador, com uma fonte e com várias | atribuídas no primeiro caso; no segundo, ignoradas sem erro |
-| 15 | Identificadores com crase | dialeto `bigquery`, como em `sql_objects.py` |
+| 15 | Identificadores com crase | lidos no dialeto detectado (`bigquery` para `` `projeto.dataset.tabela` ``, `mysql` para nomes simples), como em `sql_objects.py` |
 | 16 | Vazio, só comentários, só DDL, string sem fechar, lixo aleatório | grafo vazio; nunca lança exceção |
 | 17 | SQL da tela 09 (`ON … AND c.Ativo = 1`, `WHERE p.DataPedido >= @inicio AND p.Status NOT IN ('C', 'D')`, `HAVING SUM(pg.Valor) > 1000`) | 4 filtros: `>= @inicio` e `NOT IN ('C', 'D')` em Pedidos (`where`); `= 1` em `c.Ativo` (`on`, `join_label="INNER"`); `SUM(pg.Valor) > 1000` em `filters` do Resultado (`having`). `c.Ativo` não vira aresta |
 | 18 | Uma condição de cada forma da tabela "Forma curta" (`@x <= p.Valor`, `IN` com 5 itens, `IS NOT NULL`, `LIKE`, `BETWEEN`, `YEAR(…) = 2026`) | `predicate` exatamente como na tabela; o operador invertido quando a coluna está à direita |
@@ -488,6 +488,8 @@ Uma por vez, na branch `feat/query-diagram`, um commit por fatia (Conventional C
 ## Apêndice — protótipo de `sql_segments.py`
 
 Validado com sqlglot 30.24 nos casos 1–6 e 13. Ajustar tipagem e estilo às convenções do projeto.
+
+> Registro histórico: o módulo real já se afastou deste protótipo (lotes e palavras procedurais por dialeto desde a 1.4.0). A referência é o código em `sqlshelf/core/sql_segments.py`.
 
 ```python
 from __future__ import annotations

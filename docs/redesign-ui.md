@@ -115,7 +115,7 @@ O qt-material impõe botões em caixa alta e contornos verdes — exatamente o q
   - ☰ (menu) — primeiro item, à esquerda; ícone `menu` (três barras), com a dica "Menu". O ⋯ (`more`) fica só no painel de detalhes, onde abre ações da consulta.
   - Nova consulta — botão primário, Ctrl+N.
   - Importar pasta — Ctrl+O. (O rótulo era "Abrir pasta"; a chave de tradução é a mesma da Busca rápida.)
-  - Ordenar ▾ — as 4 opções atuais; substitui o botão ⇅.
+  - Ordenar ▾ — as 4 opções atuais, mais "Relevância (mais próximos primeiro)" enquanto há busca (1.4.1); substitui o botão ⇅.
   - Agrupar ▾ — Data | Pasta | Nenhum.
   - Busca rápida — Ctrl+P.
   - Alternância Detalhes | Conteúdo | Grade.
@@ -193,7 +193,7 @@ Cartões com miniatura do SQL, em `ui/query_grid.py` (um `QAbstractScrollArea` p
   - Tabelas: clique esquerdo = ir para a ocorrência no editor; botão direito = menu atual com "Buscar em todas as consultas". Comportamento atual mantido.
   - Local: caminho absoluto clicável, com o menu atual.
   - Modificado: data e autor.
-- **Faixa sobre o editor:** "SQL · N linhas · encoding · T-SQL". Omitir o encoding se a UI não o tiver à mão.
+- **Faixa sobre o editor:** "SQL · N linhas · encoding · T-SQL". Omitir o encoding se a UI não o tiver à mão. *(Desde a 1.4.0 o último item é o dialeto da consulta, com tooltip dizendo de onde ele veio; ver `docs/sql-dialects.md`.)*
 - **Editor:** o mesmo QPlainTextEdit, com cores de sintaxe vindas dos tokens. Mantém números de linha, linha atual, destaque de ocorrências, a regra de >1000 linhas e a carga assíncrona.
 
 ### Painel de detalhes — edição
@@ -203,6 +203,7 @@ Cartões com miniatura do SQL, em `ui/query_grid.py` (um `QAbstractScrollArea` p
   - Descrição (3 linhas).
   - Tags: campo de chips com o autocomplete existente; mostra a contagem por tag, destaca o trecho digitado e tem o rodapé "Enter cria a tag".
   - Autor.
+  - Dialeto (desde a 1.4.0): Automático, um dialeto ou SQL genérico.
   - Criado (somente leitura).
 - **Faixa do editor:** "editável" e "Ln X, Col Y".
 - **Gravação** segue o `CLAUDE.md`: preserva campos YAML, atualiza `updated`, cria o bloco se não existir, grava em UTF-8.
@@ -210,7 +211,7 @@ Cartões com miniatura do SQL, em `ui/query_grid.py` (um `QAbstractScrollArea` p
 ### Busca com chips
 - **Criação de chips:** `op:valor` seguido de espaço, Enter ou Tab vira chip dentro do campo.
   - × remove o chip; Backspace com o campo vazio remove o último.
-  - Operadores: os que `search.py` já aceita (`table`, `col`, `tag`, `date`).
+  - Operadores: os que `search.py` já aceita (`table`, `col`, `tag`, `date`; `dialect` desde a 1.4.0).
 - **Envio:** a string enviada à busca = chips serializados + texto livre. É o mesmo caminho de hoje, sem mudança de semântica.
   - Se `search.py` não expõe tokenização, adicionar `split_tokens()` / `join_tokens()`, com testes de ida e volta (inclusive aspas).
 - **Barra de escopo** abaixo dos comandos: "Toda a biblioteca | {pasta atual}", "N resultados" e "Limpar busca".
@@ -229,14 +230,14 @@ Reestilização do diálogo atual:
 - **Esquerda:** "N consultas" ou "N resultados" · "1 selecionada".
 - **Direita:**
   - Estado do índice: ponto `accent` + "Índice atualizado", ou, durante a indexação, "Indexando {pasta}" + QProgressBar 120×4 + "34 de 61".
-  - "Observando N pastas" · "T-SQL".
+  - "Observando N pastas" · dialeto da consulta aberta (era "T-SQL" fixo até a 1.3.x; oculto sem consulta aberta).
 - Isso **substitui os diálogos modais de progresso** (indexação inicial e Forçar indexação). Atualização via signals do worker.
 
 ## Não pode regredir
 
 - [ ] Multi-pastas, Favoritas, Recentes, navegação por tag
-- [ ] Busca FTS com `table:` `col:` `tag:` `date:`, combinados; aspas escapadas
-- [ ] Ordenação (4 opções) persistente entre buscas; padrão = modificado mais recente
+- [ ] Busca FTS com `table:` `col:` `tag:` `date:` `dialect:`, combinados; aspas escapadas
+- [ ] Ordenação (4 opções) persistente ao navegar pelas pastas; padrão = modificado mais recente. A busca guarda a sua à parte (`search_sort_key`), com Relevância como padrão
 - [ ] Seleção preservada ao reordenar ou atualizar a lista (sem recarregar o arquivo)
 - [ ] Editor: highlight, números de linha, linha atual, destaque de ocorrências, regra de >1000 linhas, carga assíncrona
 - [ ] Chips de tabela e menu do caminho do arquivo (copiar caminho, copiar pasta, revelar)

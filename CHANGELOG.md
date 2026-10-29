@@ -1,5 +1,10 @@
 # Changelog
 
+## [Unreleased]
+
+### Docs
+- README, `CLAUDE.md` and the specs brought up to date with 1.4.1: search ranking and the Relevance sort, the `dialect:` operator, browsing and views, shortcuts (`Ctrl+Shift+F` copies an empty frontmatter block; it never cleared the search), building and releases. `docs/database-schema.md` is at schema version 6 and documents alias rows, `access_log` and the ranking; the project spec points to it instead of keeping its own copy of the DDL, and its backlog marks the delivered Phase 2 items
+
 ## [1.4.1] - 2026-10-28
 
 ### Changed
@@ -24,6 +29,11 @@
 
 ### Fixed
 - **T-SQL after `END` or `PRINT`** — a statement right after an `END` or a `PRINT` line was read as part of it and left out; it is now indexed and drawn in the diagram
+
+### Internal
+- **Every sqlglot dialect in the frozen app** — sqlglot imports a dialect module the first time it is asked for, so PyInstaller only bundled T-SQL and MySQL; `sqlshelf.spec` now collects them all, and the installed app reads PostgreSQL, Oracle and BigQuery queries too
+- `build_app.ps1` runs under Windows PowerShell 5.1 as well, and names the portable zip like the release asset (`SQLShelf-<version>-windows-x64-portable.zip`)
+- GitHub Actions moved to their Node 24 releases
 
 ### Docs
 - `docs/sql-dialects.md` describes how the dialect is chosen, what each part of the app does with it, and the cases that must not regress
